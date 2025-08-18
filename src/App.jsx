@@ -261,20 +261,35 @@ const PatroApp = () => {
     });
   };
 
-  const removeFromCart = (productId, saleType = 'unit') => {
-    const cartKey = `${productId}-${saleType}`;
-    setCart(prev => {
-      const newCart = { ...prev };
-      if (newCart[cartKey]) {
-        if (newCart[cartKey].quantity > 1) {
-          newCart[cartKey].quantity--;
-        } else {
-          delete newCart[cartKey];
-        }
+const removeFromCart = (productId, saleType = 'unit') => {
+  const cartKey = `${productId}-${saleType}`;
+  const product = products.find(p => p.id === productId);
+  if (!product) return;
+
+  let quantityToRemove;
+  switch (saleType) {
+    case 'pack':
+      quantityToRemove = product.packSize;
+      break;
+    case 'eleven':
+      quantityToRemove = 11;
+      break;
+    default: // 'unit'
+      quantityToRemove = 1;
+  }
+
+  setCart(prev => {
+    const newCart = { ...prev };
+    if (newCart[cartKey]) {
+      if (newCart[cartKey].quantity > quantityToRemove) {
+        newCart[cartKey].quantity -= quantityToRemove;
+      } else {
+        delete newCart[cartKey];
       }
-      return newCart;
-    });
-  };
+    }
+    return newCart;
+  });
+};
 
   const validateOrder = async () => {
     if (Object.keys(cart).length === 0 || !selectedMember) return;
