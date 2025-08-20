@@ -38,7 +38,7 @@ const [products, setProducts] = useState([]);
 const [orders, setOrders] = useState([]);
 const [jobs, setJobs] = useState([]);
 const [stockMovements, setStockMovements] = useState([]);
-  
+  const [memberSearch, setMemberSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [selectedMember, setSelectedMember] = useState(null);
@@ -48,6 +48,7 @@ const [stockMovements, setStockMovements] = useState([]);
   const [hourlyRate, setHourlyRate] = useState(10.00);
   const [newMemberName, setNewMemberName] = useState('');
   const [newBroName, setNewBroName] = useState('');
+  const [showBroDropdown, setShowBroDropdown] = useState(false);
   const [newProduct, setNewProduct] = useState({ 
     name: '', price: '', category: 'Boissons', stock: '', stockType: 'unit',
     packSize: 1, pricePerPack: '', pricePer11: '', alertThreshold: 5
@@ -603,7 +604,9 @@ const addProduct = async () => {
     }
   };
 
-  const categories = [...new Set(products.map(p => p.category))];
+const categories = ['Alcool', 'Boissons', 'Snacks', 'Nourriture'].filter(cat => 
+  products.some(p => p.category === cat)
+);
 
   const Header = ({ title, onBack }) => (
     <div className="flex items-center justify-between p-4 bg-white shadow-sm">
@@ -688,26 +691,26 @@ const addProduct = async () => {
         
         <div className="p-6 space-y-4">
           <button
-            onClick={() => navigateTo('bar-members')}
+            onClick={() => navigateTo('bar-order')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
           >
             <div className="flex items-center space-x-3">
               <Users className="text-blue-500" size={24} />
               <div className="text-left">
-                <h3 className="font-semibold">Gestion des membres</h3>
+                <h3 className="font-semibold">Nouvelle commande</h3>
                 <p className="text-gray-600 text-sm">Liste, rechargements, suppressions</p>
               </div>
             </div>
           </button>
 
           <button
-            onClick={() => navigateTo('bar-order')}
+            onClick={() => navigateTo('bar-members')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
           >
             <div className="flex items-center space-x-3">
               <ShoppingCart className="text-blue-500" size={24} />
               <div className="text-left">
-                <h3 className="font-semibold">Nouvelle commande</h3>
+                <h3 className="font-semibold">Gestion des membres</h3>
                 <p className="text-gray-600 text-sm">Ventes avec gestion stock</p>
               </div>
             </div>
@@ -730,135 +733,178 @@ const addProduct = async () => {
     );
   }
 
-  if (currentScreen === 'bar-members') {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Header title="Gestion des membres" onBack={() => navigateTo('bar')} />
-        
-        <div className="p-4">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Membres ({members.length})</h2>
-            <button
-              onClick={() => { setModalType('add-member'); setShowModal(true); }}
-              className="p-2 bg-blue-500 text-white rounded-full active:scale-95 transition-transform"
-            >
-              <Plus size={20} />
-            </button>
-          </div>
+if (currentScreen === 'bar-members') {
+  const filteredMembers = members.filter(member =>
+    member.name.toLowerCase().includes(memberSearch.toLowerCase())
+  );
 
-          <div className="space-y-3">
-            {members.map(member => (
-              <div key={member.id} className="bg-white p-4 rounded-lg shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-medium">{member.name}</h3>
-                    <p className={`text-sm font-semibold ${member.balance < 0 ? 'text-red-500' : 'text-green-500'}`}>
-                      Solde: {formatCurrency(member.balance)}
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => { setSelectedMember(member); setModalType('repay'); setShowModal(true); }}
-                      className={`px-3 py-1 text-white rounded text-sm active:scale-95 transition-transform ${
-                        member.balance < 0 ? 'bg-green-500' : 'bg-blue-500'
-                      }`}
-                    >
-                      {member.balance < 0 ? 'Rembourser' : 'Recharger'}
-                    </button>
-                    <button
-                      onClick={() => deleteMember(member.id)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header title="Gestion des membres" onBack={() => navigateTo('bar')} />
+      
+      <div className="p-4">
+        <div className="flex items-center space-x-2 mb-4">
+          <input
+            type="text"
+            placeholder={`Rechercher parmi les ${members.length} membres`}
+            value={memberSearch}
+            onChange={(e) => setMemberSearch(e.target.value)}
+            className="flex-1 p-2 border rounded-lg bg-white shadow-sm"
+          />
+          <button
+            onClick={() => { setModalType('add-member'); setShowModal(true); }}
+            className="p-2 bg-blue-500 text-white rounded-full active:scale-95 transition-transform"
+          >
+            <Plus size={20} />
+          </button>
         </div>
 
-        <Modal
-          isOpen={showModal}
-          onClose={() => { setShowModal(false); setNewMemberName(''); setRepaymentAmount(''); }}
-          title={modalType === 'add-member' ? 'Ajouter un membre' : selectedMember?.balance < 0 ? 'Remboursement' : 'Recharger le compte'}
-        >
-          {modalType === 'add-member' ? (
-            <div className="space-y-4">
-              <input
-                type="text"
-                placeholder="Nom du membre"
-                value={newMemberName}
-                onChange={(e) => setNewMemberName(e.target.value)}
-                className="w-full p-3 border rounded-lg"
-              />
-              <button
-                onClick={addMember}
-                disabled={!newMemberName.trim() || loading}
-                className="w-full p-3 bg-blue-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
-              >
-                {loading ? 'Ajout en cours...' : 'Ajouter'}
-              </button>
+        <div className="space-y-3">
+          {filteredMembers.map(member => (
+            <div key={member.id} className="bg-white p-4 rounded-lg shadow-sm">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <h3 className="font-medium">{member.name}</h3>
+                  <p className={`text-sm font-semibold ${member.balance < 0 ? 'text-red-500' : 'text-green-500'}`}>
+                    Solde: {formatCurrency(member.balance)}
+                  </p>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => { setSelectedMember(member); setModalType('repay'); setShowModal(true); }}
+                    className={`px-3 py-1 text-white rounded text-sm active:scale-95 transition-transform ${
+                      member.balance < 0 ? 'bg-green-500' : 'bg-blue-500'
+                    }`}
+                  >
+                    {member.balance < 0 ? 'Rembourser' : 'Recharger'}
+                  </button>
+                  <button
+                    onClick={() => deleteMember(member.id)}
+                    className="p-2 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className="space-y-4">
-              <p>Membre: <strong>{selectedMember?.name}</strong></p>
-              <p>Solde actuel: <strong className={selectedMember?.balance < 0 ? 'text-red-500' : 'text-green-500'}>
-                {formatCurrency(selectedMember?.balance || 0)}
-              </strong></p>
-              <input
-                type="number"
-                step="0.01"
-                placeholder={selectedMember?.balance < 0 ? "Montant à rembourser" : "Montant à recharger"}
-                value={repaymentAmount}
-                onChange={(e) => setRepaymentAmount(e.target.value)}
-                className="w-full p-3 border rounded-lg"
-              />
-              <button
-                onClick={repayMember}
-                disabled={!repaymentAmount || parseFloat(repaymentAmount) <= 0 || loading}
-                className={`w-full p-3 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform ${
-                  selectedMember?.balance < 0 ? 'bg-green-500' : 'bg-blue-500'
-                }`}
-              >
-                {loading ? 'Traitement...' : (selectedMember?.balance < 0 ? 'Confirmer le remboursement' : 'Confirmer le rechargement')}
-              </button>
-            </div>
-          )}
-        </Modal>
+          ))}
+        </div>
+      </div>
+
+      <Modal
+        isOpen={showModal}
+        onClose={() => { setShowModal(false); setNewMemberName(''); setRepaymentAmount(''); }}
+        title={modalType === 'add-member' ? 'Ajouter un membre' : selectedMember?.balance < 0 ? 'Remboursement' : 'Recharger le compte'}
+      >
+        {modalType === 'add-member' ? (
+          <div className="space-y-4">
+            <input
+              type="text"
+              placeholder="Nom du membre"
+              value={newMemberName}
+              onChange={(e) => setNewMemberName(e.target.value)}
+              className="w-full p-3 border rounded-lg"
+            />
+            <button
+              onClick={addMember}
+              disabled={!newMemberName.trim() || loading}
+              className="w-full p-3 bg-blue-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
+            >
+              {loading ? 'Ajout en cours...' : 'Ajouter'}
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <p>Membre: <strong>{selectedMember?.name}</strong></p>
+            <p>Solde actuel: <strong className={selectedMember?.balance < 0 ? 'text-red-500' : 'text-green-500'}>
+              {formatCurrency(selectedMember?.balance || 0)}
+            </strong></p>
+            <input
+              type="number"
+              step="0.01"
+              placeholder={selectedMember?.balance < 0 ? "Montant à rembourser" : "Montant à recharger"}
+              value={repaymentAmount}
+              onChange={(e) => setRepaymentAmount(e.target.value)}
+              className="w-full p-3 border rounded-lg"
+            />
+            <button
+              onClick={repayMember}
+              disabled={!repaymentAmount || parseFloat(repaymentAmount) <= 0 || loading}
+              className={`w-full p-3 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform ${
+                selectedMember?.balance < 0 ? 'bg-green-500' : 'bg-blue-500'
+              }`}
+            >
+              {loading ? 'Traitement...' : (selectedMember?.balance < 0 ? 'Confirmer le remboursement' : 'Confirmer le rechargement')}
+            </button>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+if (currentScreen === 'bar-order') {
+  if (!selectedMember) {
+    // Filtrer les membres selon la recherche
+    const filteredMembers = members.filter(member =>
+      member.name.toLowerCase().includes(memberSearch.toLowerCase())
+    );
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header title="Sélectionner un membre" onBack={() => {
+          navigateTo('bar');
+          setMemberSearch(''); // Reset de la recherche
+        }} />
+        
+        <div className="p-4">
+          {/* Champ de recherche */}
+          <div className="mb-4">
+            <input
+              type="text"
+              placeholder="Rechercher un membre..."
+              value={memberSearch}
+              onChange={(e) => setMemberSearch(e.target.value)}
+              className="w-full p-1 border rounded-lg bg-white shadow-sm"
+            />
+          </div>
+
+          {/* Liste des membres filtrés */}
+          <div className="space-y-3">
+            {filteredMembers.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Users size={48} className="mx-auto mb-2 opacity-50" />
+                <p>{memberSearch ? 'Aucun membre trouvé' : 'Aucun membre disponible'}</p>
+              </div>
+            ) : (
+              filteredMembers.map(member => (
+                <button
+                  key={member.id}
+                  onClick={() => { 
+                    setSelectedMember(member); 
+                    setCurrentScreen('bar-products');
+                    setMemberSearch(''); // Reset de la recherche
+                  }}
+                  className="w-full p-4 bg-white rounded-lg shadow-sm text-left active:scale-95 transition-transform"
+                >
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="font-medium">{member.name}</h3>
+                      <p className={`text-sm ${member.balance < 0 ? 'text-red-500' : 'text-green-500'}`}>
+                        Solde: {formatCurrency(member.balance)}
+                      </p>
+                    </div>
+                    <div className="text-gray-400">→</div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     );
   }
-
-  if (currentScreen === 'bar-order') {
-    if (!selectedMember) {
-      return (
-        <div className="min-h-screen bg-gray-50">
-          <Header title="Sélectionner un membre" onBack={() => navigateTo('bar')} />
-          
-          <div className="p-4 space-y-3">
-            {members.map(member => (
-              <button
-                key={member.id}
-                onClick={() => { setSelectedMember(member); setCurrentScreen('bar-products'); }}
-                className="w-full p-4 bg-white rounded-lg shadow-sm text-left active:scale-95 transition-transform"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="font-medium">{member.name}</h3>
-                    <p className={`text-sm ${member.balance < 0 ? 'text-red-500' : 'text-green-500'}`}>
-                      Solde: {formatCurrency(member.balance)}
-                    </p>
-                  </div>
-                  <div className="text-gray-400">→</div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      );
-    }
-  }
+}
 
   if (currentScreen === 'bar-products') {
     return (
@@ -908,94 +954,97 @@ const addProduct = async () => {
                           </div>
                         </div>
                         
-                        {product.stockType === 'mixed' ? (
-                          <div className="space-y-2">
-                            {/* Vente par bac */}
-                            {product.stock >= product.packSize && (
-                              <div className="flex items-center justify-between p-2 bg-blue-50 rounded">
-                                <div className="text-sm">
-                                  <span className="font-medium">Bac de {product.packSize}</span>
-                                  <span className="text-blue-600 ml-2 font-semibold">{formatCurrency(product.pricePerPack)}</span>
-                                  <div className="text-xs text-gray-500">
-                                    ({formatCurrency(product.pricePerPack / product.packSize)}/unité)
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <button
-                                    onClick={() => removeFromCart(product.id, 'pack')}
-                                    disabled={!cart[`${product.id}-pack`]}
-                                    className="p-1 bg-red-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                                  >
-                                    <Minus size={12} />
-                                  </button>
-                                  <span className="font-medium w-8 text-center">
-                                    {Math.floor(packQuantity / product.packSize)}
-                                  </span>
-                                  <button
-                                    onClick={() => addToCart(product.id, 'pack')}
-                                    disabled={product.stock < product.packSize}
-                                    className="p-1 bg-blue-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                                  >
-                                    <Plus size={12} />
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* Vente par 11 */}
-                            {product.stock >= 11 && (
-                              <div className="flex items-center justify-between p-2 bg-green-50 rounded">
-                                <div className="text-sm">
-                                  <span className="font-medium">11 bières (mètre)</span>
-                                  <span className="text-green-600 ml-2 font-semibold">{formatCurrency(product.pricePer11)}</span>
-                                  <div className="text-xs text-gray-500">
-                                    ({formatCurrency(product.pricePer11 / 11)}/unité)
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <button
-                                    onClick={() => removeFromCart(product.id, 'eleven')}
-                                    disabled={!cart[`${product.id}-eleven`]}
-                                    className="p-1 bg-red-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                                  >
-                                    <Minus size={12} />
-                                  </button>
-                                  <span className="font-medium w-8 text-center">
-                                    {Math.floor(elevenQuantity / 11)}
-                                  </span>
-                                  <button
-                                    onClick={() => addToCart(product.id, 'eleven')}
-                                    disabled={product.stock < 11}
-                                    className="p-1 bg-green-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                                  >
-                                    <Plus size={12} />
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* Vente à l'unité */}
-                            <div className="flex items-center justify-between">
-                              <span className="text-sm">À l'unité</span>
-                              <div className="flex items-center space-x-2">
-                                <button
-                                  onClick={() => removeFromCart(product.id, 'unit')}
-                                  disabled={!cart[`${product.id}-unit`] || isOutOfStock}
-                                  className="p-1 bg-red-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                                >
-                                  <Minus size={16} />
-                                </button>
-                                <span className="font-medium w-8 text-center">{unitQuantity}</span>
-                                <button
-                                  onClick={() => addToCart(product.id, 'unit')}
-                                  disabled={isOutOfStock || availableStock <= 0}
-                                  className="p-1 bg-green-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                                >
-                                  <Plus size={16} />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
+{product.stockType === 'mixed' ? (
+  <div className="space-y-2">
+    {/* Vente à l'unité - EN PREMIER */}
+    <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+      <div className="text-sm">
+        <span className="font-medium">À l'unité</span>
+        <span className="text-gray-600 ml-2 font-semibold">{formatCurrency(product.price)}</span>
+      </div>
+      <div className="flex items-center space-x-2">
+        <button
+          onClick={() => removeFromCart(product.id, 'unit')}
+          disabled={!cart[`${product.id}-unit`] || isOutOfStock}
+          className="p-1 bg-red-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
+        >
+          <Minus size={12} />
+        </button>
+        <span className="font-medium w-8 text-center">{unitQuantity}</span>
+        <button
+          onClick={() => addToCart(product.id, 'unit')}
+          disabled={isOutOfStock || availableStock <= 0}
+          className="p-1 bg-green-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
+        >
+          <Plus size={12} />
+        </button>
+      </div>
+    </div>
+    
+    {/* Vente par 11 (mètre) - EN SECOND */}
+    {product.stock >= 11 && (
+      <div className="flex items-center justify-between p-2 bg-green-50 rounded">
+        <div className="text-sm">
+          <span className="font-medium">Mètre (11 bières)</span>
+          <span className="text-green-600 ml-2 font-semibold">{formatCurrency(product.pricePer11)}</span>
+          <div className="text-xs text-gray-500">
+            ({formatCurrency(product.pricePer11 / 11)}/unité)
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => removeFromCart(product.id, 'eleven')}
+            disabled={!cart[`${product.id}-eleven`]}
+            className="p-1 bg-red-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
+          >
+            <Minus size={12} />
+          </button>
+          <span className="font-medium w-8 text-center">
+            {Math.floor(elevenQuantity / 11)}
+          </span>
+          <button
+            onClick={() => addToCart(product.id, 'eleven')}
+            disabled={product.stock < 11}
+            className="p-1 bg-green-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
+          >
+            <Plus size={12} />
+          </button>
+        </div>
+      </div>
+    )}
+    
+    {/* Vente par bac - EN DERNIER */}
+    {product.stock >= product.packSize && (
+      <div className="flex items-center justify-between p-2 bg-blue-50 rounded">
+        <div className="text-sm">
+          <span className="font-medium">Bac de {product.packSize}</span>
+          <span className="text-blue-600 ml-2 font-semibold">{formatCurrency(product.pricePerPack)}</span>
+          <div className="text-xs text-gray-500">
+            ({formatCurrency(product.pricePerPack / product.packSize)}/unité)
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={() => removeFromCart(product.id, 'pack')}
+            disabled={!cart[`${product.id}-pack`]}
+            className="p-1 bg-red-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
+          >
+            <Minus size={12} />
+          </button>
+          <span className="font-medium w-8 text-center">
+            {Math.floor(packQuantity / product.packSize)}
+          </span>
+          <button
+            onClick={() => addToCart(product.id, 'pack')}
+            disabled={product.stock < product.packSize}
+            className="p-1 bg-blue-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
+          >
+            <Plus size={12} />
+          </button>
+        </div>
+      </div>
+    )}
+  </div>
                         ) : (
                           <div className="flex items-center justify-between mt-2">
                             <button
@@ -1241,18 +1290,16 @@ const addProduct = async () => {
 
   if (currentScreen === 'boulots-new') {
     const addBroToJob = () => {
-      if (newJob.bros.length < bros.length) {
-        const availableBros = bros.filter(bro => 
-          !newJob.bros.some(assignment => assignment.broId === bro.id)
-        );
-        if (availableBros.length > 0) {
-          setNewJob({
-            ...newJob,
-            bros: [...newJob.bros, { broId: availableBros[0].id, hours: 0 }]
-          });
-        }
-      }
-    };
+  setShowBroDropdown(!showBroDropdown);
+};
+
+const selectBroForJob = (broId) => {
+  setNewJob({
+    ...newJob,
+    bros: [...newJob.bros, { broId: broId, hours: 0 }]
+  });
+  setShowBroDropdown(false);
+};
 
     const removeBroFromJob = (index) => {
       const newBros = newJob.bros.filter((_, i) => i !== index);
@@ -1265,12 +1312,11 @@ const addProduct = async () => {
       setNewJob({ ...newJob, bros: newBros });
     };
 
-    const updateBroSelection = (index, broId) => {
-      const newBros = [...newJob.bros];
-      newBros[index].broId = parseInt(broId);
-      setNewJob({ ...newJob, bros: newBros });
-    };
-
+const updateBroSelection = (index, broId) => {
+  const newBros = [...newJob.bros];
+  newBros[index].broId = broId; // Supprimez parseInt()
+  setNewJob({ ...newJob, bros: newBros });
+};
     const totalHours = newJob.bros.reduce((sum, assignment) => sum + assignment.hours, 0);
     const totalCost = totalHours * newJob.customRate;
 
@@ -1339,18 +1385,45 @@ const addProduct = async () => {
             </div>
 
             <div>
-              <div className="flex items-center justify-between mb-3">
-                <label className="block text-sm font-medium text-gray-700">
-                  Bro assignés ({newJob.bros.length})
-                </label>
-                <button
-                  onClick={addBroToJob}
-                  disabled={newJob.bros.length >= bros.length}
-                  className="p-1 bg-green-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                >
-                  <Plus size={16} />
-                </button>
-              </div>
+              <div className="mb-3">
+  <div className="flex items-center justify-between">
+    <label className="block text-sm font-medium text-gray-700">
+      Bro assignés ({newJob.bros.length})
+    </label>
+    <button
+      onClick={addBroToJob}
+      disabled={newJob.bros.length >= bros.length}
+      className="p-1 bg-green-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
+    >
+      <Plus size={16} />
+    </button>
+  </div>
+  
+  {showBroDropdown && (
+    <div className="mt-2 p-2 bg-gray-50 rounded border">
+      <p className="text-sm text-gray-600 mb-2">Sélectionner un Bro :</p>
+      <div className="space-y-1">
+        {bros.filter(bro => 
+          !newJob.bros.some(assignment => assignment.broId === bro.id)
+        ).map(bro => (
+          <button
+            key={bro.id}
+            onClick={() => selectBroForJob(bro.id)}
+            className="w-full text-left p-2 hover:bg-gray-200 rounded text-sm"
+          >
+            {bro.name}
+          </button>
+        ))}
+      </div>
+      <button
+        onClick={() => setShowBroDropdown(false)}
+        className="mt-2 text-xs text-gray-500 hover:text-gray-700"
+      >
+        Annuler
+      </button>
+    </div>
+  )}
+</div>
 
               <div className="space-y-3">
                 {newJob.bros.map((assignment, index) => {
