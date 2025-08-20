@@ -602,17 +602,7 @@ const removeFromCart = (productId, saleType = 'unit') => {
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
         <Header title="Gestion Patro" />
         
-        <div className={`mx-4 mt-4 p-3 rounded-lg ${isOnline ? 'bg-green-50 border border-green-200' : 'bg-orange-50 border border-orange-200'}`}>
-          <div className="flex items-center space-x-2">
-            {isOnline ? <Wifi size={16} className="text-green-600" /> : <WifiOff size={16} className="text-orange-600" />}
-            <span className={`text-sm font-medium ${isOnline ? 'text-green-800' : 'text-orange-800'}`}>
-              {isOnline ? 'Application complète - Prêt pour Firebase' : 'Hors ligne - Mode local'}
-            </span>
-          </div>
-          <p className="text-xs text-gray-600 mt-1">
-            Toutes les fonctionnalités avancées sont disponibles
-          </p>
-        </div>
+        
         
         <div className="p-6 space-y-4">
           <h2 className="text-2xl font-bold text-center text-gray-800 mb-8">
