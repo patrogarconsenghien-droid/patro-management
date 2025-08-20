@@ -81,9 +81,29 @@ const [stockMovements, setStockMovements] = useState([]);
     setCartTotal(total);
   }, [cart]);
 
+  useEffect(() => {
+  const handlePopState = (event) => {
+    if (event.state && event.state.screen) {
+      setCurrentScreen(event.state.screen);
+      setSelectedMember(event.state.selectedMember || null);
+    } else {
+      // Si pas d'état, retour à l'accueil
+      setCurrentScreen('home');
+      setSelectedMember(null);
+    }
+  };
+
+  window.addEventListener('popstate', handlePopState);
+  
+  return () => {
+    window.removeEventListener('popstate', handlePopState);
+  };
+}, []);
 useEffect(() => {
   console.log("Chargement des données depuis Firebase...");
   
+  window.history.replaceState({ screen: 'home' }, '', '#home');
+
   let unsubscribeMembers = null;
   let unsubscribeBros = null;
   let unsubscribeProducts = null;
@@ -226,11 +246,18 @@ const updateStock = async (productId, quantityChange, reason) => {
     return { color: 'text-green-600', bg: 'bg-green-50' };
   };
 
-  const navigateTo = (screen) => {
-    setCurrentScreen(screen);
-    setSelectedMember(null);
-    setCart({});
-  };
+ const navigateTo = (screen, member = null) => {
+  setCurrentScreen(screen);
+  setSelectedMember(member);
+  setCart({});
+  
+  // Pousser l'état dans l'historique pour la navigation mobile
+  window.history.pushState(
+    { screen: screen, selectedMember: member }, 
+    '', 
+    `#${screen}`
+  );
+};
 
 const addMember = async () => {
   if (newMemberName.trim()) {
@@ -880,11 +907,11 @@ if (currentScreen === 'bar-order') {
               filteredMembers.map(member => (
                 <button
                   key={member.id}
-                  onClick={() => { 
-                    setSelectedMember(member); 
-                    setCurrentScreen('bar-products');
-                    setMemberSearch(''); // Reset de la recherche
-                  }}
+                onClick={() => { 
+  setSelectedMember(member); 
+  navigateTo('bar-products', member);
+  setMemberSearch('');
+}}
                   className="w-full p-4 bg-white rounded-lg shadow-sm text-left active:scale-95 transition-transform"
                 >
                   <div className="flex items-center justify-between">
@@ -1150,25 +1177,12 @@ if (currentScreen === 'bar-order') {
     );
   }
 
-  if (currentScreen === 'boulots') {
+if (currentScreen === 'boulots') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100">
         <Header title="Section Boulots" onBack={() => navigateTo('home')} />
         
         <div className="p-6 space-y-4">
-          <button
-            onClick={() => navigateTo('boulots-bros')}
-            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
-          >
-            <div className="flex items-center space-x-3">
-              <User className="text-green-500" size={24} />
-              <div className="text-left">
-                <h3 className="font-semibold">Gestion des Bro</h3>
-                <p className="text-gray-600 text-sm">Liste et suppressions</p>
-              </div>
-            </div>
-          </button>
-
           <button
             onClick={() => navigateTo('boulots-new')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
@@ -1178,6 +1192,19 @@ if (currentScreen === 'bar-order') {
               <div className="text-left">
                 <h3 className="font-semibold">Nouveau boulot</h3>
                 <p className="text-gray-600 text-sm">Multi-Bro avec paiement</p>
+              </div>
+            </div>
+          </button>
+
+          <button
+            onClick={() => navigateTo('boulots-stats')}
+            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center space-x-3">
+              <BarChart3 className="text-green-500" size={24} />
+              <div className="text-left">
+                <h3 className="font-semibold">Statistiques</h3>
+                <p className="text-gray-600 text-sm">Graphiques et classements</p>
               </div>
             </div>
           </button>
@@ -1196,14 +1223,14 @@ if (currentScreen === 'bar-order') {
           </button>
 
           <button
-            onClick={() => navigateTo('boulots-stats')}
+            onClick={() => navigateTo('boulots-bros')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
           >
             <div className="flex items-center space-x-3">
-              <BarChart3 className="text-green-500" size={24} />
+              <User className="text-green-500" size={24} />
               <div className="text-left">
-                <h3 className="font-semibold">Statistiques</h3>
-                <p className="text-gray-600 text-sm">Graphiques et classements</p>
+                <h3 className="font-semibold">Gestion des Bro</h3>
+                <p className="text-gray-600 text-sm">Liste et suppressions</p>
               </div>
             </div>
           </button>
@@ -1554,74 +1581,69 @@ const updateBroSelection = (index, broId) => {
   }
 
   if (currentScreen === 'boulots-stats') {
-    const chartData = bros.map(bro => ({
-      name: bro.name,
-      hours: bro.totalHours,
-      earnings: bro.totalHours * hourlyRate,
-      jobs: jobs.filter(j => j.broId === bro.id).length
-    })).sort((a, b) => b.hours - a.hours);
+    // Calculer les vrais gains à partir des jobs individuels
+    const chartData = bros.map(bro => {
+      const broJobs = jobs.filter(j => j.broId === bro.id);
+      const realEarnings = broJobs.reduce((sum, job) => sum + (job.total || 0), 0);
+      
+      return {
+        name: bro.name,
+        hours: bro.totalHours,
+        earnings: realEarnings,
+        jobs: broJobs.length
+      };
+    }).sort((a, b) => b.hours - a.hours);
 
-    const maxHours = Math.max(...chartData.map(d => d.hours), 1);
+    const totalEarnings = chartData.reduce((sum, bro) => sum + bro.earnings, 0);
 
     return (
       <div className="min-h-screen bg-gray-50">
         <Header title="Statistiques des Bro" onBack={() => navigateTo('boulots')} />
         
         <div className="p-4 space-y-6">
+          {/* Statistiques globales en premier */}
           <div className="bg-white p-4 rounded-lg shadow-sm">
-            <h3 className="font-semibold text-lg mb-4 text-center">Heures travaillées par Bro</h3>
+            <h3 className="font-semibold text-lg mb-4 text-center">Statistiques globales</h3>
             
-            <div className="space-y-3">
-              {chartData.map((bro, index) => {
-                const percentage = (bro.hours / maxHours) * 100;
-                const colors = [
-                  'bg-green-500',
-                  'bg-blue-500', 
-                  'bg-purple-500',
-                  'bg-orange-500',
-                  'bg-red-500',
-                  'bg-yellow-500'
-                ];
-                const color = colors[index % colors.length];
-                
-                return (
-                  <div key={bro.name} className="space-y-1">
-                    <div className="flex justify-between items-center text-sm">
-                      <span className="font-medium">{bro.name}</span>
-                      <span className="text-gray-600">{bro.hours}h</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-6 relative overflow-hidden">
-                      <div 
-                        className={`h-full ${color} transition-all duration-500 ease-out flex items-center justify-end pr-2`}
-                        style={{ width: `${Math.max(percentage, 5)}%` }}
-                      >
-                        {percentage > 25 && (
-                          <span className="text-white text-xs font-medium">
-                            {formatCurrency(bro.earnings)}
-                          </span>
-                        )}
-                      </div>
-                      {percentage <= 25 && bro.hours > 0 && (
-                        <span className="absolute right-2 top-1/2 transform -translate-y-1/2 text-xs text-gray-600">
-                          {formatCurrency(bro.earnings)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {chartData.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                <BarChart3 size={48} className="mx-auto mb-2 opacity-50" />
-                <p>Aucune donnée à afficher</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-green-50 p-3 rounded-lg text-center">
+                <div className="text-2xl font-bold text-green-600">
+                  {chartData.reduce((sum, bro) => sum + bro.hours, 0)}h
+                </div>
+                <div className="text-xs text-gray-600">Total heures</div>
               </div>
-            )}
+              
+              <div className="bg-blue-50 p-3 rounded-lg text-center">
+                <div className="text-2xl font-bold text-blue-600">
+                  {formatCurrency(totalEarnings)}
+                </div>
+                <div className="text-xs text-gray-600">Total gains réels</div>
+              </div>
+              
+              <div className="bg-purple-50 p-3 rounded-lg text-center">
+                <div className="text-2xl font-bold text-purple-600">
+                  {jobs.length}
+                </div>
+                <div className="text-xs text-gray-600">Total boulots</div>
+              </div>
+              
+              <div className="bg-orange-50 p-3 rounded-lg text-center">
+<div className="text-2xl font-bold text-orange-600">
+  {chartData.length > 0 ? (() => {
+    const avgHours = chartData.reduce((sum, bro) => sum + bro.hours, 0) / chartData.length;
+    const hours = Math.floor(avgHours);
+    const minutes = Math.round((avgHours - hours) * 60);
+    return `${hours}h${minutes.toString().padStart(2, '0')}min`;
+  })() : '0h00min'}
+</div>
+                <div className="text-xs text-gray-600">Moyenne/Bro</div>
+              </div>
+            </div>
           </div>
 
+          {/* Classement basé sur les heures */}
           <div className="bg-white p-4 rounded-lg shadow-sm">
-            <h3 className="font-semibold text-lg mb-4 text-center">Classement des travailleurs</h3>
+            <h3 className="font-semibold text-lg mb-4 text-center">Classement par heures travaillées</h3>
             
             <div className="space-y-2">
               {chartData.map((bro, index) => (
@@ -1648,38 +1670,88 @@ const updateBroSelection = (index, broId) => {
             </div>
           </div>
 
+          {/* Diagramme circulaire des gains */}
           <div className="bg-white p-4 rounded-lg shadow-sm">
-            <h3 className="font-semibold text-lg mb-4 text-center">Statistiques globales</h3>
+            <h3 className="font-semibold text-lg mb-4 text-center">Répartition des gains réels</h3>
             
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-green-50 p-3 rounded-lg text-center">
-                <div className="text-2xl font-bold text-green-600">
-                  {chartData.reduce((sum, bro) => sum + bro.hours, 0)}h
+            {chartData.filter(bro => bro.earnings > 0).length > 0 ? (
+              <div className="flex flex-col items-center space-y-4">
+                {/* Diagramme circulaire simplifié */}
+                <div className="relative w-48 h-48">
+                  <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
+                    {chartData.filter(bro => bro.earnings > 0).map((bro, index) => {
+                      const percentage = (bro.earnings / totalEarnings) * 100;
+                      const angle = (percentage / 100) * 360;
+                      const startAngle = chartData.slice(0, index).reduce((sum, prevBro) => 
+                        sum + ((prevBro.earnings / totalEarnings) * 360), 0);
+                      
+                      const colors = [
+                        '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#eab308'
+                      ];
+                      const color = colors[index % colors.length];
+                      
+                      // Calcul des coordonnées pour le path de l'arc
+                      const centerX = 50;
+                      const centerY = 50;
+                      const radius = 40;
+                      
+                      const startAngleRad = (startAngle * Math.PI) / 180;
+                      const endAngleRad = ((startAngle + angle) * Math.PI) / 180;
+                      
+                      const x1 = centerX + radius * Math.cos(startAngleRad);
+                      const y1 = centerY + radius * Math.sin(startAngleRad);
+                      const x2 = centerX + radius * Math.cos(endAngleRad);
+                      const y2 = centerY + radius * Math.sin(endAngleRad);
+                      
+                      const largeArcFlag = angle > 180 ? 1 : 0;
+                      
+                      return (
+                        <path
+                          key={bro.name}
+                          d={`M ${centerX} ${centerY} L ${x1} ${y1} A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2} Z`}
+                          fill={color}
+                          stroke="white"
+                          strokeWidth="1"
+                        />
+                      );
+                    })}
+                  </svg>
                 </div>
-                <div className="text-xs text-gray-600">Total heures</div>
-              </div>
-              
-              <div className="bg-blue-50 p-3 rounded-lg text-center">
-                <div className="text-2xl font-bold text-blue-600">
-                  {formatCurrency(chartData.reduce((sum, bro) => sum + bro.earnings, 0))}
+                
+                {/* Légende */}
+                <div className="space-y-2 w-full">
+                  {chartData.filter(bro => bro.earnings > 0).map((bro, index) => {
+                    const percentage = ((bro.earnings / totalEarnings) * 100).toFixed(1);
+                    const colors = [
+                      'bg-green-500', 'bg-blue-500', 'bg-purple-500', 'bg-orange-500', 'bg-red-500', 'bg-yellow-500'
+                    ];
+                    const color = colors[index % colors.length];
+                    
+                    return (
+                      <div key={bro.name} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div className="flex items-center space-x-2">
+                          <div className={`w-3 h-3 rounded-full ${color}`}></div>
+                          <span className="text-sm font-medium">{bro.name}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-sm font-semibold text-green-600">
+                            {formatCurrency(bro.earnings)}
+                          </span>
+                          <span className="text-xs text-gray-500 ml-1">
+                            ({percentage}%)
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                <div className="text-xs text-gray-600">Total gains</div>
               </div>
-              
-              <div className="bg-purple-50 p-3 rounded-lg text-center">
-                <div className="text-2xl font-bold text-purple-600">
-                  {jobs.length}
-                </div>
-                <div className="text-xs text-gray-600">Total boulots</div>
+            ) : (
+              <div className="text-center py-8 text-gray-500">
+                <BarChart3 size={48} className="mx-auto mb-2 opacity-50" />
+                <p>Aucun gain à afficher</p>
               </div>
-              
-              <div className="bg-orange-50 p-3 rounded-lg text-center">
-                <div className="text-2xl font-bold text-orange-600">
-                  {chartData.length > 0 ? (chartData.reduce((sum, bro) => sum + bro.hours, 0) / chartData.length).toFixed(1) : 0}h
-                </div>
-                <div className="text-xs text-gray-600">Moyenne/Bro</div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
