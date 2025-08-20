@@ -7,48 +7,37 @@ import {
 import { db } from './firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 
-
+const Modal = ({ isOpen, onClose, title, children }) => {
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg w-full max-w-md">
+        <div className="flex items-center justify-between p-4 border-b">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
+            <Plus className="rotate-45" size={20} />
+          </button>
+        </div>
+        <div className="p-4">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const PatroApp = () => {
   const [currentScreen, setCurrentScreen] = useState('home');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [loading, setLoading] = useState(false);
   
-  const [members, setMembers] = useState([
-    { id: 1, name: 'Jean Dupont', balance: -15.50 },
-    { id: 2, name: 'Marie Martin', balance: 23.75 },
-    { id: 3, name: 'Paul Durand', balance: -8.20 }
-  ]);
-  
-  const [bros, setBros] = useState([
-    { id: 1, name: 'Alex Bro', totalHours: 12.5 },
-    { id: 2, name: 'Sam Worker', totalHours: 8.0 }
-  ]);
-  
-  const [products, setProducts] = useState([
-    { 
-      id: 1, name: 'Coca Cola', price: 2.50, category: 'Boissons',
-      stock: 48, stockType: 'unit', packSize: 1, alertThreshold: 10
-    },
-    { 
-      id: 2, name: 'Bière Jupiler', price: 3.00, category: 'Alcool',
-      stock: 72, stockType: 'mixed', packSize: 24, pricePerPack: 66.00,
-      pricePer11: 30.00, alertThreshold: 24
-    },
-    { 
-      id: 3, name: 'Chips', price: 1.50, category: 'Snacks',
-      stock: 25, stockType: 'unit', packSize: 1, alertThreshold: 5
-    },
-    { 
-      id: 4, name: 'Sandwich', price: 4.50, category: 'Nourriture',
-      stock: 12, stockType: 'unit', packSize: 1, alertThreshold: 3
-    }
-  ]);
-  
-  const [orders, setOrders] = useState([]);
-  const [jobs, setJobs] = useState([]);
-  const [hourlyRate, setHourlyRate] = useState(10.00);
-  const [stockMovements, setStockMovements] = useState([]);
+const [members, setMembers] = useState([]);
+const [bros, setBros] = useState([]);
+const [products, setProducts] = useState([]);
+const [orders, setOrders] = useState([]);
+const [jobs, setJobs] = useState([]);
+const [stockMovements, setStockMovements] = useState([]);
   
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
@@ -56,7 +45,7 @@ const PatroApp = () => {
   const [cart, setCart] = useState({});
   const [cartTotal, setCartTotal] = useState(0);
   const [repaymentAmount, setRepaymentAmount] = useState('');
-  
+  const [hourlyRate, setHourlyRate] = useState(10.00);
   const [newMemberName, setNewMemberName] = useState('');
   const [newBroName, setNewBroName] = useState('');
   const [newProduct, setNewProduct] = useState({ 
@@ -91,58 +80,127 @@ const PatroApp = () => {
     setCartTotal(total);
   }, [cart]);
 
+useEffect(() => {
+  console.log("Chargement des données depuis Firebase...");
+  
+  let unsubscribeMembers = null;
+  let unsubscribeBros = null;
+  let unsubscribeProducts = null;
+  let unsubscribeOrders = null;
+  let unsubscribeJobs = null;
+  let unsubscribeStockMovements = null;
+
+  const setupListeners = async () => {
+    unsubscribeMembers = await loadFromFirebase('members', setMembers);
+    unsubscribeBros = await loadFromFirebase('bros', setBros);
+    unsubscribeProducts = await loadFromFirebase('products', setProducts);
+    unsubscribeOrders = await loadFromFirebase('orders', setOrders);
+    unsubscribeJobs = await loadFromFirebase('jobs', setJobs);
+    unsubscribeStockMovements = await loadFromFirebase('stockMovements', setStockMovements);
+  };
+
+  setupListeners();
+
+  return () => {
+    if (unsubscribeMembers) unsubscribeMembers();
+    if (unsubscribeBros) unsubscribeBros();
+    if (unsubscribeProducts) unsubscribeProducts();
+    if (unsubscribeOrders) unsubscribeOrders();
+    if (unsubscribeJobs) unsubscribeJobs();
+    if (unsubscribeStockMovements) unsubscribeStockMovements();
+  };
+}, []);
+
   const formatCurrency = (amount) => `€${amount.toFixed(2)}`;
   const formatDate = (date) => new Date(date).toLocaleDateString('fr-FR');
 
-  const saveToFirebase = async (collectionName, data) => {
-    setLoading(true);
-    try {
-      console.log(`Sauvegarde simulée dans ${collectionName}:`, data);
-      await new Promise(resolve => setTimeout(resolve, 300));
-    } catch (error) {
-      console.error('Erreur simulation Firebase:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+const saveToFirebase = async (collectionName, data) => {
+  setLoading(true);
+  try {
+    const docRef = await addDoc(collection(db, collectionName), {
+      ...data,
+      createdAt: serverTimestamp()
+    });
+    console.log(`Document sauvegardé dans ${collectionName} avec ID:`, docRef.id);
+    return docRef.id;
+  } catch (error) {
+    console.error('Erreur sauvegarde Firebase:', error);
+    alert(`Erreur de connexion Firebase: ${error.message}`);
+    throw error;
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const updateInFirebase = async (collectionName, id, data) => {
-    setLoading(true);
-    try {
-      console.log(`Mise à jour simulée ${collectionName}/${id}:`, data);
-      await new Promise(resolve => setTimeout(resolve, 200));
-    } catch (error) {
-      console.error('Erreur simulation Firebase:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+const updateInFirebase = async (collectionName, id, data) => {
+  setLoading(true);
+  try {
+    const docRef = doc(db, collectionName, id);
+    await updateDoc(docRef, {
+      ...data,
+      updatedAt: serverTimestamp()
+    });
+    console.log(`Document ${collectionName}/${id} mis à jour`);
+  } catch (error) {
+    console.error('Erreur mise à jour Firebase:', error);
+    alert(`Erreur de mise à jour: ${error.message}`);
+    throw error;
+  } finally {
+    setLoading(false);
+  }
+};
 
-  const deleteFromFirebase = async (collectionName, id) => {
-    setLoading(true);
-    try {
-      console.log(`Suppression simulée ${collectionName}/${id}`);
-      await new Promise(resolve => setTimeout(resolve, 200));
-    } catch (error) {
-      console.error('Erreur simulation Firebase:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+const deleteFromFirebase = async (collectionName, id) => {
+  setLoading(true);
+  try {
+    const docRef = doc(db, collectionName, id);
+    await deleteDoc(docRef);
+    console.log(`Document ${collectionName}/${id} supprimé`);
+  } catch (error) {
+    console.error('Erreur suppression Firebase:', error);
+    alert(`Erreur de suppression: ${error.message}`);
+    throw error;
+  } finally {
+    setLoading(false);
+  }
+};
+const loadFromFirebase = async (collectionName, setState) => {
+  try {
+    const unsubscribe = onSnapshot(collection(db, collectionName), (snapshot) => {
+      if (!snapshot.metadata.hasPendingWrites) {
+        const data = snapshot.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setState(data);
+        console.log(`Données chargées de ${collectionName}:`, data);
+      }
+    });
+    return unsubscribe;
+  } catch (error) {
+    console.error(`Erreur chargement ${collectionName}:`, error);
+  }
+};
+const updateStock = async (productId, quantityChange, reason) => {
+  console.log('updateStock appelée avec:', { productId, quantityChange, reason });
+  
+  const product = products.find(p => p.id === productId);
+  console.log('Produit trouvé:', product);
+  
+  if (!product) {
+    console.log('Produit non trouvé!');
+    return;
+  }
 
-  const updateStock = (productId, quantityChange, reason) => {
-    const product = products.find(p => p.id === productId);
-    if (!product) return;
-
-    const newStock = Math.max(0, product.stock + quantityChange);
-    
-    const updatedProducts = products.map(p =>
-      p.id === productId ? { ...p, stock: newStock } : p
-    );
-    setProducts(updatedProducts);
+  const newStock = Math.max(0, product.stock + quantityChange);
+  console.log('Nouveau stock calculé:', newStock);
+  
+  try {
+    console.log('Mise à jour du produit dans Firebase...');
+    await updateInFirebase('products', productId, { stock: newStock });
+    console.log('Produit mis à jour avec succès');
 
     const movement = {
-      id: Date.now(),
       productId,
       productName: product.name,
       quantityChange,
@@ -150,11 +208,16 @@ const PatroApp = () => {
       reason,
       timestamp: new Date().toISOString()
     };
-    setStockMovements([movement, ...stockMovements]);
-
-    saveToFirebase('products', { id: productId, stock: newStock });
-    saveToFirebase('stockMovements', movement);
-  };
+    
+    console.log('Sauvegarde du mouvement de stock...');
+    await saveToFirebase('stockMovements', movement);
+    console.log('Mouvement de stock sauvegardé');
+    
+  } catch (error) {
+    console.error('Erreur mise à jour stock:', error);
+    alert('Erreur lors de la mise à jour du stock');
+  }
+};
 
   const getStockStatus = (product) => {
     if (product.stock <= 0) return { color: 'text-red-600', bg: 'bg-red-50' };
@@ -168,20 +231,22 @@ const PatroApp = () => {
     setCart({});
   };
 
-  const addMember = async () => {
-    if (newMemberName.trim()) {
-      const newMember = {
-        name: newMemberName.trim(),
-        balance: 0,
-        createdAt: new Date().toISOString()
-      };
-      
+const addMember = async () => {
+  if (newMemberName.trim()) {
+    const newMember = {
+      name: newMemberName.trim(),
+      balance: 0
+    };
+    
+    try {
       await saveToFirebase('members', newMember);
-      setMembers([...members, { ...newMember, id: Date.now() }]);
       setNewMemberName('');
       setShowModal(false);
+    } catch (error) {
+      alert('Erreur lors de l\'ajout du membre');
     }
-  };
+  }
+};
 
   const deleteMember = async (memberId) => {
     await deleteFromFirebase('members', memberId);
@@ -205,15 +270,7 @@ const PatroApp = () => {
         items: []
       };
       
-      await saveToFirebase('orders', transaction);
-      
-      const updatedMembers = members.map(member =>
-        member.id === selectedMember.id
-          ? { ...member, balance: updatedBalance }
-          : member
-      );
-      setMembers(updatedMembers);
-      setOrders([{ ...transaction, id: Date.now() }, ...orders]);
+await saveToFirebase('orders', transaction);
       
       setRepaymentAmount('');
       setShowModal(false);
@@ -307,7 +364,7 @@ const removeFromCart = (productId, saleType = 'unit') => {
 
     // Vérifier le stock
     Object.entries(totalUnitsNeeded).forEach(([productId, totalNeeded]) => {
-      const product = products.find(p => p.id === parseInt(productId));
+      const product = products.find(p => p.id === productId);
       if (product && product.stock < totalNeeded) {
         stockIssues.push(`${product.name}: stock insuffisant`);
       }
@@ -350,41 +407,34 @@ const removeFromCart = (productId, saleType = 'unit') => {
     const newBalance = selectedMember.balance - cartTotal;
 
     // Mettre à jour le stock
-    Object.entries(totalUnitsNeeded).forEach(([productId, totalNeeded]) => {
-      updateStock(parseInt(productId), -totalNeeded, `Vente à ${selectedMember.name}`);
-    });
-
-    await Promise.all([
-      saveToFirebase('orders', order),
-      updateInFirebase('members', selectedMember.id, { balance: newBalance })
-    ]);
-
-    setOrders([{ ...order, id: Date.now() }, ...orders]);
-    const updatedMembers = members.map(member =>
-      member.id === selectedMember.id
-        ? { ...member, balance: newBalance }
-        : member
-    );
-    setMembers(updatedMembers);
+Object.entries(totalUnitsNeeded).forEach(([productId, totalNeeded]) => {
+  updateStock(productId, -totalNeeded, `Vente à ${selectedMember.name}`);
+});
+await Promise.all([
+  saveToFirebase('orders', order),
+  updateInFirebase('members', selectedMember.id, { balance: newBalance })
+]);
 
     setCart({});
     navigateTo('bar-history');
   };
 
-  const addBro = async () => {
-    if (newBroName.trim()) {
-      const newBro = {
-        name: newBroName.trim(),
-        totalHours: 0,
-        createdAt: new Date().toISOString()
-      };
-      
+const addBro = async () => {
+  if (newBroName.trim()) {
+    const newBro = {
+      name: newBroName.trim(),
+      totalHours: 0
+    };
+    
+    try {
       await saveToFirebase('bros', newBro);
-      setBros([...bros, { ...newBro, id: Date.now() }]);
       setNewBroName('');
       setShowModal(false);
+    } catch (error) {
+      alert('Erreur lors de l\'ajout du Bro');
     }
-  };
+  }
+};
 
   const deleteBro = async (broId) => {
     await deleteFromFirebase('bros', broId);
@@ -392,8 +442,9 @@ const removeFromCart = (productId, saleType = 'unit') => {
     setJobs(jobs.filter(j => j.broId !== broId));
   };
 
-  const addJob = async () => {
-    if (newJob.description.trim() && newJob.bros.length > 0 && newJob.bros.every(b => b.hours > 0)) {
+const addJob = async () => {
+  if (newJob.description.trim() && newJob.bros.length > 0 && newJob.bros.every(b => b.hours > 0)) {
+    try {
       const newJobs = newJob.bros.map(broAssignment => {
         const bro = bros.find(b => b.id === broAssignment.broId);
         return {
@@ -404,13 +455,14 @@ const removeFromCart = (productId, saleType = 'unit') => {
           date: newJob.date,
           hourlyRate: newJob.customRate,
           total: broAssignment.hours * newJob.customRate,
-          isPaid: newJob.isPaid,
-          createdAt: new Date().toISOString()
+          isPaid: newJob.isPaid
         };
       });
 
+      // Sauvegarder tous les jobs
       await Promise.all(newJobs.map(job => saveToFirebase('jobs', job)));
 
+      // Mettre à jour les heures totales des Bro
       const broUpdates = newJob.bros.map(assignment => {
         const bro = bros.find(b => b.id === assignment.broId);
         return updateInFirebase('bros', bro.id, { 
@@ -418,15 +470,6 @@ const removeFromCart = (productId, saleType = 'unit') => {
         });
       });
       await Promise.all(broUpdates);
-
-      setJobs([...newJobs.map((job, i) => ({ ...job, id: Date.now() + i })), ...jobs]);
-      const updatedBros = bros.map(bro => {
-        const assignment = newJob.bros.find(b => b.broId === bro.id);
-        return assignment 
-          ? { ...bro, totalHours: bro.totalHours + assignment.hours }
-          : bro;
-      });
-      setBros(updatedBros);
 
       setNewJob({ 
         description: '', 
@@ -436,8 +479,11 @@ const removeFromCart = (productId, saleType = 'unit') => {
         isPaid: false
       });
       setShowModal(false);
+    } catch (error) {
+      alert('Erreur lors de l\'ajout du job');
     }
-  };
+  }
+};
 
   const toggleJobPayment = async (jobId) => {
     const job = jobs.find(j => j.id === jobId);
@@ -463,9 +509,9 @@ const removeFromCart = (productId, saleType = 'unit') => {
         stockToRestore[item.productId] += item.quantity;
       });
 
-      Object.entries(stockToRestore).forEach(([productId, quantity]) => {
-        updateStock(parseInt(productId), quantity, `Annulation commande #${orderId}`);
-      });
+       Object.entries(stockToRestore).forEach(([productId, quantity]) => {
+       updateStock(productId, quantity, `Annulation commande #${orderId}`);
+       });
 
       const member = members.find(m => m.id === order.memberId);
       if (member) {
@@ -509,38 +555,39 @@ const removeFromCart = (productId, saleType = 'unit') => {
     setJobs(jobs.filter(j => j.id !== jobId));
   };
 
-  const addProduct = async () => {
-    const price = parseFloat(newProduct.price);
-    const stock = parseInt(newProduct.stock) || 0;
-    const alertThreshold = parseInt(newProduct.alertThreshold) || 5;
-    
-    if (newProduct.name.trim() && price > 0) {
-      const product = {
-        name: newProduct.name.trim(),
-        price: price,
-        category: newProduct.category,
-        stock: stock,
-        stockType: newProduct.stockType,
-        packSize: parseInt(newProduct.packSize) || 1,
-        alertThreshold: alertThreshold,
-        createdAt: new Date().toISOString()
-      };
+const addProduct = async () => {
+  const price = parseFloat(newProduct.price);
+  const stock = parseInt(newProduct.stock) || 0;
+  const alertThreshold = parseInt(newProduct.alertThreshold) || 5;
+  
+  if (newProduct.name.trim() && price > 0) {
+    const product = {
+      name: newProduct.name.trim(),
+      price: price,
+      category: newProduct.category,
+      stock: stock,
+      stockType: newProduct.stockType,
+      packSize: parseInt(newProduct.packSize) || 1,
+      alertThreshold: alertThreshold
+    };
 
-      if (newProduct.stockType === 'mixed') {
-        product.pricePerPack = parseFloat(newProduct.pricePerPack) || 0;
-        product.pricePer11 = parseFloat(newProduct.pricePer11) || 0;
-      }
-      
+    if (newProduct.stockType === 'mixed') {
+      product.pricePerPack = parseFloat(newProduct.pricePerPack) || 0;
+      product.pricePer11 = parseFloat(newProduct.pricePer11) || 0;
+    }
+    
+    try {
       await saveToFirebase('products', product);
-      setProducts([...products, { ...product, id: Date.now() }]);
       setNewProduct({ 
         name: '', price: '', category: 'Boissons', stock: '', stockType: 'unit',
         packSize: 1, pricePerPack: '', pricePer11: '', alertThreshold: 5
       });
       setShowModal(false);
+    } catch (error) {
+      alert('Erreur lors de l\'ajout du produit');
     }
-  };
-
+  }
+};
   const deleteProduct = async (productId) => {
     await deleteFromFirebase('products', productId);
     setProducts(products.filter(p => p.id !== productId));
@@ -550,7 +597,7 @@ const removeFromCart = (productId, saleType = 'unit') => {
     const quantity = parseInt(stockAdjustment.quantity);
     if (stockAdjustment.productId && quantity !== 0 && stockAdjustment.reason.trim()) {
       const change = stockAdjustment.type === 'add' ? quantity : -quantity;
-      updateStock(parseInt(stockAdjustment.productId), change, stockAdjustment.reason.trim());
+      updateStock(stockAdjustment.productId, change, stockAdjustment.reason.trim());
       setStockAdjustment({ productId: '', quantity: '', type: 'add', reason: '' });
       setShowModal(false);
     }
@@ -577,25 +624,7 @@ const removeFromCart = (productId, saleType = 'unit') => {
     </div>
   );
 
-  const Modal = ({ isOpen, onClose, title, children }) => {
-    if (!isOpen) return null;
-    
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg w-full max-w-md">
-          <div className="flex items-center justify-between p-4 border-b">
-            <h2 className="text-lg font-semibold">{title}</h2>
-            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded">
-              <Plus className="rotate-45" size={20} />
-            </button>
-          </div>
-          <div className="p-4">
-            {children}
-          </div>
-        </div>
-      </div>
-    );
-  };
+
 
   if (currentScreen === 'home') {
     return (
