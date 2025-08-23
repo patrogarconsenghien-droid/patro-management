@@ -1058,7 +1058,7 @@ const adjustStock = async () => {
   }
 };
 
-const categories = ['Alcool', 'Boissons', 'Snacks', 'Nourriture'].filter(cat => 
+const categories = ['Alcool', 'Boissons', 'Snacks', 'Nourriture','Autre'].filter(cat => 
   products.some(p => p.category === cat)
 );
 
@@ -3977,6 +3977,7 @@ jobs.forEach(job => {
                 <option value="Alcool">Alcool</option>
                 <option value="Snacks">Snacks</option>
                 <option value="Nourriture">Nourriture</option>
+                <option value="Autre">Autre</option>
               </select>
             </div>
 
