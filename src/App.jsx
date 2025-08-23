@@ -47,26 +47,56 @@ const [stockMovements, setStockMovements] = useState([]);
   const [cart, setCart] = useState({});
   const [cartTotal, setCartTotal] = useState(0);
   const [repaymentAmount, setRepaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
   const [hourlyRate, setHourlyRate] = useState(10.00);
   const [newMemberName, setNewMemberName] = useState('');
   const [newBroName, setNewBroName] = useState('');
   const [showBroDropdown, setShowBroDropdown] = useState(false);
-  const [newProduct, setNewProduct] = useState({ 
-    name: '', price: '', category: 'Boissons', stock: '', stockType: 'unit',
-    packSize: 1, pricePerPack: '', pricePer11: '', alertThreshold: 5
-  });
-  const [newJob, setNewJob] = useState({ 
-    description: '', date: new Date().toISOString().split('T')[0],
-    customRate: 10.00, bros: [], isPaid: false
-  });
+const [financialTransactions, setFinancialTransactions] = useState([]);
+const [newTransaction, setNewTransaction] = useState({
+  type: 'income', // 'income' ou 'expense'
+  amount: '',
+  description: '',
+  paymentMethod: 'cash',
+  category: 'other'
+});
+
+
+const [newProduct, setNewProduct] = useState({ 
+  name: '', price: '', category: 'Boissons', stock: '', stockType: 'unit',
+  packSize: 1, pricePerPack: '', pricePer11: '', alertThreshold: 5,
+  moneyFlow: 'none', amount: '', paymentMethod: ''
+});
+const [newJob, setNewJob] = useState({ 
+  description: '', date: new Date().toISOString().split('T')[0],
+  customRate: 10.00, bros: [], isPaid: false, paymentMethod: ''
+});
 const [newScheduledJob, setNewScheduledJob] = useState({
   description: '', date: new Date().toISOString().split('T')[0],
   time: '09:00', estimatedHours: 1, customRate: 10.00, brosNeeded: 1, 
   registeredBros: [], status: 'planned'
 });
-  const [stockAdjustment, setStockAdjustment] = useState({ 
-    productId: '', quantity: '', type: 'add', reason: '' 
-  });
+const [stockAdjustment, setStockAdjustment] = useState({ 
+  productId: '', quantity: '', type: 'add', reason: '', 
+  moneyFlow: 'none', amount: '', paymentMethod: ''
+});
+
+const [bankDeposit, setBankDeposit] = useState({
+  amount: '',
+  description: ''
+});
+
+const [financialGoal, setFinancialGoal] = useState({
+  amount: 0,
+  description: '',
+  deadline: '',
+  isActive: false
+});
+const [newGoal, setNewGoal] = useState({
+  amount: '',
+  description: '',
+  deadline: ''
+});
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -118,6 +148,8 @@ useEffect(() => {
   let unsubscribeJobs = null;
   let unsubscribeStockMovements = null;
   let unsubscribeScheduledJobs = null;
+  let unsubscribeFinancialTransactions = null;
+  let unsubscribeFinancialGoals = null;
 
   const setupListeners = async () => {
     unsubscribeMembers = await loadFromFirebase('members', setMembers);
@@ -127,7 +159,50 @@ useEffect(() => {
     unsubscribeJobs = await loadFromFirebase('jobs', setJobs);
     unsubscribeStockMovements = await loadFromFirebase('stockMovements', setStockMovements);
     unsubscribeScheduledJobs = await loadFromFirebase('scheduledJobs', setScheduledJobs);
+     unsubscribeFinancialTransactions = await loadFromFirebase('financialTransactions', setFinancialTransactions);
+      unsubscribeFinancialGoals = await loadFromFirebase('financialGoals', (goals) => {
+    if (goals && goals.length > 0) {
+      setFinancialGoal(goals[0]); // Prendre le premier objectif actif
+    }
+  });
   };
+
+  const addFinancialTransaction = async (type) => {
+  const amount = parseFloat(newTransaction.amount);
+  
+  if (amount > 0 && newTransaction.description.trim()) {
+    const transaction = {
+      type: type, // 'income' ou 'expense'
+      amount: amount,
+      description: newTransaction.description.trim(),
+      paymentMethod: newTransaction.paymentMethod,
+      category: newTransaction.category,
+      timestamp: new Date().toISOString()
+    };
+    
+    try {
+      await saveToFirebase('financialTransactions', transaction);
+      
+      // Reset du formulaire
+      setNewTransaction({
+        type: type,
+        amount: '',
+        description: '',
+        paymentMethod: 'cash',
+        category: 'other'
+      });
+      
+      setShowModal(false);
+      
+      // Message de succès
+      alert(`${type === 'income' ? 'Rentrée' : 'Frais'} ajouté avec succès !`);
+      
+    } catch (error) {
+      console.error('Erreur ajout transaction:', error);
+      alert('Erreur lors de l\'ajout de la transaction');
+    }
+  }
+};
 
   setupListeners();
 
@@ -139,6 +214,8 @@ useEffect(() => {
     if (unsubscribeJobs) unsubscribeJobs();
     if (unsubscribeStockMovements) unsubscribeStockMovements();
     if (unsubscribeScheduledJobs) unsubscribeScheduledJobs();
+    if (unsubscribeFinancialTransactions) unsubscribeFinancialTransactions();
+    if (unsubscribeFinancialGoals) unsubscribeFinancialGoals();
   };
 }, []);
 
@@ -292,29 +369,31 @@ const addMember = async () => {
     setOrders(orders.filter(o => o.memberId !== memberId));
   };
 
-  const repayMember = async () => {
-    const amount = parseFloat(repaymentAmount);
-    if (amount > 0 && selectedMember) {
-      const updatedBalance = selectedMember.balance + amount;
-      
-      await updateInFirebase('members', selectedMember.id, { balance: updatedBalance });
-      
-      const transaction = {
-        memberId: selectedMember.id,
-        memberName: selectedMember.name,
-        type: selectedMember.balance < 0 ? 'repayment' : 'recharge',
-        amount: amount,
-        timestamp: new Date().toISOString(),
-        items: []
-      };
-      
-await saveToFirebase('orders', transaction);
-      
-      setRepaymentAmount('');
-      setShowModal(false);
-      setSelectedMember(null);
-    }
-  };
+const repayMember = async () => {
+  const amount = parseFloat(repaymentAmount);
+  if (amount > 0 && selectedMember && paymentMethod) {
+    const updatedBalance = selectedMember.balance + amount;
+    
+    await updateInFirebase('members', selectedMember.id, { balance: updatedBalance });
+    
+    const transaction = {
+      memberId: selectedMember.id,
+      memberName: selectedMember.name,
+      type: selectedMember.balance < 0 ? 'repayment' : 'recharge',
+      amount: amount,
+      paymentMethod: paymentMethod, // NOUVEAU
+      timestamp: new Date().toISOString(),
+      items: []
+    };
+    
+    await saveToFirebase('orders', transaction);
+    
+    setRepaymentAmount('');
+    setPaymentMethod(''); // NOUVEAU
+    setShowModal(false);
+    setSelectedMember(null);
+  }
+};
 
   const addToCart = (productId, saleType = 'unit', quantity = 1) => {
     const product = products.find(p => p.id === productId);
@@ -480,6 +559,15 @@ const addBro = async () => {
     setJobs(jobs.filter(j => j.broId !== broId));
   };
 
+    const deleteFinancialTransaction = async (transactionId) => {
+  try {
+    await deleteFromFirebase('financialTransactions', transactionId);
+    setFinancialTransactions(financialTransactions.filter(t => t.id !== transactionId));
+  } catch (error) {
+    console.error('Erreur suppression transaction financière:', error);
+    alert('Erreur lors de la suppression de la transaction');
+  }
+};
 const addJob = async () => {
   if (newJob.description.trim() && newJob.bros.length > 0 && newJob.bros.every(b => b.hours > 0)) {
     try {
@@ -493,7 +581,9 @@ const addJob = async () => {
           date: newJob.date,
           hourlyRate: newJob.customRate,
           total: broAssignment.hours * newJob.customRate,
-          isPaid: newJob.isPaid
+          isPaid: newJob.isPaid,
+          paymentMethod: newJob.isPaid ? newJob.paymentMethod : null,
+          paidAt: newJob.isPaid ? new Date().toISOString() : null
         };
       });
 
@@ -509,12 +599,13 @@ const addJob = async () => {
       });
       await Promise.all(broUpdates);
 
-      setNewJob({ 
+       setNewJob({ 
         description: '', 
         date: new Date().toISOString().split('T')[0],
         customRate: hourlyRate,
         bros: [],
-        isPaid: false
+        isPaid: false,
+        paymentMethod: ''
       });
       setShowModal(false);
     } catch (error) {
@@ -523,15 +614,32 @@ const addJob = async () => {
   }
 };
 
-  const toggleJobPayment = async (jobId) => {
-    const job = jobs.find(j => j.id === jobId);
-    if (!job) return;
+const confirmJobPayment = async (jobId, paymentMethodSelected, cancelPayment = false) => {
+  const job = jobs.find(j => j.id === jobId);
+  if (!job) return;
 
-    const updatedJob = { ...job, isPaid: !job.isPaid };
-    await updateInFirebase('jobs', jobId, { isPaid: updatedJob.isPaid });
-
-    setJobs(jobs.map(j => j.id === jobId ? updatedJob : j));
-  };
+  if (cancelPayment) {
+    // Annuler le paiement
+    await updateInFirebase('jobs', jobId, { 
+      isPaid: false, 
+      paymentMethod: null,
+      paidAt: null
+    });
+  } else {
+    // Confirmer le paiement
+    if (!paymentMethodSelected) return;
+    
+    await updateInFirebase('jobs', jobId, { 
+      isPaid: true, 
+      paymentMethod: paymentMethodSelected,
+      paidAt: new Date().toISOString()
+    });
+  }
+  
+  setPaymentMethod('');
+  setShowModal(false);
+  setSelectedJob(null);
+};
 
   const deleteOrder = async (orderId) => {
     const order = orders.find(o => o.id === orderId);
@@ -597,6 +705,7 @@ const addProduct = async () => {
   const price = parseFloat(newProduct.price);
   const stock = parseInt(newProduct.stock) || 0;
   const alertThreshold = parseInt(newProduct.alertThreshold) || 5;
+  const amount = parseFloat(newProduct.amount);
   
   if (newProduct.name.trim() && price > 0) {
     const product = {
@@ -615,10 +724,36 @@ const addProduct = async () => {
     }
     
     try {
-      await saveToFirebase('products', product);
+      // Sauvegarder le produit
+      const productId = await saveToFirebase('products', product);
+      
+      // Si stock initial avec impact financier, enregistrer la transaction
+      if (stock > 0 && newProduct.moneyFlow === 'out' && amount > 0 && newProduct.paymentMethod) {
+        const financialTransaction = {
+          type: 'product_creation',
+          productId: productId,
+          productName: newProduct.name.trim(),
+          quantity: stock,
+          moneyFlow: 'out',
+          amount: amount,
+          paymentMethod: newProduct.paymentMethod,
+          reason: `Achat stock initial - ${newProduct.name.trim()}`,
+          timestamp: new Date().toISOString()
+        };
+        
+        try {
+          await saveToFirebase('financialTransactions', financialTransaction);
+          console.log('Transaction financière créée pour nouveau produit:', financialTransaction);
+        } catch (error) {
+          console.error('Erreur enregistrement transaction financière:', error);
+        }
+      }
+      
+      // Réinitialiser le formulaire
       setNewProduct({ 
         name: '', price: '', category: 'Boissons', stock: '', stockType: 'unit',
-        packSize: 1, pricePerPack: '', pricePer11: '', alertThreshold: 5
+        packSize: 1, pricePerPack: '', pricePer11: '', alertThreshold: 5,
+        moneyFlow: 'none', amount: '', paymentMethod: ''
       });
       setShowModal(false);
     } catch (error) {
@@ -626,6 +761,7 @@ const addProduct = async () => {
     }
   }
 };
+
   const deleteProduct = async (productId) => {
     await deleteFromFirebase('products', productId);
     setProducts(products.filter(p => p.id !== productId));
@@ -711,17 +847,18 @@ const completeScheduledJob = async (jobId) => {
     const bro = bros.find(b => b.id === registration.broId);
     const defaultHours = 1; // Heures par défaut, peut être modifié plus tard
     
-    return {
-      broId: registration.broId,
-      broName: bro ? bro.name : 'Inconnu',
-      description: job.description,
-      hours: defaultHours,
-      date: job.date,
-      hourlyRate: job.customRate,
-      total: defaultHours * job.customRate,
-      isPaid: false,
-      originalScheduledJobId: jobId
-    };
+return {
+  broId: registration.broId,
+  broName: bro ? bro.name : 'Inconnu',
+  description: job.description,
+  hours: defaultHours,
+  date: job.date,
+  hourlyRate: job.customRate,
+  total: defaultHours * job.customRate,
+  isPaid: false,
+  paymentMethod: null, // NOUVEAU
+  originalScheduledJobId: jobId
+};
   });
 
   try {
@@ -752,16 +889,174 @@ const completeScheduledJob = async (jobId) => {
     alert('Erreur lors de la finalisation du boulot');
   }
 };
-
-  const adjustStock = () => {
-    const quantity = parseInt(stockAdjustment.quantity);
-    if (stockAdjustment.productId && quantity !== 0 && stockAdjustment.reason.trim()) {
-      const change = stockAdjustment.type === 'add' ? quantity : -quantity;
-      updateStock(stockAdjustment.productId, change, stockAdjustment.reason.trim());
-      setStockAdjustment({ productId: '', quantity: '', type: 'add', reason: '' });
-      setShowModal(false);
+const processBankDeposit = async () => {
+  const amount = parseFloat(bankDeposit.amount);
+  
+  // Calculer cashTotal dans la fonction
+  let currentCashTotal = 0;
+  let currentAccountTotal = 0;
+  
+  // Ajouter les transactions financières manuelles
+  financialTransactions.forEach(transaction => {
+    const transactionAmount = transaction.amount || 0;
+    if (transaction.paymentMethod === 'cash') {
+      currentCashTotal += transaction.type === 'income' ? transactionAmount : -transactionAmount;
+    } else if (transaction.paymentMethod === 'account') {
+      currentAccountTotal += transaction.type === 'income' ? transactionAmount : -transactionAmount;
     }
-  };
+  });
+  
+  // Ajouter les remboursements/rechargements membres
+  orders.forEach(order => {
+    if (order.type === 'repayment' || order.type === 'recharge') {
+      const orderAmount = order.amount || 0;
+      if (order.paymentMethod === 'cash') {
+        currentCashTotal += orderAmount;
+      } else if (order.paymentMethod === 'account') {
+        currentAccountTotal += orderAmount;
+      }
+    } else if (order.type === 'order') {
+      const orderAmount = order.amount || 0;
+      currentCashTotal += orderAmount; // Les ventes vont en caisse par défaut
+    }
+  });
+  
+  // Ajouter les revenus des boulots payés
+  jobs.forEach(job => {
+    if (job.isPaid) {
+      const jobAmount = job.total || 0;
+      if (job.paymentMethod === 'cash') {
+        currentCashTotal += jobAmount;
+      } else if (job.paymentMethod === 'account') {
+        currentAccountTotal += jobAmount;
+      }
+    }
+  });
+  
+  if (amount > 0 && amount <= currentCashTotal) {
+    // Créer les 2 transactions : sortie cash + entrée compte
+    const transactions = [
+      {
+        type: 'expense',
+        amount: amount,
+        description: bankDeposit.description || `Dépôt bancaire du ${formatDate(new Date().toISOString())}`,
+        paymentMethod: 'cash',
+        category: 'bank_transfer',
+        timestamp: new Date().toISOString()
+      },
+      {
+        type: 'income',
+        amount: amount,
+        description: bankDeposit.description || `Dépôt bancaire du ${formatDate(new Date().toISOString())}`,
+        paymentMethod: 'account',
+        category: 'bank_transfer',
+        timestamp: new Date().toISOString()
+      }
+    ];
+    
+    try {
+      // Sauvegarder les 2 transactions
+      await Promise.all(transactions.map(transaction => 
+        saveToFirebase('financialTransactions', transaction)
+      ));
+      
+      // Reset du formulaire
+      setBankDeposit({ amount: '', description: '' });
+      setShowModal(false);
+      
+      // Message de succès
+      alert(`Dépôt de ${formatCurrency(amount)} effectué avec succès !`);
+      
+    } catch (error) {
+      console.error('Erreur dépôt bancaire:', error);
+      alert('Erreur lors du dépôt bancaire');
+    }
+  } else {
+    alert(`Impossible de déposer ${formatCurrency(amount)}. Caisse disponible: ${formatCurrency(currentCashTotal)}`);
+  }
+};
+// Fonction pour les transactions financières manuelles
+const addFinancialTransaction = async (type) => {
+  const amount = parseFloat(newTransaction.amount);
+  
+  if (amount > 0 && newTransaction.description.trim()) {
+    const transaction = {
+      type: type, // 'income' ou 'expense'
+      amount: amount,
+      description: newTransaction.description.trim(),
+      paymentMethod: newTransaction.paymentMethod,
+      category: newTransaction.category,
+      timestamp: new Date().toISOString()
+    };
+    
+    try {
+      await saveToFirebase('financialTransactions', transaction);
+      
+      // Reset du formulaire
+      setNewTransaction({
+        type: type,
+        amount: '',
+        description: '',
+        paymentMethod: 'cash',
+        category: 'other'
+      });
+      
+      setShowModal(false);
+      
+      // Message de succès
+      alert(`${type === 'income' ? 'Rentrée' : 'Frais'} ajouté avec succès !`);
+      
+    } catch (error) {
+      console.error('Erreur ajout transaction:', error);
+      alert('Erreur lors de l\'ajout de la transaction');
+    }
+  }
+};
+
+
+const adjustStock = async () => {
+  const quantity = parseInt(stockAdjustment.quantity);
+  const amount = parseFloat(stockAdjustment.amount);
+  
+  if (stockAdjustment.productId && quantity !== 0 && stockAdjustment.reason.trim()) {
+    const change = stockAdjustment.type === 'add' ? quantity : -quantity;
+    const product = products.find(p => p.id === stockAdjustment.productId);
+    
+    // Faire l'ajustement de stock
+    await updateStock(stockAdjustment.productId, change, stockAdjustment.reason.trim());
+    
+    // Si impact financier, enregistrer la transaction
+    if (stockAdjustment.moneyFlow !== 'none' && amount > 0 && stockAdjustment.paymentMethod) {
+      
+      const financialTransaction = {
+        type: 'stock_adjustment',
+        productId: stockAdjustment.productId,
+        productName: product?.name || 'Produit inconnu',
+        quantity: quantity,
+        adjustmentType: stockAdjustment.type,
+        moneyFlow: stockAdjustment.moneyFlow, // 'in' ou 'out'
+        amount: amount,
+        paymentMethod: stockAdjustment.paymentMethod,
+        reason: stockAdjustment.reason.trim(),
+        timestamp: new Date().toISOString()
+      };
+      
+      try {
+        await saveToFirebase('financialTransactions', financialTransaction);
+        console.log('Transaction financière enregistrée:', financialTransaction);
+      } catch (error) {
+        console.error('Erreur enregistrement transaction financière:', error);
+      }
+    }
+    
+    // Réinitialiser le formulaire
+    setStockAdjustment({ 
+      productId: '', quantity: '', type: 'add', reason: '', 
+      moneyFlow: 'none', amount: '', paymentMethod: ''
+    });
+    setShowModal(false);
+  }
+};
 
 const categories = ['Alcool', 'Boissons', 'Snacks', 'Nourriture'].filter(cat => 
   products.some(p => p.category === cat)
@@ -788,12 +1083,10 @@ const categories = ['Alcool', 'Boissons', 'Snacks', 'Nourriture'].filter(cat =>
 
 
 
-  if (currentScreen === 'home') {
+if (currentScreen === 'home') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
         <Header title="Gestion Patro" />
-        
-        
         
         <div className="p-6 space-y-4">
           <h2 className="text-2xl font-bold text-center text-gray-800 mb-8">
@@ -822,6 +1115,20 @@ const categories = ['Alcool', 'Boissons', 'Snacks', 'Nourriture'].filter(cat =>
               <div className="text-left">
                 <h3 className="text-xl font-semibold">Section Boulots</h3>
                 <p className="text-green-100">Gestion Bro, tâches, paiements</p>
+              </div>
+            </div>
+          </button>
+
+          {/* NOUVEAU BOUTON FINANCE - DORÉ */}
+          <button
+            onClick={() => navigateTo('finance')}
+            className="w-full p-6 bg-gradient-to-r from-yellow-400 to-yellow-500 text-white rounded-xl shadow-lg active:scale-95 transition-transform"
+          >
+            <div className="flex items-center space-x-4">
+              <DollarSign size={32} />
+              <div className="text-left">
+                <h3 className="text-xl font-semibold">Section Finance</h3>
+                <p className="text-yellow-100">Comptabilité, trésorerie, graphiques</p>
               </div>
             </div>
           </button>
@@ -952,7 +1259,7 @@ if (currentScreen === 'bar-members') {
 
       <Modal
         isOpen={showModal}
-        onClose={() => { setShowModal(false); setNewMemberName(''); setRepaymentAmount(''); }}
+        onClose={() => { setShowModal(false); setNewMemberName(''); setRepaymentAmount(''); setPaymentMethod(''); }}
         title={modalType === 'add-member' ? 'Ajouter un membre' : selectedMember?.balance < 0 ? 'Remboursement' : 'Recharger le compte'}
       >
         {modalType === 'add-member' ? (
@@ -972,12 +1279,13 @@ if (currentScreen === 'bar-members') {
               {loading ? 'Ajout en cours...' : 'Ajouter'}
             </button>
           </div>
-        ) : (
+         ) : (
           <div className="space-y-4">
             <p>Membre: <strong>{selectedMember?.name}</strong></p>
             <p>Solde actuel: <strong className={selectedMember?.balance < 0 ? 'text-red-500' : 'text-green-500'}>
               {formatCurrency(selectedMember?.balance || 0)}
             </strong></p>
+            
             <input
               type="number"
               step="0.01"
@@ -986,9 +1294,44 @@ if (currentScreen === 'bar-members') {
               onChange={(e) => setRepaymentAmount(e.target.value)}
               className="w-full p-3 border rounded-lg"
             />
+            
+            {/* Nouveau champ - Mode de paiement */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                💳 Mode de paiement *
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('cash')}
+                  className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                    paymentMethod === 'cash' 
+                      ? 'bg-green-100 border-green-500 text-green-700' 
+                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                  }`}
+                >
+                  💵 Cash
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('account')}
+                  className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                    paymentMethod === 'account' 
+                      ? 'bg-blue-100 border-blue-500 text-blue-700' 
+                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                  }`}
+                >
+                  🏦 Compte
+                </button>
+              </div>
+              {!paymentMethod && (
+                <p className="text-xs text-red-500 mt-1">Veuillez sélectionner un mode de paiement</p>
+              )}
+            </div>
+            
             <button
               onClick={repayMember}
-              disabled={!repaymentAmount || parseFloat(repaymentAmount) <= 0 || loading}
+              disabled={!repaymentAmount || parseFloat(repaymentAmount) <= 0 || !paymentMethod || loading}
               className={`w-full p-3 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform ${
                 selectedMember?.balance < 0 ? 'bg-green-500' : 'bg-blue-500'
               }`}
@@ -1822,7 +2165,7 @@ const updateBroSelection = (index, broId) => {
                 <input
                   type="checkbox"
                   checked={newJob.isPaid}
-                  onChange={(e) => setNewJob({...newJob, isPaid: e.target.checked})}
+                  onChange={(e) => setNewJob({...newJob, isPaid: e.target.checked, paymentMethod: ''})}
                   className="rounded"
                 />
                 <span className="text-sm font-medium text-gray-700">
@@ -1830,9 +2173,45 @@ const updateBroSelection = (index, broId) => {
                 </span>
               </label>
               {newJob.isPaid && (
-                <p className="text-xs text-green-600 mt-1">
-                  ✅ Ce boulot sera marqué comme payé lors de la création
-                </p>
+                <div className="mt-3 space-y-3">
+                  <p className="text-xs text-green-600">
+                    ✅ Ce boulot sera marqué comme payé lors de la création
+                  </p>
+                  
+                  {/* Mode de paiement */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      💳 Mode de paiement *
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setNewJob({...newJob, paymentMethod: 'cash'})}
+                        className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                          newJob.paymentMethod === 'cash' 
+                            ? 'bg-green-100 border-green-500 text-green-700' 
+                            : 'bg-gray-50 border-gray-300 text-gray-600'
+                        }`}
+                      >
+                        💵 Cash
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewJob({...newJob, paymentMethod: 'account'})}
+                        className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                          newJob.paymentMethod === 'account' 
+                            ? 'bg-blue-100 border-blue-500 text-blue-700' 
+                            : 'bg-gray-50 border-gray-300 text-gray-600'
+                        }`}
+                      >
+                        🏦 Compte
+                      </button>
+                    </div>
+                    {newJob.isPaid && !newJob.paymentMethod && (
+                      <p className="text-xs text-red-500 mt-1">Veuillez sélectionner un mode de paiement</p>
+                    )}
+                  </div>
+                </div>
               )}
             </div>
 
@@ -1946,7 +2325,12 @@ const updateBroSelection = (index, broId) => {
 
             <button
               onClick={addJob}
-              disabled={!newJob.description.trim() || newJob.bros.length === 0 || !newJob.bros.every(b => b.broId && b.hours > 0)}
+              disabled={
+                !newJob.description.trim() || 
+                newJob.bros.length === 0 || 
+                !newJob.bros.every(b => b.broId && b.hours > 0) ||
+                (newJob.isPaid && !newJob.paymentMethod)
+              }
               className="w-full p-3 bg-green-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
             >
               Valider le boulot
@@ -1957,7 +2341,7 @@ const updateBroSelection = (index, broId) => {
     );
   }
 
-  if (currentScreen === 'boulots-history') {
+if (currentScreen === 'boulots-history') {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header title="Historique des boulots" onBack={() => navigateTo('boulots')} />
@@ -1977,14 +2361,24 @@ const updateBroSelection = (index, broId) => {
                       <div className="flex items-center space-x-2 mb-1">
                         <h3 className="font-medium">{job.broName}</h3>
                         <button
-                          onClick={() => toggleJobPayment(job.id)}
+                          onClick={() => {
+                            setSelectedJob(job);
+                            setModalType('toggle-job-payment');
+                            setShowModal(true);
+                          }}
                           className={`px-2 py-1 rounded-full text-xs font-medium active:scale-95 transition-transform ${
                             job.isPaid 
                               ? 'bg-green-100 text-green-800' 
                               : 'bg-orange-100 text-orange-800'
                           }`}
                         >
-                          {job.isPaid ? '✅ Payé' : '⏳ Non payé'}
+                          {job.isPaid ? (
+                            <span>
+                              ✅ Payé {job.paymentMethod === 'cash' ? '💵' : job.paymentMethod === 'account' ? '🏦' : ''}
+                            </span>
+                          ) : (
+                            '⏳ Non payé'
+                          )}
                         </button>
                       </div>
                       <p className="text-sm text-gray-600 mt-1">{job.description}</p>
@@ -2001,6 +2395,94 @@ const updateBroSelection = (index, broId) => {
             </div>
           )}
         </div>
+
+        {/* Modal pour le paiement des boulots */}
+        <Modal
+          isOpen={showModal && modalType === 'toggle-job-payment'}
+          onClose={() => { setShowModal(false); setSelectedJob(null); setPaymentMethod(''); }}
+          title={selectedJob?.isPaid ? "Annuler le paiement" : "Confirmer le paiement"}
+        >
+          <div className="space-y-4">
+            {!selectedJob?.isPaid ? (
+              // Payer le boulot
+              <>
+                <div className="text-center">
+                  <h3 className="font-medium">{selectedJob?.broName}</h3>
+                  <p className="text-sm text-gray-600">{selectedJob?.description}</p>
+                  <p className="text-lg font-semibold text-green-600 mt-2">
+                    {formatCurrency(selectedJob?.total || 0)}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {selectedJob?.hours}h × {formatCurrency(selectedJob?.hourlyRate || 0)}/h
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    💳 Mode de paiement *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('cash')}
+                      className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                        paymentMethod === 'cash' 
+                          ? 'bg-green-100 border-green-500 text-green-700' 
+                          : 'bg-gray-50 border-gray-300 text-gray-600'
+                      }`}
+                    >
+                      💵 Cash
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('account')}
+                      className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                        paymentMethod === 'account' 
+                          ? 'bg-blue-100 border-blue-500 text-blue-700' 
+                          : 'bg-gray-50 border-gray-300 text-gray-600'
+                      }`}
+                    >
+                      🏦 Compte
+                    </button>
+                  </div>
+                  {!paymentMethod && (
+                    <p className="text-xs text-red-500 mt-1">Veuillez sélectionner un mode de paiement</p>
+                  )}
+                </div>
+                
+                <button
+                  onClick={() => confirmJobPayment(selectedJob?.id, paymentMethod)}
+                  disabled={!paymentMethod || loading}
+                  className="w-full p-3 bg-green-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
+                >
+                  {loading ? 'Traitement...' : '✅ Confirmer le paiement'}
+                </button>
+              </>
+            ) : (
+              // Annuler le paiement
+              <>
+                <div className="text-center">
+                  <h3 className="font-medium">{selectedJob?.broName}</h3>
+                  <p className="text-sm text-gray-600">{selectedJob?.description}</p>
+                  <p className="text-lg font-semibold text-red-600 mt-2">
+                    Payé {selectedJob?.paymentMethod === 'cash' ? '💵 Cash' : '🏦 Compte'}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Voulez-vous annuler ce paiement ?
+                  </p>
+                </div>
+                
+                <button
+                  onClick={() => confirmJobPayment(selectedJob?.id, null, true)}
+                  disabled={loading}
+                  className="w-full p-3 bg-red-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
+                >
+                  {loading ? 'Traitement...' : '❌ Annuler le paiement'}
+                </button>
+              </>
+            )}
+          </div>
+        </Modal>
       </div>
     );
   }
@@ -2183,6 +2665,1127 @@ const updateBroSelection = (index, broId) => {
     );
   }
 
+  if (currentScreen === 'finance') {
+    // Calculer les totaux
+    const calculateTotals = () => {
+      let cashTotal = 0;
+      let accountTotal = 0;
+      
+      // Ajouter les transactions financières manuelles
+      financialTransactions.forEach(transaction => {
+        const amount = transaction.amount || 0;
+        if (transaction.paymentMethod === 'cash') {
+          cashTotal += transaction.type === 'income' ? amount : -amount;
+        } else if (transaction.paymentMethod === 'account') {
+          accountTotal += transaction.type === 'income' ? amount : -amount;
+        }
+      });
+      
+      // Ajouter les remboursements/rechargements membres
+      orders.forEach(order => {
+        if (order.type === 'repayment' || order.type === 'recharge') {
+          const amount = order.amount || 0;
+          if (order.paymentMethod === 'cash') {
+            cashTotal += amount;
+          } else if (order.paymentMethod === 'account') {
+            accountTotal += amount;
+          }
+        } else if (order.type === 'order') {
+          // Les ventes rapportent de l'argent
+          const amount = order.amount || 0;
+          // Note: On pourrait déterminer le mode de paiement selon les préférences
+          cashTotal += amount; // Par défaut, les ventes sont en cash
+        }
+      });
+      
+      // Ajouter les paiements de boulots
+jobs.forEach(job => {
+  if (job.isPaid && job.paymentMethod) {
+    const amount = job.total || 0;
+    if (job.paymentMethod === 'cash') {
+      cashTotal += amount; // Les jobs rapportent de l'argent ✅
+    } else if (job.paymentMethod === 'account') {
+      accountTotal += amount;
+    }
+  }
+});
+      
+      return { cashTotal, accountTotal, grandTotal: cashTotal + accountTotal };
+    };
+    
+    const { cashTotal, accountTotal, grandTotal } = calculateTotals();
+    
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-50">
+        <Header title="Section Finance" onBack={() => navigateTo('home')} />
+        
+        <div className="p-6 space-y-6">
+         {/* Objectif Financier */}
+          {financialGoal.isActive && (
+            <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl shadow-lg p-6 mb-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-purple-800">🎯 Objectif Financier</h2>
+                <span className="text-sm text-purple-600">
+                  Géré dans Paramètres
+                </span>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex justify-between items-center">
+                  <h3 className="font-semibold text-purple-800">{financialGoal.description}</h3>
+                  <span className="text-sm text-purple-600">
+                    {financialGoal.deadline && `Échéance: ${formatDate(financialGoal.deadline)}`}
+                  </span>
+                </div>
+                
+                {/* Barre de progression */}
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-purple-700">
+                      {formatCurrency(grandTotal)} / {formatCurrency(financialGoal.amount)}
+                    </span>
+                    <span className={`font-bold ${
+                      (grandTotal / financialGoal.amount) * 100 >= 100 
+                        ? 'text-green-600' 
+                        : (grandTotal / financialGoal.amount) * 100 >= 75 
+                        ? 'text-blue-600' 
+                        : (grandTotal / financialGoal.amount) * 100 >= 50 
+                        ? 'text-yellow-600' 
+                        : 'text-red-600'
+                    }`}>
+                      {((grandTotal / financialGoal.amount) * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  
+                  <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                    <div 
+                      className={`h-4 rounded-full transition-all duration-1000 ease-out ${
+                        (grandTotal / financialGoal.amount) * 100 >= 100 
+                          ? 'bg-gradient-to-r from-green-400 to-green-600' 
+                          : (grandTotal / financialGoal.amount) * 100 >= 75 
+                          ? 'bg-gradient-to-r from-blue-400 to-blue-600' 
+                          : (grandTotal / financialGoal.amount) * 100 >= 50 
+                          ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' 
+                          : 'bg-gradient-to-r from-red-400 to-red-600'
+                      }`}
+                      style={{ width: `${Math.min(100, (grandTotal / financialGoal.amount) * 100)}%` }}
+                    ></div>
+                  </div>
+                </div>
+                
+                {/* Message motivationnel */}
+                <div className="text-center">
+                  {(() => {
+                    const percentage = (grandTotal / financialGoal.amount) * 100;
+                    const remaining = Math.max(0, financialGoal.amount - grandTotal);
+                    
+                    if (percentage >= 100) {
+                      return (
+                        <p className="text-green-700 font-semibold">
+                          🎉 Objectif atteint ! Félicitations !
+                        </p>
+                      );
+                    } else if (percentage >= 75) {
+                      return (
+                        <p className="text-blue-700 font-semibold">
+                          🚀 Excellent ! Plus que {formatCurrency(remaining)} à atteindre !
+                        </p>
+                      );
+                    } else if (percentage >= 50) {
+                      return (
+                        <p className="text-yellow-700 font-semibold">
+                          💪 Bonne progression ! Il reste {formatCurrency(remaining)}.
+                        </p>
+                      );
+                    } else if (percentage >= 25) {
+                      return (
+                        <p className="text-orange-700 font-semibold">
+                          📈 En route vers l'objectif ! Encore {formatCurrency(remaining)}.
+                        </p>
+                      );
+                    } else {
+                      return (
+                        <p className="text-red-700 font-semibold">
+                          🎯 Objectif fixé ! Il faut encore {formatCurrency(remaining)}.
+                        </p>
+                      );
+                    }
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Bouton définir objectif si pas actif */}
+          {!financialGoal.isActive && (
+            <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl shadow-lg p-6 mb-6 text-center">
+              <h2 className="text-xl font-bold text-purple-800 mb-4">🎯 Définir un Objectif</h2>
+              <p className="text-purple-600 mb-4">
+                Fixez-vous un objectif financier pour rester motivé !
+              </p>
+              <button
+                onClick={() => navigateTo('settings-goal')}
+                className="px-6 py-3 bg-purple-500 text-white rounded-lg font-semibold active:scale-95 transition-transform"
+              >
+                ⚙️ Aller aux Paramètres
+              </button>
+            </div>
+          )}
+
+          {/* Résumé des soldes */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-gray-800">💰 Trésorerie Actuelle</h2>
+              {financialGoal.isActive && (
+                <div className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                  (grandTotal / financialGoal.amount) * 100 >= 100 
+                    ? 'bg-green-100 text-green-800' 
+                    : (grandTotal / financialGoal.amount) * 100 >= 75 
+                    ? 'bg-blue-100 text-blue-800' 
+                    : (grandTotal / financialGoal.amount) * 100 >= 50 
+                    ? 'bg-yellow-100 text-yellow-800' 
+                    : 'bg-red-100 text-red-800'
+                }`}>
+                  {((grandTotal / financialGoal.amount) * 100).toFixed(1)}% de l'objectif
+                </div>
+              )}
+            </div>
+            
+            <div className="grid grid-cols-1 gap-4 mb-4">
+              {/* Caisse */}
+              <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="bg-green-500 p-2 rounded-full">
+                      <span className="text-white text-lg">💵</span>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-green-800">Caisse</h3>
+                      <p className="text-sm text-green-600">Argent liquide</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-2xl font-bold ${cashTotal >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {formatCurrency(cashTotal)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Compte */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="bg-blue-500 p-2 rounded-full">
+                      <span className="text-white text-lg">🏦</span>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-blue-800">Compte</h3>
+                      <p className="text-sm text-blue-600">Argent en banque</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-2xl font-bold ${accountTotal >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                      {formatCurrency(accountTotal)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              {/* Total */}
+              <div className={`p-4 rounded-lg border ${
+                financialGoal.isActive && grandTotal >= financialGoal.amount
+                  ? 'bg-green-50 border-green-200' 
+                  : 'bg-yellow-50 border-yellow-200'
+              }`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2 rounded-full ${
+                      financialGoal.isActive && grandTotal >= financialGoal.amount
+                        ? 'bg-green-500' 
+                        : 'bg-yellow-500'
+                    }`}>
+                      <span className="text-white text-lg">
+                        {financialGoal.isActive && grandTotal >= financialGoal.amount ? '🏆' : '💎'}
+                      </span>
+                    </div>
+                    <div>
+                      <h3 className={`font-semibold ${
+                        financialGoal.isActive && grandTotal >= financialGoal.amount
+                          ? 'text-green-800' 
+                          : 'text-yellow-800'
+                      }`}>
+                        Total
+                        {financialGoal.isActive && grandTotal >= financialGoal.amount && ' - Objectif Atteint !'}
+                      </h3>
+                      <p className={`text-sm ${
+                        financialGoal.isActive && grandTotal >= financialGoal.amount
+                          ? 'text-green-600' 
+                          : 'text-yellow-600'
+                      }`}>
+                        Trésorerie totale
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className={`text-3xl font-bold ${
+                      grandTotal >= 0 
+                        ? (financialGoal.isActive && grandTotal >= financialGoal.amount ? 'text-green-600' : 'text-yellow-600')
+                        : 'text-red-600'
+                    }`}>
+                      {formatCurrency(grandTotal)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+{/* Boutons d'actions */}
+          <div className="grid grid-cols-3 gap-3">
+            <button
+              onClick={() => { setModalType('add-income'); setShowModal(true); }}
+              className="p-3 bg-green-500 text-white rounded-lg shadow-md active:scale-95 transition-transform"
+            >
+              <div className="text-center">
+                <div className="text-xl mb-1">📥</div>
+                <h3 className="font-semibold text-sm">Ajouter Rentrée</h3>
+                <p className="text-xs text-green-100">Recettes, gains</p>
+              </div>
+            </button>
+            
+            <button
+              onClick={() => { setModalType('add-expense'); setShowModal(true); }}
+              className="p-3 bg-red-500 text-white rounded-lg shadow-md active:scale-95 transition-transform"
+            >
+              <div className="text-center">
+                <div className="text-xl mb-1">📤</div>
+                <h3 className="font-semibold text-sm">Ajouter Frais</h3>
+                <p className="text-xs text-red-100">Dépenses, coûts</p>
+              </div>
+            </button>
+            
+            {/* NOUVEAU BOUTON - Dépôt bancaire */}
+            <button
+              onClick={() => { setModalType('bank-deposit'); setShowModal(true); }}
+              className="p-3 bg-blue-500 text-white rounded-lg shadow-md active:scale-95 transition-transform"
+            >
+              <div className="text-center">
+                <div className="text-xl mb-1">🏦</div>
+                <h3 className="font-semibold text-sm">Dépôt Banque</h3>
+                <p className="text-xs text-blue-100">Cash → Compte</p>
+              </div>
+            </button>
+          </div>
+          
+          {/* Navigation vers autres sections */}
+          <div className="space-y-3">
+            <button
+              onClick={() => navigateTo('finance-graph')}
+              className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+            >
+              <div className="flex items-center space-x-3">
+                <BarChart3 className="text-yellow-500" size={24} />
+                <div className="text-left">
+                  <h3 className="font-semibold">Évolution des Gains</h3>
+                  <p className="text-gray-600 text-sm">Graphiques et tendances</p>
+                </div>
+              </div>
+            </button>
+            
+            <button
+              onClick={() => navigateTo('finance-history')}
+              className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+            >
+              <div className="flex items-center space-x-3">
+                <Clock className="text-yellow-500" size={24} />
+                <div className="text-left">
+                  <h3 className="font-semibold">Historique Complet</h3>
+                  <p className="text-gray-600 text-sm">Toutes les transactions</p>
+                </div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        {/* Modal pour dépôt bancaire */}
+        <Modal
+          isOpen={showModal && modalType === 'bank-deposit'}
+          onClose={() => { setShowModal(false); setBankDeposit({ amount: '', description: '' }); }}
+          title="Dépôt à la Banque"
+        >
+          <div className="space-y-4">
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <h4 className="font-medium text-blue-800 mb-1">🔄 Transfert Interne</h4>
+              <p className="text-sm text-blue-700">
+                Transférer de l'argent de la caisse vers le compte bancaire.
+              </p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                💵 Montant à déposer *
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={Math.max(0, cashTotal)}
+                  value={bankDeposit.amount}
+                  onChange={(e) => setBankDeposit({...bankDeposit, amount: e.target.value})}
+                  className="w-full p-3 border rounded-lg pr-8"
+                  placeholder="0.00"
+                />
+                <span className="absolute right-3 top-3 text-gray-500">€</span>
+              </div>
+              {cashTotal > 0 && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Disponible en caisse: {formatCurrency(cashTotal)}
+                </p>
+              )}
+              {cashTotal <= 0 && (
+                <p className="text-xs text-red-500 mt-1">
+                  ⚠️ Pas assez d'argent en caisse
+                </p>
+              )}
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📝 Note (optionnel)
+              </label>
+              <input
+                type="text"
+                value={bankDeposit.description}
+                onChange={(e) => setBankDeposit({...bankDeposit, description: e.target.value})}
+                className="w-full p-3 border rounded-lg"
+                placeholder="Ex: Dépôt fin de semaine, sécurisation caisse..."
+              />
+            </div>
+            
+            {/* Résumé du transfert */}
+            {bankDeposit.amount && parseFloat(bankDeposit.amount) > 0 && (
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <h4 className="font-medium text-gray-800 mb-2">📊 Impact du transfert :</h4>
+                <div className="text-sm space-y-1">
+                  <div className="flex justify-between">
+                    <span>💵 Caisse après dépôt:</span>
+                    <span className="font-semibold">
+                      {formatCurrency(cashTotal - parseFloat(bankDeposit.amount))}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>🏦 Compte après dépôt:</span>
+                    <span className="font-semibold">
+                      {formatCurrency(accountTotal + parseFloat(bankDeposit.amount))}
+                    </span>
+                  </div>
+                  <hr className="my-2" />
+                  <div className="flex justify-between font-semibold">
+                    <span>💎 Total trésorerie:</span>
+                    <span>{formatCurrency(grandTotal)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            <button
+              onClick={processBankDeposit}
+              disabled={
+                !bankDeposit.amount || 
+                parseFloat(bankDeposit.amount) <= 0 || 
+                parseFloat(bankDeposit.amount) > cashTotal ||
+                cashTotal <= 0 ||
+                loading
+              }
+              className="w-full p-3 bg-blue-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
+            >
+              {loading ? 'Traitement...' : '🏦 Effectuer le Dépôt'}
+            </button>
+          </div>
+        </Modal>
+
+        {/* Modal pour ajouter une rentrée */}
+        <Modal
+          isOpen={showModal && modalType === 'add-income'}
+          onClose={() => { setShowModal(false); setNewTransaction({
+            type: 'income', amount: '', description: '', paymentMethod: 'cash', category: 'other'
+          }); }}
+          title="Ajouter une Rentrée d'Argent"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                💵 Montant *
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newTransaction.amount}
+                  onChange={(e) => setNewTransaction({...newTransaction, amount: e.target.value})}
+                  className="w-full p-3 border rounded-lg pr-8"
+                  placeholder="0.00"
+                />
+                <span className="absolute right-3 top-3 text-gray-500">€</span>
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📝 Description *
+              </label>
+              <input
+                type="text"
+                value={newTransaction.description}
+                onChange={(e) => setNewTransaction({...newTransaction, description: e.target.value})}
+                className="w-full p-3 border rounded-lg"
+                placeholder="Ex: Vente événement, don, subside..."
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                🏷️ Catégorie
+              </label>
+              <select
+                value={newTransaction.category}
+                onChange={(e) => setNewTransaction({...newTransaction, category: e.target.value})}
+                className="w-full p-3 border rounded-lg"
+              >
+                <option value="sales">Ventes</option>
+                <option value="events">Événements</option>
+                <option value="donations">Dons</option>
+                <option value="subsidies">Subsides</option>
+                <option value="other">Autre</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                💳 Mode de paiement *
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNewTransaction({...newTransaction, paymentMethod: 'cash'})}
+                  className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                    newTransaction.paymentMethod === 'cash' 
+                      ? 'bg-green-100 border-green-500 text-green-700' 
+                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                  }`}
+                >
+                  💵 Cash
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewTransaction({...newTransaction, paymentMethod: 'account'})}
+                  className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                    newTransaction.paymentMethod === 'account' 
+                      ? 'bg-blue-100 border-blue-500 text-blue-700' 
+                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                  }`}
+                >
+                  🏦 Compte
+                </button>
+              </div>
+            </div>
+            
+            <button
+              onClick={() => addFinancialTransaction('income')}
+              disabled={!newTransaction.amount || !newTransaction.description.trim() || loading}
+              className="w-full p-3 bg-green-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
+            >
+              {loading ? 'Ajout en cours...' : '✅ Ajouter la Rentrée'}
+            </button>
+          </div>
+        </Modal>
+
+        
+
+        {/* Modal pour ajouter une dépense */}
+        <Modal
+          isOpen={showModal && modalType === 'add-expense'}
+          onClose={() => { setShowModal(false); setNewTransaction({
+            type: 'expense', amount: '', description: '', paymentMethod: 'cash', category: 'other'
+          }); }}
+          title="Ajouter un Frais"
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                💵 Montant *
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newTransaction.amount}
+                  onChange={(e) => setNewTransaction({...newTransaction, amount: e.target.value})}
+                  className="w-full p-3 border rounded-lg pr-8"
+                  placeholder="0.00"
+                />
+                <span className="absolute right-3 top-3 text-gray-500">€</span>
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📝 Description *
+              </label>
+              <input
+                type="text"
+                value={newTransaction.description}
+                onChange={(e) => setNewTransaction({...newTransaction, description: e.target.value})}
+                className="w-full p-3 border rounded-lg"
+                placeholder="Ex: Achat matériel, frais event, réparation..."
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                🏷️ Catégorie
+              </label>
+              <select
+                value={newTransaction.category}
+                onChange={(e) => setNewTransaction({...newTransaction, category: e.target.value})}
+                className="w-full p-3 border rounded-lg"
+              >
+                <option value="supplies">Fournitures</option>
+                <option value="maintenance">Entretien</option>
+                <option value="events">Événements</option>
+                <option value="utilities">Utilities</option>
+                <option value="other">Autre</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                💳 Mode de paiement *
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNewTransaction({...newTransaction, paymentMethod: 'cash'})}
+                  className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                    newTransaction.paymentMethod === 'cash' 
+                      ? 'bg-green-100 border-green-500 text-green-700' 
+                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                  }`}
+                >
+                  💵 Cash
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNewTransaction({...newTransaction, paymentMethod: 'account'})}
+                  className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                    newTransaction.paymentMethod === 'account' 
+                      ? 'bg-blue-100 border-blue-500 text-blue-700' 
+                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                  }`}
+                >
+                  🏦 Compte
+                </button>
+              </div>
+            </div>
+            
+            <button
+              onClick={() => addFinancialTransaction('expense')}
+              disabled={!newTransaction.amount || !newTransaction.description.trim() || loading}
+              className="w-full p-3 bg-red-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
+            >
+              {loading ? 'Ajout en cours...' : '✅ Ajouter le Frais'}
+            </button>
+          </div>
+        </Modal>
+      </div>
+
+      
+    );
+    
+  }
+
+  
+
+  if (currentScreen === 'finance-graph') {
+    // Calculer l'évolution des revenus par mois
+    const calculateMonthlyRevenue = () => {
+      const monthlyData = {};
+      
+      // Ajouter les transactions financières manuelles
+      financialTransactions.forEach(transaction => {
+        const date = new Date(transaction.timestamp);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = { revenue: 0, expenses: 0 };
+        }
+        
+        const amount = transaction.amount || 0;
+        if (transaction.type === 'income') {
+          monthlyData[monthKey].revenue += amount;
+        } else {
+          monthlyData[monthKey].expenses += amount;
+        }
+      });
+
+      const processBankDeposit = async () => {
+  const amount = parseFloat(bankDeposit.amount);
+  
+  if (amount > 0 && amount <= cashTotal) {
+    // Créer les 2 transactions : sortie cash + entrée compte
+    const transactions = [
+      {
+        type: 'expense',
+        amount: amount,
+        description: bankDeposit.description || `Dépôt bancaire du ${formatDate(new Date().toISOString())}`,
+        paymentMethod: 'cash',
+        category: 'bank_transfer',
+        timestamp: new Date().toISOString()
+      },
+      {
+        type: 'income',
+        amount: amount,
+        description: bankDeposit.description || `Dépôt bancaire du ${formatDate(new Date().toISOString())}`,
+        paymentMethod: 'account',
+        category: 'bank_transfer',
+        timestamp: new Date().toISOString()
+      }
+    ];
+    
+    try {
+      // Sauvegarder les 2 transactions
+      await Promise.all(transactions.map(transaction => 
+        saveToFirebase('financialTransactions', transaction)
+      ));
+      
+      // Reset du formulaire
+      setBankDeposit({ amount: '', description: '' });
+      setShowModal(false);
+      
+      // Message de succès
+      alert(`Dépôt de ${formatCurrency(amount)} effectué avec succès !`);
+      
+    } catch (error) {
+      console.error('Erreur dépôt bancaire:', error);
+      alert('Erreur lors du dépôt bancaire');
+    }
+  }
+};
+      
+      // Ajouter les ventes du bar (commandes)
+      orders.forEach(order => {
+        if (order.type === 'order') {
+          const date = new Date(order.timestamp);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          
+          if (!monthlyData[monthKey]) {
+            monthlyData[monthKey] = { revenue: 0, expenses: 0 };
+          }
+          
+          monthlyData[monthKey].revenue += order.amount || 0;
+        }
+      });
+      
+// Ajouter les revenus des boulots (travaux effectués payés)
+      jobs.forEach(job => {
+        if (job.isPaid) {
+          const date = new Date(job.date);
+          const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+          
+          if (!monthlyData[monthKey]) {
+            monthlyData[monthKey] = { revenue: 0, expenses: 0 };
+          }
+          
+          monthlyData[monthKey].revenue += job.total || 0;
+        }
+      });
+      
+      // Convertir en array et trier par date
+      const sortedData = Object.entries(monthlyData)
+        .map(([month, data]) => ({
+          month,
+          ...data,
+          net: data.revenue - data.expenses
+        }))
+        .sort((a, b) => a.month.localeCompare(b.month));
+      
+      return sortedData;
+    };
+    
+    const monthlyData = calculateMonthlyRevenue();
+    const maxRevenue = Math.max(...monthlyData.map(d => Math.max(d.revenue, Math.abs(d.net))), 100);
+    
+    // Calculer les totaux
+    const totalRevenue = monthlyData.reduce((sum, d) => sum + d.revenue, 0);
+    const totalExpenses = monthlyData.reduce((sum, d) => sum + d.expenses, 0);
+    const totalNet = totalRevenue - totalExpenses;
+    
+    const formatMonth = (monthKey) => {
+      const [year, month] = monthKey.split('-');
+      const date = new Date(parseInt(year), parseInt(month) - 1);
+      return date.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+    };
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-50">
+        <Header title="Évolution des Revenus" onBack={() => navigateTo('finance')} />
+        
+        <div className="p-4 space-y-6">
+          {/* Résumé global */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-4 text-center">📊 Résumé Global</h2>
+            
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className="bg-green-100 p-3 rounded-lg">
+                  <p className="text-2xl font-bold text-green-600">{formatCurrency(totalRevenue)}</p>
+                  <p className="text-sm text-green-700">Revenus Total</p>
+                </div>
+              </div>
+              
+              <div className="text-center">
+                <div className="bg-red-100 p-3 rounded-lg">
+                  <p className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
+                  <p className="text-sm text-red-700">Dépenses Total</p>
+                </div>
+              </div>
+              
+              <div className="text-center">
+                <div className={`p-3 rounded-lg ${totalNet >= 0 ? 'bg-blue-100' : 'bg-orange-100'}`}>
+                  <p className={`text-2xl font-bold ${totalNet >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                    {formatCurrency(totalNet)}
+                  </p>
+                  <p className={`text-sm ${totalNet >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
+                    Bénéfice Net
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Graphique */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-6 text-center">📈 Évolution Mensuelle</h2>
+            
+            {monthlyData.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <BarChart3 size={48} className="mx-auto mb-2 opacity-50" />
+                <p>Pas encore de données pour le graphique</p>
+                <p className="text-sm">Commencez à enregistrer des transactions !</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Légende */}
+                <div className="flex justify-center space-x-6 text-sm">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 bg-green-500 rounded"></div>
+                    <span>Revenus</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 bg-red-500 rounded"></div>
+                    <span>Dépenses</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <div className="w-4 h-4 bg-blue-500 rounded"></div>
+                    <span>Bénéfice Net</span>
+                  </div>
+                </div>
+
+{/* Graphique linéaire */}
+                <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
+                  {(() => {
+                    const width = Math.max(400, monthlyData.length * 80);
+                    const height = 300;
+                    const padding = { top: 20, right: 40, bottom: 60, left: 80 };
+                    const chartWidth = width - padding.left - padding.right;
+                    const chartHeight = height - padding.top - padding.bottom;
+                    
+                    // Calculer les échelles
+                    const minValue = Math.min(...monthlyData.map(d => d.net), 0) - 100;
+                    const maxValue = Math.max(...monthlyData.map(d => d.net), 100) + 100;
+                    const valueRange = maxValue - minValue;
+                    
+                    // Fonctions de conversion
+                    const xScale = (index) => (index / (monthlyData.length - 1 || 1)) * chartWidth;
+                    const yScale = (value) => chartHeight - ((value - minValue) / valueRange) * chartHeight;
+                    
+                    // Générer les points de la courbe
+                    const points = monthlyData.map((data, index) => ({
+                      x: xScale(index),
+                      y: yScale(data.net),
+                      data
+                    }));
+                    
+                    // Créer le path de la courbe
+                    const createPath = (points) => {
+                      if (points.length === 0) return '';
+                      
+                      let path = `M ${points[0].x} ${points[0].y}`;
+                      
+                      if (points.length > 1) {
+                        for (let i = 1; i < points.length; i++) {
+                          const prev = points[i - 1];
+                          const curr = points[i];
+                          const cp1x = prev.x + (curr.x - prev.x) / 3;
+                          const cp1y = prev.y;
+                          const cp2x = curr.x - (curr.x - prev.x) / 3;
+                          const cp2y = curr.y;
+                          path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${curr.x} ${curr.y}`;
+                        }
+                      }
+                      
+                      return path;
+                    };
+                    
+                    const pathData = createPath(points);
+                    
+                    // Lignes de grille Y
+                    const gridLines = [];
+                    const numGridLines = 5;
+                    for (let i = 0; i <= numGridLines; i++) {
+                      const value = minValue + (valueRange * i / numGridLines);
+                      const y = yScale(value);
+                      gridLines.push({
+                        y,
+                        value,
+                        isZero: Math.abs(value) < 50
+                      });
+                    }
+                    
+                    return (
+                      <svg width={width} height={height} className="mx-auto">
+                        <defs>
+                          {/* Gradient pour la zone sous la courbe */}
+                          <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
+                            <stop offset="100%" stopColor="#10b981" stopOpacity="0.05" />
+                          </linearGradient>
+                          
+                          {/* Gradient pour la courbe */}
+                          <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" stopColor="#10b981" />
+                            <stop offset="50%" stopColor="#3b82f6" />
+                            <stop offset="100%" stopColor="#8b5cf6" />
+                          </linearGradient>
+                        </defs>
+                        
+                        <g transform={`translate(${padding.left}, ${padding.top})`}>
+                          {/* Grille horizontale */}
+                          {gridLines.map((line, i) => (
+                            <g key={i}>
+                              <line
+                                x1="0"
+                                y1={line.y}
+                                x2={chartWidth}
+                                y2={line.y}
+                                stroke={line.isZero ? "#ef4444" : "#e5e7eb"}
+                                strokeWidth={line.isZero ? "2" : "1"}
+                                strokeDasharray={line.isZero ? "0" : "2,2"}
+                                opacity={line.isZero ? "0.8" : "0.5"}
+                              />
+                              <text
+                                x="-10"
+                                y={line.y + 4}
+                                textAnchor="end"
+                                className="text-xs fill-gray-600"
+                              >
+                                {formatCurrency(line.value)}
+                              </text>
+                            </g>
+                          ))}
+                          
+                          {/* Grille verticale */}
+                          {points.map((point, i) => (
+                            <line
+                              key={i}
+                              x1={point.x}
+                              y1="0"
+                              x2={point.x}
+                              y2={chartHeight}
+                              stroke="#f3f4f6"
+                              strokeWidth="1"
+                              strokeDasharray="2,2"
+                              opacity="0.5"
+                            />
+                          ))}
+                          
+                          {/* Zone sous la courbe */}
+                          {points.length > 0 && (
+                            <path
+                              d={`${pathData} L ${points[points.length - 1].x} ${chartHeight} L ${points[0].x} ${chartHeight} Z`}
+                              fill="url(#areaGradient)"
+                            />
+                          )}
+                          
+                          {/* Courbe principale */}
+                          <path
+                            d={pathData}
+                            fill="none"
+                            stroke="url(#lineGradient)"
+                            strokeWidth="3"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="drop-shadow-sm"
+                            style={{
+                              strokeDasharray: points.length > 0 ? `${points.reduce((acc, p, i) => {
+                                if (i === 0) return 0;
+                                const prev = points[i-1];
+                                return acc + Math.sqrt(Math.pow(p.x - prev.x, 2) + Math.pow(p.y - prev.y, 2));
+                              }, 0)}` : '0',
+                              strokeDashoffset: points.length > 0 ? `${points.reduce((acc, p, i) => {
+                                if (i === 0) return 0;
+                                const prev = points[i-1];
+                                return acc + Math.sqrt(Math.pow(p.x - prev.x, 2) + Math.pow(p.y - prev.y, 2));
+                              }, 0)}` : '0',
+                              animation: 'dash 2s ease-out forwards'
+                            }}
+                          />
+                          
+                          {/* Points sur la courbe */}
+                          {points.map((point, i) => (
+                            <g key={i}>
+                              {/* Cercle de fond */}
+                              <circle
+                                cx={point.x}
+                                cy={point.y}
+                                r="8"
+                                fill="white"
+                                stroke={point.data.net >= 0 ? "#10b981" : "#ef4444"}
+                                strokeWidth="3"
+                                className="drop-shadow-sm"
+                              />
+                              {/* Point central */}
+                              <circle
+                                cx={point.x}
+                                cy={point.y}
+                                r="4"
+                                fill={point.data.net >= 0 ? "#10b981" : "#ef4444"}
+                              />
+                              
+                              {/* Valeur au-dessus du point */}
+                              <text
+                                x={point.x}
+                                y={point.y - 15}
+                                textAnchor="middle"
+                                className="text-xs font-semibold fill-gray-700"
+                              >
+                                {formatCurrency(point.data.net)}
+                              </text>
+                            </g>
+                          ))}
+                          
+                          {/* Labels des mois (axe X) */}
+                          {points.map((point, i) => (
+                            <g key={i} transform={`translate(${point.x}, ${chartHeight + 20})`}>
+                              <text
+                                textAnchor="middle"
+                                className="text-xs fill-gray-600"
+                                transform="rotate(-45)"
+                              >
+                                {formatMonth(point.data.month)}
+                              </text>
+                            </g>
+                          ))}
+                        </g>
+                        
+                        {/* Titre des axes */}
+                        <text
+                          x={padding.left + chartWidth / 2}
+                          y={height - 10}
+                          textAnchor="middle"
+                          className="text-sm font-medium fill-gray-700"
+                        >
+                          Période
+                        </text>
+                        
+                        <text
+                          x="20"
+                          y={padding.top + chartHeight / 2}
+                          textAnchor="middle"
+                          className="text-sm font-medium fill-gray-700"
+                          transform={`rotate(-90, 20, ${padding.top + chartHeight / 2})`}
+                        >
+                          Bénéfice Net (€)
+                        </text>
+                      </svg>
+                    );
+                  })()}
+                </div>
+                
+                <style jsx>{`
+                  @keyframes dash {
+                    to {
+                      stroke-dashoffset: 0;
+                    }
+                  }
+                `}</style>
+
+                {/* Tendance */}
+                {monthlyData.length > 1 && (
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h4 className="font-semibold text-blue-800 mb-2">📊 Analyse de Tendance</h4>
+                    <div className="text-sm text-blue-700 space-y-1">
+                      {(() => {
+                        const lastMonth = monthlyData[monthlyData.length - 1];
+                        const previousMonth = monthlyData[monthlyData.length - 2];
+                        const trend = lastMonth.net - previousMonth.net;
+                        
+                        return (
+                          <>
+                            <p>
+                              Mois le plus rentable: <strong>
+                                {formatMonth(monthlyData.sort((a, b) => b.net - a.net)[0].month)} 
+                                ({formatCurrency(monthlyData.sort((a, b) => b.net - a.net)[0].net)})
+                              </strong>
+                            </p>
+                            <p>
+                              Évolution récente: <strong className={trend >= 0 ? 'text-green-700' : 'text-red-700'}>
+                                {trend >= 0 ? '📈' : '📉'} {formatCurrency(Math.abs(trend))}
+                              </strong>
+                            </p>
+                            <p>
+                              Moyenne mensuelle: <strong>
+                                {formatCurrency(totalNet / monthlyData.length)}
+                              </strong>
+                            </p>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Conseils */}
+          <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl p-4">
+            <h3 className="font-semibold text-purple-800 mb-2">💡 Conseils Financiers</h3>
+            <div className="text-sm text-purple-700 space-y-1">
+              {totalNet > 0 ? (
+                <>
+                  <p>✅ Excellente situation financière !</p>
+                  <p>💡 Pensez à mettre de côté pour les investissements futurs.</p>
+                </>
+              ) : totalNet < 0 ? (
+                <>
+                  <p>⚠️ Attention aux dépenses qui dépassent les revenus.</p>
+                  <p>💡 Analysez les postes de dépenses les plus importants.</p>
+                </>
+              ) : (
+                <p>🎯 Équilibre parfait entre revenus et dépenses.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (currentScreen === 'settings') {
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-purple-100">
@@ -2215,18 +3818,24 @@ const updateBroSelection = (index, broId) => {
             </div>
           </button>
 
-          <button
-            onClick={() => navigateTo('settings-rate')}
+                    <button
+            onClick={() => navigateTo('settings-goal')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
           >
             <div className="flex items-center space-x-3">
-              <DollarSign className="text-purple-500" size={24} />
+              <span className="text-purple-500 text-2xl">🎯</span>
               <div className="text-left">
-                <h3 className="font-semibold">Tarif horaire</h3>
-                <p className="text-gray-600 text-sm">Actuellement: {formatCurrency(hourlyRate)}/h</p>
+                <h3 className="font-semibold">Objectif Financier</h3>
+                <p className="text-gray-600 text-sm">
+                  {financialGoal.isActive 
+                    ? `Actuel: ${formatCurrency(financialGoal.amount)}` 
+                    : 'Définir un objectif'}
+                </p>
               </div>
             </div>
           </button>
+
+          
 
           <button
             onClick={() => navigateTo('settings-history')}
@@ -2314,43 +3923,66 @@ const updateBroSelection = (index, broId) => {
             setShowModal(false); 
             setNewProduct({ 
               name: '', price: '', category: 'Boissons', stock: '', stockType: 'unit',
-              packSize: 1, pricePerPack: '', pricePer11: '', alertThreshold: 5
+              packSize: 1, pricePerPack: '', pricePer11: '', alertThreshold: 5,
+              moneyFlow: 'none', amount: '', paymentMethod: ''
             }); 
           }}
           title="Ajouter un produit"
         >
           <div className="space-y-4">
-            <input
-              type="text"
-              placeholder="Nom du produit"
-              value={newProduct.name}
-              onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
-              className="w-full p-3 border rounded-lg"
-            />
-            
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              placeholder="Prix unitaire (€)"
-              value={newProduct.price}
-              onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
-              className="w-full p-3 border rounded-lg"
-            />
-            
-            <select
-              value={newProduct.category}
-              onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}
-              className="w-full p-3 border rounded-lg"
-            >
-              <option value="Boissons">Boissons</option>
-              <option value="Alcool">Alcool</option>
-              <option value="Snacks">Snacks</option>
-              <option value="Nourriture">Nourriture</option>
-            </select>
-
+            {/* Nom du produit */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Type de vente</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📦 Nom du produit *
+              </label>
+              <input
+                type="text"
+                placeholder="Nom du produit"
+                value={newProduct.name}
+                onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
+                className="w-full p-3 border rounded-lg"
+              />
+            </div>
+            
+            {/* Prix unitaire */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                💰 Prix unitaire *
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="Prix unitaire"
+                  value={newProduct.price}
+                  onChange={(e) => setNewProduct({...newProduct, price: e.target.value})}
+                  className="w-full p-3 border rounded-lg pr-8"
+                />
+                <span className="absolute right-3 top-3 text-gray-500">€</span>
+              </div>
+            </div>
+            
+            {/* Catégorie */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                🏷️ Catégorie *
+              </label>
+              <select
+                value={newProduct.category}
+                onChange={(e) => setNewProduct({...newProduct, category: e.target.value})}
+                className="w-full p-3 border rounded-lg"
+              >
+                <option value="Boissons">Boissons</option>
+                <option value="Alcool">Alcool</option>
+                <option value="Snacks">Snacks</option>
+                <option value="Nourriture">Nourriture</option>
+              </select>
+            </div>
+
+            {/* Type de vente */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">⚡ Type de vente</label>
               <select
                 value={newProduct.stockType}
                 onChange={(e) => setNewProduct({...newProduct, stockType: e.target.value})}
@@ -2361,63 +3993,200 @@ const updateBroSelection = (index, broId) => {
               </select>
             </div>
 
+            {/* Options pour vente mixte */}
             {newProduct.stockType === 'mixed' && (
               <>
-                <input
-                  type="number"
-                  min="1"
-                  placeholder="Taille du bac (ex: 24)"
-                  value={newProduct.packSize}
-                  onChange={(e) => setNewProduct({...newProduct, packSize: e.target.value})}
-                  className="w-full p-3 border rounded-lg"
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">📦 Taille du bac</label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="Taille du bac (ex: 24)"
+                    value={newProduct.packSize}
+                    onChange={(e) => setNewProduct({...newProduct, packSize: e.target.value})}
+                    className="w-full p-3 border rounded-lg"
+                  />
+                </div>
                 
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="Prix du bac complet (€)"
-                  value={newProduct.pricePerPack}
-                  onChange={(e) => setNewProduct({...newProduct, pricePerPack: e.target.value})}
-                  className="w-full p-3 border rounded-lg"
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">💰 Prix du bac complet</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Prix du bac complet"
+                      value={newProduct.pricePerPack}
+                      onChange={(e) => setNewProduct({...newProduct, pricePerPack: e.target.value})}
+                      className="w-full p-3 border rounded-lg pr-8"
+                    />
+                    <span className="absolute right-3 top-3 text-gray-500">€</span>
+                  </div>
+                </div>
                 
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="Prix pour 11 unités (€)"
-                  value={newProduct.pricePer11}
-                  onChange={(e) => setNewProduct({...newProduct, pricePer11: e.target.value})}
-                  className="w-full p-3 border rounded-lg"
-                />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">🍺 Prix pour 11 unités (mètre)</label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="Prix pour 11 unités"
+                      value={newProduct.pricePer11}
+                      onChange={(e) => setNewProduct({...newProduct, pricePer11: e.target.value})}
+                      className="w-full p-3 border rounded-lg pr-8"
+                    />
+                    <span className="absolute right-3 top-3 text-gray-500">€</span>
+                  </div>
+                </div>
               </>
             )}
 
-            <input
-              type="number"
-              min="0"
-              placeholder="Stock initial"
-              value={newProduct.stock}
-              onChange={(e) => setNewProduct({...newProduct, stock: e.target.value})}
-              className="w-full p-3 border rounded-lg"
-            />
+            {/* Stock initial */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📊 Stock initial
+              </label>
+              <input
+                type="number"
+                min="0"
+                placeholder="Stock initial"
+                value={newProduct.stock}
+                onChange={(e) => setNewProduct({...newProduct, stock: e.target.value})}
+                className="w-full p-3 border rounded-lg"
+              />
+            </div>
             
-            <input
-              type="number"
-              min="0"
-              placeholder="Seuil d'alerte stock"
-              value={newProduct.alertThreshold}
-              onChange={(e) => setNewProduct({...newProduct, alertThreshold: e.target.value})}
-              className="w-full p-3 border rounded-lg"
-            />
+            {/* Seuil d'alerte */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                ⚠️ Seuil d'alerte stock
+              </label>
+              <input
+                type="number"
+                min="0"
+                placeholder="Seuil d'alerte stock"
+                value={newProduct.alertThreshold}
+                onChange={(e) => setNewProduct({...newProduct, alertThreshold: e.target.value})}
+                className="w-full p-3 border rounded-lg"
+              />
+            </div>
+
+            {/* Impact financier pour le stock initial */}
+            {parseInt(newProduct.stock) > 0 && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    💰 Impact financier du stock initial *
+                  </label>
+                  <div className="space-y-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewProduct({...newProduct, moneyFlow: 'none', amount: '', paymentMethod: ''})}
+                      className={`w-full p-3 border rounded-lg text-sm font-medium text-left active:scale-95 transition-transform ${
+                        newProduct.moneyFlow === 'none' 
+                          ? 'bg-gray-100 border-gray-500 text-gray-700' 
+                          : 'bg-gray-50 border-gray-300 text-gray-600'
+                      }`}
+                    >
+                      🚫 Stock gratuit (don, échantillon)
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => setNewProduct({...newProduct, moneyFlow: 'out', amount: '', paymentMethod: ''})}
+                      className={`w-full p-3 border rounded-lg text-sm font-medium text-left active:scale-95 transition-transform ${
+                        newProduct.moneyFlow === 'out' 
+                          ? 'bg-red-100 border-red-500 text-red-700' 
+                          : 'bg-gray-50 border-gray-300 text-gray-600'
+                      }`}
+                    >
+                      📤 Stock acheté (coût d'achat)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Détails financiers si stock acheté */}
+                {newProduct.moneyFlow === 'out' && (
+                  <>
+                    {/* Montant */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        💵 Coût d'achat du stock initial *
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={newProduct.amount}
+                          onChange={(e) => setNewProduct({...newProduct, amount: e.target.value})}
+                          className="w-full p-3 border rounded-lg pr-8"
+                          placeholder="0.00"
+                        />
+                        <span className="absolute right-3 top-3 text-gray-500">€</span>
+                      </div>
+                    </div>
+
+                    {/* Mode de paiement */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        💳 Mode de paiement *
+                      </label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setNewProduct({...newProduct, paymentMethod: 'cash'})}
+                          className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                            newProduct.paymentMethod === 'cash' 
+                              ? 'bg-green-100 border-green-500 text-green-700' 
+                              : 'bg-gray-50 border-gray-300 text-gray-600'
+                          }`}
+                        >
+                          💵 Cash
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setNewProduct({...newProduct, paymentMethod: 'account'})}
+                          className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                            newProduct.paymentMethod === 'account' 
+                              ? 'bg-blue-100 border-blue-500 text-blue-700' 
+                              : 'bg-gray-50 border-gray-300 text-gray-600'
+                          }`}
+                        >
+                          🏦 Compte
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Résumé financier */}
+                    {newProduct.amount && (
+                      <div className="bg-red-50 p-3 rounded-lg">
+                        <h4 className="font-medium text-red-800 mb-1">💡 Résumé financier :</h4>
+                        <div className="text-sm text-red-700 space-y-1">
+                          <p>📤 Coût d'achat: {formatCurrency(parseFloat(newProduct.amount) || 0)}</p>
+                          <p>📦 Stock: {newProduct.stock} unités</p>
+                          <p>Mode: {newProduct.paymentMethod === 'cash' ? '💵 Cash' : '🏦 Compte'}</p>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            )}
             
+            {/* Bouton validation */}
             <button
               onClick={addProduct}
-              disabled={!newProduct.name.trim() || !newProduct.price || parseFloat(newProduct.price) <= 0}
+              disabled={
+                !newProduct.name.trim() || 
+                !newProduct.price || 
+                parseFloat(newProduct.price) <= 0 ||
+                (parseInt(newProduct.stock) > 0 && newProduct.moneyFlow === 'out' && (!newProduct.amount || !newProduct.paymentMethod))
+              }
               className="w-full p-3 bg-purple-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
             >
-              Ajouter le produit
+              ✅ Ajouter le produit
             </button>
           </div>
         </Modal>
@@ -2520,14 +4289,23 @@ const updateBroSelection = (index, broId) => {
           )}
         </div>
 
-        <Modal
+<Modal
           isOpen={showModal && modalType === 'adjust-stock'}
-          onClose={() => { setShowModal(false); setStockAdjustment({ productId: '', quantity: '', type: 'add', reason: '' }); }}
+          onClose={() => { 
+            setShowModal(false); 
+            setStockAdjustment({ 
+              productId: '', quantity: '', type: 'add', reason: '', 
+              moneyFlow: 'none', amount: '', paymentMethod: ''
+            }); 
+          }}
           title="Ajuster le stock"
         >
           <div className="space-y-4">
+            {/* Produit */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Produit</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📦 Produit *
+              </label>
               <select
                 value={stockAdjustment.productId}
                 onChange={(e) => setStockAdjustment({...stockAdjustment, productId: e.target.value})}
@@ -2542,26 +4320,42 @@ const updateBroSelection = (index, broId) => {
               </select>
             </div>
 
+            {/* Type d'ajustement */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Type d'ajustement</label>
-              <div className="flex space-x-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                ⚖️ Type d'ajustement *
+              </label>
+              <div className="grid grid-cols-2 gap-2">
                 <button
+                  type="button"
                   onClick={() => setStockAdjustment({...stockAdjustment, type: 'add'})}
-                  className={`flex-1 p-2 rounded text-sm ${stockAdjustment.type === 'add' ? 'bg-green-500 text-white' : 'bg-gray-200'}`}
+                  className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                    stockAdjustment.type === 'add' 
+                      ? 'bg-green-100 border-green-500 text-green-700' 
+                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                  }`}
                 >
-                  Ajouter
+                  ➕ Ajouter
                 </button>
                 <button
+                  type="button"
                   onClick={() => setStockAdjustment({...stockAdjustment, type: 'remove'})}
-                  className={`flex-1 p-2 rounded text-sm ${stockAdjustment.type === 'remove' ? 'bg-red-500 text-white' : 'bg-gray-200'}`}
+                  className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                    stockAdjustment.type === 'remove' 
+                      ? 'bg-red-100 border-red-500 text-red-700' 
+                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                  }`}
                 >
-                  Retirer
+                  ➖ Retirer
                 </button>
               </div>
             </div>
 
+            {/* Quantité */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Quantité</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                🔢 Quantité *
+              </label>
               <input
                 type="number"
                 min="1"
@@ -2572,23 +4366,153 @@ const updateBroSelection = (index, broId) => {
               />
             </div>
 
+            {/* Raison */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Raison</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📝 Raison *
+              </label>
               <input
                 type="text"
                 value={stockAdjustment.reason}
                 onChange={(e) => setStockAdjustment({...stockAdjustment, reason: e.target.value})}
-                placeholder="Ex: Réception livraison, casse, péremption..."
+                placeholder="Ex: Réception livraison, casse, péremption, vente manuelle..."
                 className="w-full p-3 border rounded-lg"
               />
             </div>
 
+            {/* Impact financier */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                💰 Impact financier *
+              </label>
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => setStockAdjustment({...stockAdjustment, moneyFlow: 'none', amount: '', paymentMethod: ''})}
+                  className={`w-full p-3 border rounded-lg text-sm font-medium text-left active:scale-95 transition-transform ${
+                    stockAdjustment.moneyFlow === 'none' 
+                      ? 'bg-gray-100 border-gray-500 text-gray-700' 
+                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                  }`}
+                >
+                  🚫 Aucun impact financier
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => setStockAdjustment({...stockAdjustment, moneyFlow: 'out', amount: '', paymentMethod: ''})}
+                  className={`w-full p-3 border rounded-lg text-sm font-medium text-left active:scale-95 transition-transform ${
+                    stockAdjustment.moneyFlow === 'out' 
+                      ? 'bg-red-100 border-red-500 text-red-700' 
+                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                  }`}
+                >
+                  📤 Argent qui sort (achat, coût)
+                </button>
+                
+                <button
+                  type="button"
+                  onClick={() => setStockAdjustment({...stockAdjustment, moneyFlow: 'in', amount: '', paymentMethod: ''})}
+                  className={`w-full p-3 border rounded-lg text-sm font-medium text-left active:scale-95 transition-transform ${
+                    stockAdjustment.moneyFlow === 'in' 
+                      ? 'bg-green-100 border-green-500 text-green-700' 
+                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                  }`}
+                >
+                  📥 Argent qui rentre (vente, recette)
+                </button>
+              </div>
+            </div>
+
+            {/* Détails financiers si argent sort ou rentre */}
+            {(stockAdjustment.moneyFlow === 'out' || stockAdjustment.moneyFlow === 'in') && (
+              <>
+                {/* Montant */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    💵 Montant {stockAdjustment.moneyFlow === 'out' ? '(coût)' : '(recette)'} *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={stockAdjustment.amount}
+                      onChange={(e) => setStockAdjustment({...stockAdjustment, amount: e.target.value})}
+                      className="w-full p-3 border rounded-lg pr-8"
+                      placeholder="0.00"
+                    />
+                    <span className="absolute right-3 top-3 text-gray-500">€</span>
+                  </div>
+                </div>
+
+                {/* Mode de paiement */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    💳 Mode de paiement *
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setStockAdjustment({...stockAdjustment, paymentMethod: 'cash'})}
+                      className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                        stockAdjustment.paymentMethod === 'cash' 
+                          ? 'bg-green-100 border-green-500 text-green-700' 
+                          : 'bg-gray-50 border-gray-300 text-gray-600'
+                      }`}
+                    >
+                      💵 Cash
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStockAdjustment({...stockAdjustment, paymentMethod: 'account'})}
+                      className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                        stockAdjustment.paymentMethod === 'account' 
+                          ? 'bg-blue-100 border-blue-500 text-blue-700' 
+                          : 'bg-gray-50 border-gray-300 text-gray-600'
+                      }`}
+                    >
+                      🏦 Compte
+                    </button>
+                  </div>
+                </div>
+
+                {/* Résumé financier */}
+                {stockAdjustment.amount && (
+                  <div className={`p-3 rounded-lg ${
+                    stockAdjustment.moneyFlow === 'out' ? 'bg-red-50' : 'bg-green-50'
+                  }`}>
+                    <h4 className={`font-medium mb-1 ${
+                      stockAdjustment.moneyFlow === 'out' ? 'text-red-800' : 'text-green-800'
+                    }`}>
+                      💡 Résumé financier :
+                    </h4>
+                    <div className={`text-sm space-y-1 ${
+                      stockAdjustment.moneyFlow === 'out' ? 'text-red-700' : 'text-green-700'
+                    }`}>
+                      <p>
+                        {stockAdjustment.moneyFlow === 'out' ? '📤 Sortie' : '📥 Entrée'}: {formatCurrency(parseFloat(stockAdjustment.amount) || 0)}
+                      </p>
+                      <p>Mode: {stockAdjustment.paymentMethod === 'cash' ? '💵 Cash' : '🏦 Compte'}</p>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Bouton de validation */}
             <button
               onClick={adjustStock}
-              disabled={!stockAdjustment.productId || !stockAdjustment.quantity || !stockAdjustment.reason.trim()}
+              disabled={
+                !stockAdjustment.productId || 
+                !stockAdjustment.quantity || 
+                !stockAdjustment.reason.trim() ||
+                !stockAdjustment.moneyFlow ||
+                (stockAdjustment.moneyFlow !== 'none' && (!stockAdjustment.amount || !stockAdjustment.paymentMethod))
+              }
               className="w-full p-3 bg-purple-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
             >
-              Confirmer l'ajustement
+              ✅ Confirmer l'ajustement
             </button>
           </div>
         </Modal>
@@ -2650,11 +4574,17 @@ const updateBroSelection = (index, broId) => {
   }
 
   if (currentScreen === 'settings-history') {
-    const allHistory = [
-      ...orders.map(o => ({ ...o, type: 'order-item', category: 'Commandes' })),
-      ...jobs.map(j => ({ ...j, type: 'job-item', category: 'Boulots' }))
-    ].sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
-
+   const allHistory = [
+  ...orders.map(o => ({ ...o, type: 'order-item', category: 'Commandes' })),
+  ...jobs.map(j => ({ ...j, type: 'job-item', category: 'Boulots' })),
+  ...financialTransactions.map(f => ({ 
+    ...f, 
+    type: 'financial-item', 
+    category: f.type === 'income' ? 'Rentrées' : 'Frais',
+    memberName: f.description, // Pour réutiliser l'affichage existant
+    amount: f.amount
+  }))
+].sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
     return (
       <div className="min-h-screen bg-gray-50">
         <Header title="Historique complet" onBack={() => navigateTo('settings')} />
@@ -2675,103 +4605,586 @@ const updateBroSelection = (index, broId) => {
             </div>
           ) : (
             <div className="space-y-3">
-              {allHistory.map(item => (
-                <div key={`${item.type}-${item.id}`} className="bg-white p-4 rounded-lg shadow-sm">
-                  {item.type === 'order-item' ? (
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                            {item.category}
-                          </span>
-                          {item.type === 'repayment' && (
-                            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                              Remboursement
-                            </span>
-                          )}
-                          {item.type === 'recharge' && (
-                            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                              Rechargement
-                            </span>
-                          )}
-                        </div>
-                        <h3 className="font-medium">{item.memberName}</h3>
-                        <p className="text-sm text-gray-600">{formatDate(item.timestamp)}</p>
-                        {item.items && item.items.length > 0 && (
-                          <div className="mt-2 text-xs text-gray-500">
-                            {item.items.map((product, idx) => (
-                              <span key={idx}>
-                                {product.quantity}x {product.productName}
-                                {idx < item.items.length - 1 ? ', ' : ''}
-                              </span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="text-right ml-4">
-                        <div className="flex items-center space-x-2">
-                          <span className={`font-semibold ${
-                            item.type === 'order' ? 'text-red-600' : 'text-green-600'
-                          }`}>
-                            {item.type === 'order' ? '-' : '+'}{formatCurrency(item.amount)}
-                          </span>
-                          <button
-                            onClick={() => {
-                              if (confirm(`Êtes-vous sûr de vouloir supprimer cette ${item.type === 'order' ? 'commande' : 'transaction'} ?\nCela restaurera le solde et le stock.`)) {
-                                deleteOrder(item.id);
-                              }
-                            }}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-1">
-                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
-                            {item.category}
-                          </span>
-                          <span className={`text-xs px-2 py-1 rounded ${
-                            item.isPaid 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-orange-100 text-orange-800'
-                          }`}>
-                            {item.isPaid ? 'Payé' : 'Non payé'}
-                          </span>
-                        </div>
-                        <h3 className="font-medium">{item.broName}</h3>
-                        <p className="text-sm text-gray-600">{item.description}</p>
-                        <p className="text-xs text-gray-500">{formatDate(item.date)}</p>
-                      </div>
-                      <div className="text-right ml-4">
-                        <div className="flex items-center space-x-2">
-                          <div>
-                            <p className="font-semibold text-green-600">{item.hours}h</p>
-                            <p className="text-sm text-green-600">{formatCurrency(item.total)}</p>
-                          </div>
-                          <button
-                            onClick={() => {
-                              if (confirm(`Êtes-vous sûr de vouloir supprimer ce boulot ?\nCela retirera ${item.hours}h du total de ${item.broName}.`)) {
-                                deleteJob(item.id);
-                              }
-                            }}
-                            className="p-1 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
+{allHistory.map(item => (
+  <div key={`${item.type}-${item.id}`} className="bg-white p-4 rounded-lg shadow-sm">
+    {item.type === 'order-item' ? (
+      // Code existant pour les commandes
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center space-x-2 mb-1">
+            <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+              {item.category}
+            </span>
+            {item.type === 'repayment' && (
+              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                Remboursement
+              </span>
+            )}
+            {item.type === 'recharge' && (
+              <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                Rechargement
+              </span>
+            )}
+          </div>
+          <h3 className="font-medium">{item.memberName}</h3>
+          <p className="text-sm text-gray-600">{formatDate(item.timestamp)}</p>
+          {item.items && item.items.length > 0 && (
+            <div className="mt-2 text-xs text-gray-500">
+              {item.items.map((product, idx) => (
+                <span key={idx}>
+                  {product.quantity}x {product.productName}
+                  {idx < item.items.length - 1 ? ', ' : ''}
+                </span>
               ))}
             </div>
           )}
         </div>
+        <div className="text-right ml-4">
+          <div className="flex items-center space-x-2">
+            <span className={`font-semibold ${
+              item.type === 'order' ? 'text-red-600' : 'text-green-600'
+            }`}>
+              {item.type === 'order' ? '-' : '+'}{formatCurrency(item.amount)}
+            </span>
+            <button
+              onClick={() => {
+                if (confirm(`Êtes-vous sûr de vouloir supprimer cette ${item.type === 'order' ? 'commande' : 'transaction'} ?\nCela restaurera le solde et le stock.`)) {
+                  deleteOrder(item.id);
+                }
+              }}
+              className="p-1 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : item.type === 'financial-item' ? (
+      // NOUVEAU : Code pour les transactions financières
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center space-x-2 mb-1">
+            <span className={`text-xs px-2 py-1 rounded ${
+              item.category === 'Rentrées' 
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-red-100 text-red-800'
+            }`}>
+              {item.category}
+            </span>
+            <span className={`text-xs px-2 py-1 rounded ${
+              item.paymentMethod === 'cash' 
+                ? 'bg-green-50 text-green-700' 
+                : 'bg-blue-50 text-blue-700'
+            }`}>
+              {item.paymentMethod === 'cash' ? '💵 Cash' : '🏦 Compte'}
+            </span>
+          </div>
+          <h3 className="font-medium">{item.description}</h3>
+          <p className="text-sm text-gray-600">{formatDate(item.timestamp)}</p>
+          {item.category && item.category !== 'other' && (
+            <p className="text-xs text-gray-500 mt-1">
+              Catégorie: {item.category === 'sales' ? 'Ventes' : 
+                          item.category === 'events' ? 'Événements' :
+                          item.category === 'donations' ? 'Dons' :
+                          item.category === 'subsidies' ? 'Subsides' :
+                          item.category === 'supplies' ? 'Fournitures' :
+                          item.category === 'maintenance' ? 'Entretien' :
+                          item.category === 'utilities' ? 'Utilities' :
+                          'Autre'}
+            </p>
+          )}
+        </div>
+        <div className="text-right ml-4">
+          <div className="flex items-center space-x-2">
+            <span className={`font-semibold ${
+              item.category === 'Rentrées' ? 'text-green-600' : 'text-red-600'
+            }`}>
+              {item.category === 'Rentrées' ? '+' : '-'}{formatCurrency(item.amount)}
+            </span>
+            <button
+              onClick={() => {
+                if (confirm(`Êtes-vous sûr de vouloir supprimer cette ${item.category.toLowerCase()} ?\n"${item.description}"`)) {
+                  deleteFinancialTransaction(item.id);
+                }
+              }}
+              className="p-1 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    ) : (
+      // Code existant pour les boulots
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center space-x-2 mb-1">
+            <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+              {item.category}
+            </span>
+            <span className={`text-xs px-2 py-1 rounded ${
+              item.isPaid 
+                ? 'bg-green-100 text-green-800' 
+                : 'bg-orange-100 text-orange-800'
+            }`}>
+              {item.isPaid ? 'Payé' : 'Non payé'}
+            </span>
+          </div>
+          <h3 className="font-medium">{item.broName}</h3>
+          <p className="text-sm text-gray-600">{item.description}</p>
+          <p className="text-xs text-gray-500">{formatDate(item.date)}</p>
+        </div>
+        <div className="text-right ml-4">
+          <div className="flex items-center space-x-2">
+            <div>
+              <p className="font-semibold text-green-600">{item.hours}h</p>
+              <p className="text-sm text-green-600">{formatCurrency(item.total)}</p>
+            </div>
+            <button
+              onClick={() => {
+                if (confirm(`Êtes-vous sûr de vouloir supprimer ce boulot ?\nCela retirera ${item.hours}h du total de ${item.broName}.`)) {
+                  deleteJob(item.id);
+                }
+              }}
+              className="p-1 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (currentScreen === 'settings-goal') {
+    // Calculer les totaux pour cet écran
+    const calculateTotalsForGoal = () => {
+      let cashTotal = 0;
+      let accountTotal = 0;
+      
+      // Ajouter les transactions financières manuelles
+      financialTransactions.forEach(transaction => {
+        const amount = transaction.amount || 0;
+        if (transaction.paymentMethod === 'cash') {
+          cashTotal += transaction.type === 'income' ? amount : -amount;
+        } else if (transaction.paymentMethod === 'account') {
+          accountTotal += transaction.type === 'income' ? amount : -amount;
+        }
+      });
+      
+      // Ajouter les remboursements/rechargements membres
+      orders.forEach(order => {
+        if (order.type === 'repayment' || order.type === 'recharge') {
+          const amount = order.amount || 0;
+          if (order.paymentMethod === 'cash') {
+            cashTotal += amount;
+          } else if (order.paymentMethod === 'account') {
+            accountTotal += amount;
+          }
+        } else if (order.type === 'order') {
+          const amount = order.amount || 0;
+          cashTotal += amount; // Les ventes vont en caisse par défaut
+        }
+      });
+      
+      // Ajouter les revenus des boulots payés
+      jobs.forEach(job => {
+        if (job.isPaid) {
+          const amount = job.total || 0;
+          if (job.paymentMethod === 'cash') {
+            cashTotal += amount;
+          } else if (job.paymentMethod === 'account') {
+            accountTotal += amount;
+          }
+        }
+      });
+      
+      return { cashTotal, accountTotal, grandTotal: cashTotal + accountTotal };
+    };
+
+    const { cashTotal, accountTotal, grandTotal } = calculateTotalsForGoal();
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header title="Objectif Financier" onBack={() => navigateTo('settings')} />
+        
+        <div className="p-4 space-y-6">
+          {/* État actuel */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">💰 Situation Actuelle</h2>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="text-center">
+                <div className="bg-green-100 p-3 rounded-lg">
+                  <p className="text-lg font-bold text-green-600">{formatCurrency(cashTotal)}</p>
+                  <p className="text-xs text-green-700">Caisse</p>
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="bg-blue-100 p-3 rounded-lg">
+                  <p className="text-lg font-bold text-blue-600">{formatCurrency(accountTotal)}</p>
+                  <p className="text-xs text-blue-700">Compte</p>
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="bg-yellow-100 p-3 rounded-lg">
+                  <p className="text-lg font-bold text-yellow-600">{formatCurrency(grandTotal)}</p>
+                  <p className="text-xs text-yellow-700">Total</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Objectif actuel ou formulaire */}
+          {financialGoal.isActive ? (
+            <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl shadow-lg p-6">
+              <h2 className="text-xl font-bold text-purple-800 mb-4">🎯 Objectif Actuel</h2>
+              
+              <div className="space-y-4">
+                <div className="bg-white bg-opacity-70 p-4 rounded-lg">
+                  <h3 className="font-semibold text-purple-800 mb-2">{financialGoal.description}</h3>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span>Objectif: {formatCurrency(financialGoal.amount)}</span>
+                    {financialGoal.deadline && (
+                      <span>Échéance: {formatDate(financialGoal.deadline)}</span>
+                    )}
+                  </div>
+                  
+                  {/* Barre de progression */}
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-purple-700">
+                        {formatCurrency(grandTotal)} / {formatCurrency(financialGoal.amount)}
+                      </span>
+                      <span className={`font-bold ${
+                        (grandTotal / financialGoal.amount) * 100 >= 100 
+                          ? 'text-green-600' 
+                          : (grandTotal / financialGoal.amount) * 100 >= 75 
+                          ? 'text-blue-600' 
+                          : (grandTotal / financialGoal.amount) * 100 >= 50 
+                          ? 'text-yellow-600' 
+                          : 'text-red-600'
+                      }`}>
+                        {((grandTotal / financialGoal.amount) * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    
+                    <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                      <div 
+                        className={`h-4 rounded-full transition-all duration-1000 ease-out ${
+                          (grandTotal / financialGoal.amount) * 100 >= 100 
+                            ? 'bg-gradient-to-r from-green-400 to-green-600' 
+                            : (grandTotal / financialGoal.amount) * 100 >= 75 
+                            ? 'bg-gradient-to-r from-blue-400 to-blue-600' 
+                            : (grandTotal / financialGoal.amount) * 100 >= 50 
+                            ? 'bg-gradient-to-r from-yellow-400 to-yellow-600' 
+                            : 'bg-gradient-to-r from-red-400 to-red-600'
+                        }`}
+                        style={{ width: `${Math.min(100, (grandTotal / financialGoal.amount) * 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  
+                  {/* Message de statut */}
+                  <div className="text-center mt-3">
+                    {(() => {
+                      const percentage = (grandTotal / financialGoal.amount) * 100;
+                      const remaining = Math.max(0, financialGoal.amount - grandTotal);
+                      
+                      if (percentage >= 100) {
+                        return (
+                          <p className="text-green-700 font-semibold">
+                            🎉 Objectif atteint ! Félicitations !
+                          </p>
+                        );
+                      } else {
+                        return (
+                          <p className="text-purple-700">
+                            Il reste <strong>{formatCurrency(remaining)}</strong> à atteindre
+                          </p>
+                        );
+                      }
+                    })()}
+                  </div>
+                </div>
+                
+                <div className="flex space-x-3">
+                  <button
+                    onClick={() => { setModalType('edit-goal'); setShowModal(true); }}
+                    className="flex-1 p-3 bg-blue-500 text-white rounded-lg active:scale-95 transition-transform"
+                  >
+                    ✏️ Modifier
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (confirm('Êtes-vous sûr de vouloir supprimer votre objectif financier ?')) {
+                        try {
+                          if (financialGoal.id) {
+                            await deleteFromFirebase('financialGoals', financialGoal.id);
+                          }
+                          setFinancialGoal({ amount: 0, description: '', deadline: '', isActive: false });
+                          alert('Objectif supprimé ! 🗑️');
+                        } catch (error) {
+                          console.error('Erreur suppression objectif:', error);
+                          alert('Erreur lors de la suppression de l\'objectif');
+                        }
+                      }
+                    }}
+                    className="flex-1 p-3 bg-red-500 text-white rounded-lg active:scale-95 transition-transform"
+                  >
+                    🗑️ Supprimer
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl shadow-lg p-6">
+              <h2 className="text-xl font-bold text-purple-800 mb-4">🎯 Définir un Objectif</h2>
+              
+              <div className="bg-white bg-opacity-70 p-4 rounded-lg mb-4">
+                <h4 className="font-medium text-purple-800 mb-2">💡 Pourquoi un objectif ?</h4>
+                <div className="text-sm text-purple-700 space-y-1">
+                  <p>• Rester motivé dans la gestion financière</p>
+                  <p>• Avoir un cap à atteindre</p>
+                  <p>• Suivre vos progrès visuellement</p>
+                  <p>• Célébrer vos réussites !</p>
+                </div>
+              </div>
+              
+              <button
+                onClick={() => { setModalType('set-goal'); setShowModal(true); }}
+                className="w-full p-4 bg-purple-500 text-white rounded-lg font-semibold active:scale-95 transition-transform"
+              >
+                ✨ Créer mon Objectif
+              </button>
+            </div>
+          )}
+
+          {/* Conseils */}
+          <div className="bg-gradient-to-r from-blue-100 to-indigo-100 rounded-xl p-4">
+            <h3 className="font-semibold text-blue-800 mb-2">💡 Conseils pour vos Objectifs</h3>
+            <div className="text-sm text-blue-700 space-y-1">
+              <p>• <strong>Réaliste :</strong> Fixez un montant atteignable</p>
+              <p>• <strong>Motivant :</strong> Choisissez un objectif qui vous tient à cœur</p>
+              <p>• <strong>Daté :</strong> Une échéance vous aidera à rester focus</p>
+              <p>• <strong>Mesurable :</strong> Suivez régulièrement vos progrès</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Modal pour créer un objectif */}
+        <Modal
+          isOpen={showModal && modalType === 'set-goal'}
+          onClose={() => { setShowModal(false); setNewGoal({ amount: '', description: '', deadline: '' }); }}
+          title="🎯 Créer mon Objectif Financier"
+        >
+          <div className="space-y-4">
+            <div className="bg-purple-50 p-3 rounded-lg">
+              <h4 className="font-medium text-purple-800 mb-1">🚀 Votre trésorerie actuelle</h4>
+              <p className="text-sm text-purple-700">
+                Vous avez actuellement <strong>{formatCurrency(grandTotal)}</strong> en trésorerie totale.
+              </p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                💰 Montant à atteindre *
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.01"
+                  min={grandTotal}
+                  value={newGoal.amount}
+                  onChange={(e) => setNewGoal({...newGoal, amount: e.target.value})}
+                  className="w-full p-3 border rounded-lg pr-8"
+                  placeholder={`Minimum: ${formatCurrency(grandTotal)}`}
+                />
+                <span className="absolute right-3 top-3 text-gray-500">€</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Recommandé : au moins {formatCurrency(grandTotal + 500)} pour un objectif motivant
+              </p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📝 Description de l'objectif *
+              </label>
+              <input
+                type="text"
+                value={newGoal.description}
+                onChange={(e) => setNewGoal({...newGoal, description: e.target.value})}
+                className="w-full p-3 border rounded-lg"
+                placeholder="Ex: Fonds pour nouveau matériel, réserve sécurité, projet spécial..."
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📅 Échéance (optionnel mais recommandé)
+              </label>
+              <input
+                type="date"
+                value={newGoal.deadline}
+                onChange={(e) => setNewGoal({...newGoal, deadline: e.target.value})}
+                className="w-full p-3 border rounded-lg"
+                min={new Date().toISOString().split('T')[0]}
+              />
+            </div>
+            
+            {/* Aperçu */}
+            {newGoal.amount && newGoal.description && (
+              <div className="bg-gradient-to-r from-purple-50 to-pink-50 p-3 rounded-lg">
+                <h4 className="font-medium text-purple-800 mb-2">🎯 Aperçu de votre objectif :</h4>
+                <div className="text-sm text-purple-700 space-y-1">
+                  <p><strong>Objectif :</strong> {newGoal.description}</p>
+                  <p><strong>Montant :</strong> {formatCurrency(parseFloat(newGoal.amount) || 0)}</p>
+                  <p><strong>À gagner :</strong> {formatCurrency(Math.max(0, parseFloat(newGoal.amount) - grandTotal))}</p>
+                  {newGoal.deadline && (
+                    <p><strong>Échéance :</strong> {formatDate(newGoal.deadline)}</p>
+                  )}
+                  <p><strong>Progression actuelle :</strong> {((grandTotal / parseFloat(newGoal.amount)) * 100).toFixed(1)}%</p>
+                </div>
+              </div>
+            )}
+            
+            <button
+             onClick={async () => {
+                const amount = parseFloat(newGoal.amount);
+                
+                if (amount > 0 && newGoal.description.trim()) {
+                  const goal = {
+                    amount: amount,
+                    description: newGoal.description.trim(),
+                    deadline: newGoal.deadline || null,
+                    isActive: true,
+                    createdAt: new Date().toISOString()
+                  };
+                  
+                  try {
+                    // Supprimer l'ancien objectif s'il existe
+                    if (financialGoal.isActive && financialGoal.id) {
+                      await deleteFromFirebase('financialGoals', financialGoal.id);
+                    }
+                    
+                    // Créer le nouveau objectif
+                    const goalId = await saveToFirebase('financialGoals', goal);
+                    setFinancialGoal({ ...goal, id: goalId });
+                    
+                    setNewGoal({ amount: '', description: '', deadline: '' });
+                    setShowModal(false);
+                    alert('Objectif défini avec succès ! 🎯');
+                  } catch (error) {
+                    console.error('Erreur définition objectif:', error);
+                    alert('Erreur lors de la définition de l\'objectif');
+                  }
+                }
+              }}
+              disabled={!newGoal.amount || !newGoal.description.trim() || parseFloat(newGoal.amount) < grandTotal || loading}
+              className="w-full p-3 bg-purple-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
+            >
+              {loading ? 'Création...' : '🎯 Créer mon Objectif'}
+            </button>
+          </div>
+        </Modal>
+
+        {/* Modal pour modifier l'objectif */}
+        <Modal
+          isOpen={showModal && modalType === 'edit-goal'}
+          onClose={() => { setShowModal(false); setNewGoal({ amount: '', description: '', deadline: '' }); }}
+          title="✏️ Modifier mon Objectif"
+        >
+          <div className="space-y-4">
+            <div className="bg-yellow-50 p-3 rounded-lg">
+              <h4 className="font-medium text-yellow-800 mb-1">⚠️ Modifier l'objectif</h4>
+              <p className="text-sm text-yellow-700">
+                Vous pouvez ajuster votre objectif selon vos nouveaux besoins.
+              </p>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                💰 Montant à atteindre *
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={newGoal.amount || financialGoal.amount}
+                  onChange={(e) => setNewGoal({...newGoal, amount: e.target.value})}
+                  className="w-full p-3 border rounded-lg pr-8"
+                  placeholder={financialGoal.amount?.toString() || "0.00"}
+                />
+                <span className="absolute right-3 top-3 text-gray-500">€</span>
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📝 Description de l'objectif *
+              </label>
+              <input
+                type="text"
+                value={newGoal.description || financialGoal.description}
+                onChange={(e) => setNewGoal({...newGoal, description: e.target.value})}
+                className="w-full p-3 border rounded-lg"
+                placeholder={financialGoal.description || "Description..."}
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📅 Échéance (optionnel)
+              </label>
+              <input
+                type="date"
+                value={newGoal.deadline || financialGoal.deadline || ''}
+                onChange={(e) => setNewGoal({...newGoal, deadline: e.target.value})}
+                className="w-full p-3 border rounded-lg"
+                min={new Date().toISOString().split('T')[0]}
+              />
+            </div>
+            
+            <button
+              onClick={async () => {
+                const amount = parseFloat(newGoal.amount || financialGoal.amount);
+                const description = newGoal.description || financialGoal.description;
+                
+                if (amount > 0 && description.trim() && financialGoal.id) {
+                  const updatedGoal = {
+                    amount: amount,
+                    description: description.trim(),
+                    deadline: newGoal.deadline || financialGoal.deadline,
+                    updatedAt: new Date().toISOString()
+                  };
+                  
+                  try {
+                    await updateInFirebase('financialGoals', financialGoal.id, updatedGoal);
+                    setFinancialGoal({ ...financialGoal, ...updatedGoal });
+                    setNewGoal({ amount: '', description: '', deadline: '' });
+                    setShowModal(false);
+                    alert('Objectif mis à jour ! 📝');
+                  } catch (error) {
+                    console.error('Erreur mise à jour objectif:', error);
+                    alert('Erreur lors de la mise à jour de l\'objectif');
+                  }
+                }
+              }}
+              disabled={loading}
+              className="w-full p-3 bg-blue-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
+            >
+              {loading ? 'Mise à jour...' : '✅ Mettre à Jour'}
+            </button>
+          </div>
+        </Modal>
       </div>
     );
   }
