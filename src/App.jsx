@@ -37,11 +37,13 @@ const [bros, setBros] = useState([]);
 const [products, setProducts] = useState([]);
 const [orders, setOrders] = useState([]);
 const [jobs, setJobs] = useState([]);
+const [scheduledJobs, setScheduledJobs] = useState([]);
 const [stockMovements, setStockMovements] = useState([]);
   const [memberSearch, setMemberSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
   const [selectedMember, setSelectedMember] = useState(null);
+  const [selectedJob, setSelectedJob] = useState(null);
   const [cart, setCart] = useState({});
   const [cartTotal, setCartTotal] = useState(0);
   const [repaymentAmount, setRepaymentAmount] = useState('');
@@ -57,6 +59,11 @@ const [stockMovements, setStockMovements] = useState([]);
     description: '', date: new Date().toISOString().split('T')[0],
     customRate: 10.00, bros: [], isPaid: false
   });
+const [newScheduledJob, setNewScheduledJob] = useState({
+  description: '', date: new Date().toISOString().split('T')[0],
+  time: '09:00', estimatedHours: 1, customRate: 10.00, brosNeeded: 1, 
+  registeredBros: [], status: 'planned'
+});
   const [stockAdjustment, setStockAdjustment] = useState({ 
     productId: '', quantity: '', type: 'add', reason: '' 
   });
@@ -110,6 +117,7 @@ useEffect(() => {
   let unsubscribeOrders = null;
   let unsubscribeJobs = null;
   let unsubscribeStockMovements = null;
+  let unsubscribeScheduledJobs = null;
 
   const setupListeners = async () => {
     unsubscribeMembers = await loadFromFirebase('members', setMembers);
@@ -118,6 +126,7 @@ useEffect(() => {
     unsubscribeOrders = await loadFromFirebase('orders', setOrders);
     unsubscribeJobs = await loadFromFirebase('jobs', setJobs);
     unsubscribeStockMovements = await loadFromFirebase('stockMovements', setStockMovements);
+    unsubscribeScheduledJobs = await loadFromFirebase('scheduledJobs', setScheduledJobs);
   };
 
   setupListeners();
@@ -129,6 +138,7 @@ useEffect(() => {
     if (unsubscribeOrders) unsubscribeOrders();
     if (unsubscribeJobs) unsubscribeJobs();
     if (unsubscribeStockMovements) unsubscribeStockMovements();
+    if (unsubscribeScheduledJobs) unsubscribeScheduledJobs();
   };
 }, []);
 
@@ -620,6 +630,128 @@ const addProduct = async () => {
     await deleteFromFirebase('products', productId);
     setProducts(products.filter(p => p.id !== productId));
   };
+
+const addScheduledJob = async () => {
+  if (newScheduledJob.description.trim() && newScheduledJob.brosNeeded > 0) {
+    const scheduledJob = {
+      description: newScheduledJob.description.trim(),
+      date: newScheduledJob.date,
+      customRate: newScheduledJob.customRate,
+      brosNeeded: newScheduledJob.brosNeeded,
+      registeredBros: [],
+      status: 'planned'
+    };
+    
+    try {
+      await saveToFirebase('scheduledJobs', scheduledJob);
+      setNewScheduledJob({
+  description: '', 
+  date: new Date().toISOString().split('T')[0],
+  time: '09:00',
+  estimatedHours: 1,
+  customRate: hourlyRate, 
+  brosNeeded: 1, 
+  registeredBros: [], 
+  status: 'planned'
+      });
+      setShowModal(false);
+    } catch (error) {
+      alert('Erreur lors de la programmation du boulot');
+    }
+  }
+};
+
+const registerBroToJob = async (jobId, broId) => {
+  const job = scheduledJobs.find(j => j.id === jobId);
+  if (!job || job.registeredBros.length >= job.brosNeeded) return;
+
+  // Vérifier que le Bro n'est pas déjà inscrit
+  if (job.registeredBros.some(reg => reg.broId === broId)) return;
+
+  const newRegistration = {
+    broId: broId,
+    registeredAt: new Date().toISOString(),
+    hours: 0 // À définir plus tard quand le boulot sera terminé
+  };
+
+  const updatedRegisteredBros = [...job.registeredBros, newRegistration];
+
+  try {
+    await updateInFirebase('scheduledJobs', jobId, { 
+      registeredBros: updatedRegisteredBros 
+    });
+    setShowModal(false);
+    setSelectedJob(null);
+  } catch (error) {
+    alert('Erreur lors de l\'inscription');
+  }
+};
+
+const removeBroFromScheduled = async (jobId, broId) => {
+  const job = scheduledJobs.find(j => j.id === jobId);
+  if (!job) return;
+
+  const updatedRegisteredBros = job.registeredBros.filter(reg => reg.broId !== broId);
+
+  try {
+    await updateInFirebase('scheduledJobs', jobId, { 
+      registeredBros: updatedRegisteredBros 
+    });
+  } catch (error) {
+    alert('Erreur lors de la désinscription');
+  }
+};
+
+const completeScheduledJob = async (jobId) => {
+  const job = scheduledJobs.find(j => j.id === jobId);
+  if (!job || job.registeredBros.length < job.brosNeeded) return;
+
+  // Créer un boulot terminé pour chaque Bro inscrit
+  const completedJobs = job.registeredBros.map(registration => {
+    const bro = bros.find(b => b.id === registration.broId);
+    const defaultHours = 1; // Heures par défaut, peut être modifié plus tard
+    
+    return {
+      broId: registration.broId,
+      broName: bro ? bro.name : 'Inconnu',
+      description: job.description,
+      hours: defaultHours,
+      date: job.date,
+      hourlyRate: job.customRate,
+      total: defaultHours * job.customRate,
+      isPaid: false,
+      originalScheduledJobId: jobId
+    };
+  });
+
+  try {
+    // Sauvegarder tous les boulots terminés
+    await Promise.all(completedJobs.map(completedJob => 
+      saveToFirebase('jobs', completedJob)
+    ));
+
+    // Mettre à jour les heures totales des Bro
+    const broUpdates = job.registeredBros.map(registration => {
+      const bro = bros.find(b => b.id === registration.broId);
+      if (bro) {
+        return updateInFirebase('bros', bro.id, { 
+          totalHours: bro.totalHours + 1 // 1 heure par défaut
+        });
+      }
+      return Promise.resolve();
+    });
+    await Promise.all(broUpdates);
+
+    // Supprimer le boulot programmé
+    await deleteFromFirebase('scheduledJobs', jobId);
+    
+    alert(`Boulot "${job.description}" marqué comme terminé !`);
+    
+  } catch (error) {
+    console.error('Erreur lors de la finalisation:', error);
+    alert('Erreur lors de la finalisation du boulot');
+  }
+};
 
   const adjustStock = () => {
     const quantity = parseInt(stockAdjustment.quantity);
@@ -1178,63 +1310,356 @@ if (currentScreen === 'bar-order') {
   }
 
 if (currentScreen === 'boulots') {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100">
+      <Header title="Section Boulots" onBack={() => navigateTo('home')} />
+      
+      <div className="p-6 space-y-4">
+        {/* NOUVEAU BOUTON - Boulots programmés */}
+        <button
+          onClick={() => navigateTo('boulots-scheduled')}
+          className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+        >
+          <div className="flex items-center space-x-3">
+            <Clock className="text-green-500" size={24} />
+            <div className="text-left">
+              <h3 className="font-semibold">Boulots programmés</h3>
+              <p className="text-gray-600 text-sm">Planning et inscriptions</p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => navigateTo('boulots-new')}
+          className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+        >
+          <div className="flex items-center space-x-3">
+            <Plus className="text-green-500" size={24} />
+            <div className="text-left">
+              <h3 className="font-semibold">Nouveau boulot</h3>
+              <p className="text-gray-600 text-sm">Multi-Bro avec paiement</p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => navigateTo('boulots-stats')}
+          className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+        >
+          <div className="flex items-center space-x-3">
+            <BarChart3 className="text-green-500" size={24} />
+            <div className="text-left">
+              <h3 className="font-semibold">Statistiques</h3>
+              <p className="text-gray-600 text-sm">Graphiques et classements</p>
+            </div>
+          </div>
+        </button>
+
+        {/* RENOMMÉ : Historique → Boulots terminés */}
+        <button
+          onClick={() => navigateTo('boulots-history')}
+          className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+        >
+          <div className="flex items-center space-x-3">
+            <CheckCircle className="text-green-500" size={24} />
+            <div className="text-left">
+              <h3 className="font-semibold">Boulots terminés</h3>
+              <p className="text-gray-600 text-sm">Avec statut paiements</p>
+            </div>
+          </div>
+        </button>
+
+        <button
+          onClick={() => navigateTo('boulots-bros')}
+          className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+        >
+          <div className="flex items-center space-x-3">
+            <User className="text-green-500" size={24} />
+            <div className="text-left">
+              <h3 className="font-semibold">Gestion des Bro</h3>
+              <p className="text-gray-600 text-sm">Liste et suppressions</p>
+            </div>
+          </div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+if (currentScreen === 'boulots-scheduled') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100">
-        <Header title="Section Boulots" onBack={() => navigateTo('home')} />
+      <div className="min-h-screen bg-gray-50">
+        <Header title="Boulots programmés" onBack={() => navigateTo('boulots')} />
         
-        <div className="p-6 space-y-4">
-          <button
-            onClick={() => navigateTo('boulots-new')}
-            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
-          >
-            <div className="flex items-center space-x-3">
-              <Plus className="text-green-500" size={24} />
-              <div className="text-left">
-                <h3 className="font-semibold">Nouveau boulot</h3>
-                <p className="text-gray-600 text-sm">Multi-Bro avec paiement</p>
+        <div className="p-4">
+          {/* Bouton pour programmer un nouveau boulot */}
+          <div className="mb-4">
+            <button
+              onClick={() => { setModalType('schedule-job'); setShowModal(true); }}
+              className="w-full p-3 bg-green-500 text-white rounded-lg active:scale-95 transition-transform"
+            >
+              <div className="flex items-center justify-center space-x-2">
+                <Plus size={20} />
+                <span>Programmer un boulot</span>
               </div>
-            </div>
-          </button>
+            </button>
+          </div>
 
-          <button
-            onClick={() => navigateTo('boulots-stats')}
-            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
-          >
-            <div className="flex items-center space-x-3">
-              <BarChart3 className="text-green-500" size={24} />
-              <div className="text-left">
-                <h3 className="font-semibold">Statistiques</h3>
-                <p className="text-gray-600 text-sm">Graphiques et classements</p>
-              </div>
+          {/* Liste des boulots programmés */}
+          {scheduledJobs.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Clock size={48} className="mx-auto mb-2 opacity-50" />
+              <p>Aucun boulot programmé pour le moment</p>
             </div>
-          </button>
-
-          <button
-            onClick={() => navigateTo('boulots-history')}
-            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
-          >
-            <div className="flex items-center space-x-3">
-              <Clock className="text-green-500" size={24} />
-              <div className="text-left">
-                <h3 className="font-semibold">Historique</h3>
-                <p className="text-gray-600 text-sm">Avec statut paiements</p>
-              </div>
+          ) : (
+            <div className="space-y-3">
+              {scheduledJobs.map(job => {
+                const hasEnoughBros = job.registeredBros.length >= job.brosNeeded;
+                const statusColor = hasEnoughBros ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50';
+                const statusText = hasEnoughBros ? 'Prêt' : `${job.brosNeeded - job.registeredBros.length} Bro manquant(s)`;
+                const statusTextColor = hasEnoughBros ? 'text-green-700' : 'text-red-700';
+                
+                return (
+                  <div key={job.id} className={`bg-white border rounded-lg shadow-sm ${statusColor} p-4`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex-1">
+                        <h3 className="font-medium">{job.description}</h3>
+                        <p className="text-sm text-gray-600">{formatDate(job.date)}</p>
+                        <p className="text-xs text-gray-500">Tarif: {formatCurrency(job.customRate)}/h</p>
+                      </div>
+                      <div className="text-right">
+                        <div className={`px-2 py-1 rounded-full text-xs font-medium ${statusTextColor} ${hasEnoughBros ? 'bg-green-100' : 'bg-red-100'}`}>
+                          {statusText}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Affichage des Bro inscrits */}
+                    <div className="mt-3">
+                      <p className="text-sm font-medium text-gray-700 mb-2">
+                        Bro inscrits ({job.registeredBros.length}/{job.brosNeeded}) :
+                      </p>
+                      
+                      {job.registeredBros.length > 0 ? (
+                        <div className="flex flex-wrap gap-2 mb-3">
+                          {job.registeredBros.map((registration, index) => {
+                            const bro = bros.find(b => b.id === registration.broId);
+                            return (
+                              <div key={index} className="flex items-center bg-blue-100 px-2 py-1 rounded-full text-xs">
+                                <span className="mr-1">{bro?.name || 'Inconnu'}</span>
+                                <button
+                                  onClick={() => removeBroFromScheduled(job.id, registration.broId)}
+                                  className="text-red-500 hover:text-red-700"
+                                >
+                                  <Minus size={12} />
+                                </button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-500 mb-3">Aucun Bro inscrit</p>
+                      )}
+                      
+                      {/* Bouton pour s'inscrire */}
+                      {job.registeredBros.length < job.brosNeeded && (
+                        <button
+                          onClick={() => { setSelectedJob(job); setModalType('register-bro'); setShowModal(true); }}
+                          className="w-full p-2 bg-blue-500 text-white rounded text-sm active:scale-95 transition-transform"
+                        >
+                          Inscrire un Bro
+                        </button>
+                      )}
+                      
+                      {/* Bouton pour marquer comme terminé */}
+                      {hasEnoughBros && (
+                        <button
+                          onClick={() => completeScheduledJob(job.id)}
+                          className="w-full p-2 bg-green-500 text-white rounded text-sm mt-2 active:scale-95 transition-transform"
+                        >
+                          Marquer comme terminé
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </button>
-
-          <button
-            onClick={() => navigateTo('boulots-bros')}
-            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
-          >
-            <div className="flex items-center space-x-3">
-              <User className="text-green-500" size={24} />
-              <div className="text-left">
-                <h3 className="font-semibold">Gestion des Bro</h3>
-                <p className="text-gray-600 text-sm">Liste et suppressions</p>
-              </div>
-            </div>
-          </button>
+          )}
         </div>
+
+{/* Modal pour programmer un boulot */}
+        <Modal
+          isOpen={showModal && modalType === 'schedule-job'}
+          onClose={() => { setShowModal(false); setNewScheduledJob({
+            description: '', date: new Date().toISOString().split('T')[0],
+            customRate: hourlyRate, brosNeeded: 1, registeredBros: [], status: 'planned'
+          }); }}
+          title="Programmer un boulot"
+        >
+          <div className="space-y-4">
+            {/* Description */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📝 Description du travail *
+              </label>
+              <textarea
+                value={newScheduledJob.description}
+                onChange={(e) => setNewScheduledJob({...newScheduledJob, description: e.target.value})}
+                placeholder="Ex: Nettoyage des locaux, installation matériel..."
+                className="w-full p-3 border rounded-lg h-20 resize-none"
+              />
+            </div>
+            
+{/* Date */}
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    📅 Date prévue *
+  </label>
+  <input
+    type="date"
+    value={newScheduledJob.date}
+    onChange={(e) => setNewScheduledJob({...newScheduledJob, date: e.target.value})}
+    className="w-full p-3 border rounded-lg"
+  />
+</div>
+
+{/* Heure de rendez-vous */}
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    🕐 Heure de rendez-vous *
+  </label>
+  <input
+    type="time"
+    value={newScheduledJob.time}
+    onChange={(e) => setNewScheduledJob({...newScheduledJob, time: e.target.value})}
+    className="w-full p-3 border rounded-lg"
+  />
+</div>
+
+{/* Durée estimée */}
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    ⏱️ Durée estimée *
+  </label>
+  <div className="relative">
+    <input
+      type="number"
+      step="0.5"
+      min="0.5"
+      max="12"
+      value={newScheduledJob.estimatedHours}
+      onChange={(e) => setNewScheduledJob({...newScheduledJob, estimatedHours: parseFloat(e.target.value) || 1})}
+      className="w-full p-3 border rounded-lg pr-12"
+      placeholder="1.0"
+    />
+    <span className="absolute right-3 top-3 text-gray-500">heure(s)</span>
+  </div>
+  <p className="text-xs text-gray-500 mt-1">
+    Durée estimée du boulot par personne
+  </p>
+</div>
+            
+            {/* Tarif horaire */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                💰 Tarif horaire *
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.25"
+                  min="0"
+                  value={newScheduledJob.customRate}
+                  onChange={(e) => setNewScheduledJob({...newScheduledJob, customRate: parseFloat(e.target.value) || 0})}
+                  className="w-full p-3 border rounded-lg pr-8"
+                  placeholder="10.00"
+                />
+                <span className="absolute right-3 top-3 text-gray-500">€/h</span>
+              </div>
+            </div>
+            
+          {/* Nombre de Bro nécessaires */}
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    👥 Nombre de Bro nécessaires *
+  </label>
+  <input
+    type="number"
+    min="1"
+    max={bros.length}
+    value={newScheduledJob.brosNeeded}
+    onChange={(e) => setNewScheduledJob({...newScheduledJob, brosNeeded: parseInt(e.target.value) || 1})}
+    className="w-full p-3 border rounded-lg"
+    placeholder="1"
+  />
+  <p className="text-xs text-gray-500 mt-1">
+    Nombre de personnes requises pour ce boulot (max: {bros.length} Bro disponibles)
+  </p>
+</div>
+            
+{/* Aperçu du coût */}
+<div className="bg-blue-50 p-3 rounded-lg">
+  <h4 className="font-medium text-blue-800 mb-1">💡 Estimation :</h4>
+  <div className="text-sm text-blue-700 space-y-1">
+    <p>📅 {formatDate(newScheduledJob.date)} à {newScheduledJob.time}</p>
+    <p>⏱️ Durée: {newScheduledJob.estimatedHours}h par personne</p>
+    <p>💰 Tarif: {formatCurrency(newScheduledJob.customRate)}/heure</p>
+    <p>👥 Bro requis: {newScheduledJob.brosNeeded} personne(s)</p>
+    <p className="font-semibold border-t border-blue-200 pt-1 mt-2">
+      💸 Coût total estimé: {formatCurrency(newScheduledJob.customRate * newScheduledJob.estimatedHours * newScheduledJob.brosNeeded)}
+    </p>
+  </div>
+</div>
+            
+            <button
+              onClick={addScheduledJob}
+              disabled={!newScheduledJob.description.trim() || newScheduledJob.brosNeeded < 1 || newScheduledJob.customRate <= 0}
+              className="w-full p-3 bg-green-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
+            >
+              ✅ Programmer le boulot
+            </button>
+          </div>
+        </Modal>
+
+        {/* Modal pour inscrire un Bro */}
+        <Modal
+          isOpen={showModal && modalType === 'register-bro'}
+          onClose={() => { setShowModal(false); setSelectedJob(null); }}
+          title="Inscrire un Bro"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Boulot: <strong>{selectedJob?.description}</strong>
+            </p>
+            <p className="text-sm text-gray-600">
+              Places disponibles: <strong>{selectedJob ? selectedJob.brosNeeded - selectedJob.registeredBros.length : 0}</strong>
+            </p>
+            
+            <div className="space-y-2">
+              {bros.filter(bro => 
+                !selectedJob?.registeredBros.some(reg => reg.broId === bro.id)
+              ).map(bro => (
+                <button
+                  key={bro.id}
+                  onClick={() => registerBroToJob(selectedJob?.id, bro.id)}
+                  className="w-full text-left p-3 border rounded-lg hover:bg-gray-50 active:scale-95 transition-transform"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{bro.name}</span>
+                    <span className="text-sm text-gray-500">{bro.totalHours}h totales</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+            
+            {bros.filter(bro => 
+              !selectedJob?.registeredBros.some(reg => reg.broId === bro.id)
+            ).length === 0 && (
+              <p className="text-center text-gray-500">Tous les Bro sont déjà inscrits</p>
+            )}
+          </div>
+        </Modal>
       </div>
     );
   }
