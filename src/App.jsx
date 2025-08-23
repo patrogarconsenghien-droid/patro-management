@@ -838,27 +838,50 @@ const removeBroFromScheduled = async (jobId, broId) => {
   }
 };
 
-const completeScheduledJob = async (jobId) => {
+const completeScheduledJob = async (jobId, isPartial = false) => {
   const job = scheduledJobs.find(j => j.id === jobId);
-  if (!job || job.registeredBros.length < job.brosNeeded) return;
+  if (!job) return;
+
+  // Validation : soit quota complet, soit au moins 1 Bro inscrit pour validation partielle
+  if (!isPartial && job.registeredBros.length < job.brosNeeded) {
+    alert('Le quota de Bro n\'est pas atteint pour une finalisation complète.');
+    return;
+  }
+  
+  if (isPartial && job.registeredBros.length === 0) {
+    alert('Aucun Bro inscrit pour ce boulot.');
+    return;
+  }
+
+  // Message de confirmation adaptatif
+  const confirmMessage = isPartial 
+    ? `Valider ce boulot avec seulement ${job.registeredBros.length} Bro sur ${job.brosNeeded} requis ?\n\n"${job.description}"\n\nSeuls les Bro inscrits seront payés.`
+    : `Finaliser ce boulot avec le quota complet ?\n\n"${job.description}"`;
+    
+  if (!confirm(confirmMessage)) return;
 
   // Créer un boulot terminé pour chaque Bro inscrit
   const completedJobs = job.registeredBros.map(registration => {
     const bro = bros.find(b => b.id === registration.broId);
     const defaultHours = 1; // Heures par défaut, peut être modifié plus tard
     
-return {
-  broId: registration.broId,
-  broName: bro ? bro.name : 'Inconnu',
-  description: job.description,
-  hours: defaultHours,
-  date: job.date,
-  hourlyRate: job.customRate,
-  total: defaultHours * job.customRate,
-  isPaid: false,
-  paymentMethod: null, // NOUVEAU
-  originalScheduledJobId: jobId
-};
+    return {
+      broId: registration.broId,
+      broName: bro ? bro.name : 'Inconnu',
+      description: isPartial 
+        ? `${job.description} (PARTIEL ${job.registeredBros.length}/${job.brosNeeded})`
+        : job.description,
+      hours: defaultHours,
+      date: job.date,
+      hourlyRate: job.customRate,
+      total: defaultHours * job.customRate,
+      isPaid: false,
+      paymentMethod: null,
+      originalScheduledJobId: jobId,
+      isPartialCompletion: isPartial,
+      originalBrosNeeded: job.brosNeeded,
+      actualBrosUsed: job.registeredBros.length
+    };
   });
 
   try {
@@ -882,7 +905,11 @@ return {
     // Supprimer le boulot programmé
     await deleteFromFirebase('scheduledJobs', jobId);
     
-    alert(`Boulot "${job.description}" marqué comme terminé !`);
+    const successMessage = isPartial 
+      ? `Boulot "${job.description}" validé partiellement !\n${job.registeredBros.length} Bro sur ${job.brosNeeded} ont été enregistrés.`
+      : `Boulot "${job.description}" marqué comme terminé !`;
+      
+    alert(successMessage);
     
   } catch (error) {
     console.error('Erreur lors de la finalisation:', error);
@@ -1758,9 +1785,24 @@ if (currentScreen === 'boulots-scheduled') {
             <div className="space-y-3">
               {scheduledJobs.map(job => {
                 const hasEnoughBros = job.registeredBros.length >= job.brosNeeded;
-                const statusColor = hasEnoughBros ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50';
-                const statusText = hasEnoughBros ? 'Prêt' : `${job.brosNeeded - job.registeredBros.length} Bro manquant(s)`;
-                const statusTextColor = hasEnoughBros ? 'text-green-700' : 'text-red-700';
+                const hasAtLeastOneBro = job.registeredBros.length > 0;
+                
+                // Code couleur plus nuancé
+                let statusColor, statusText, statusTextColor;
+                
+                if (hasEnoughBros) {
+                  statusColor = 'border-green-200 bg-green-50';
+                  statusText = 'Prêt';
+                  statusTextColor = 'text-green-700';
+                } else if (hasAtLeastOneBro) {
+                  statusColor = 'border-orange-200 bg-orange-50';
+                  statusText = `Partiel (${job.registeredBros.length}/${job.brosNeeded})`;
+                  statusTextColor = 'text-orange-700';
+                } else {
+                  statusColor = 'border-red-200 bg-red-50';
+                  statusText = `${job.brosNeeded} Bro manquant(s)`;
+                  statusTextColor = 'text-red-700';
+                }
                 
                 return (
                   <div key={job.id} className={`bg-white border rounded-lg shadow-sm ${statusColor} p-4`}>
@@ -1804,23 +1846,38 @@ if (currentScreen === 'boulots-scheduled') {
                         <p className="text-xs text-gray-500 mb-3">Aucun Bro inscrit</p>
                       )}
                       
-                      {/* Bouton pour s'inscrire */}
+                   
+                      
+{/* Bouton pour s'inscrire + validation partielle */}
                       {job.registeredBros.length < job.brosNeeded && (
-                        <button
-                          onClick={() => { setSelectedJob(job); setModalType('register-bro'); setShowModal(true); }}
-                          className="w-full p-2 bg-blue-500 text-white rounded text-sm active:scale-95 transition-transform"
-                        >
-                          Inscrire un Bro
-                        </button>
+                        <div className="flex items-center space-x-2">
+                          <button
+                            onClick={() => { setSelectedJob(job); setModalType('register-bro'); setShowModal(true); }}
+                            className="flex-1 p-2 bg-blue-500 text-white rounded text-sm active:scale-95 transition-transform"
+                          >
+                            Inscrire un Bro
+                          </button>
+                          
+                          {/* Petit bouton rond vert pour validation partielle */}
+                          {job.registeredBros.length > 0 && (
+                            <button
+                              onClick={() => completeScheduledJob(job.id, true)}
+                              className="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center active:scale-95 transition-transform"
+                              title={`Valider avec ${job.registeredBros.length} Bro sur ${job.brosNeeded}`}
+                            >
+                              <span className="text-sm font-bold">✓</span>
+                            </button>
+                          )}
+                        </div>
                       )}
                       
-                      {/* Bouton pour marquer comme terminé */}
+                      {/* Bouton normal si quota atteint */}
                       {hasEnoughBros && (
                         <button
-                          onClick={() => completeScheduledJob(job.id)}
-                          className="w-full p-2 bg-green-500 text-white rounded text-sm mt-2 active:scale-95 transition-transform"
+                          onClick={() => completeScheduledJob(job.id, false)}
+                          className="w-full p-2 bg-green-500 text-white rounded text-sm active:scale-95 transition-transform"
                         >
-                          Marquer comme terminé
+                          ✅ Marquer comme terminé
                         </button>
                       )}
                     </div>
@@ -2380,6 +2437,12 @@ if (currentScreen === 'boulots-history') {
                             '⏳ Non payé'
                           )}
                         </button>
+                          {/* Nouveau badge pour les boulots partiels */}
+                          {job.isPartialCompletion && (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                              ⚠️ Partiel ({job.actualBrosUsed}/{job.originalBrosNeeded})
+                            </span>
+                          )}
                       </div>
                       <p className="text-sm text-gray-600 mt-1">{job.description}</p>
                       <p className="text-xs text-gray-500 mt-1">{formatDate(job.date)}</p>
@@ -2709,11 +2772,23 @@ jobs.forEach(job => {
     }
   }
 });
+ // NOUVEAU : Calculer la valeur du stock
+      let stockValue = 0;
+      products.forEach(product => {
+        const quantity = product.stock || 0;
+        const unitPrice = product.price || 0;
+        stockValue += quantity * unitPrice;
+      });
       
-      return { cashTotal, accountTotal, grandTotal: cashTotal + accountTotal };
+     return { 
+        cashTotal, 
+        accountTotal, 
+        stockValue, // Nouvelle valeur pour info
+        grandTotal: cashTotal + accountTotal // Total reste inchangé
+      };
     };
     
-    const { cashTotal, accountTotal, grandTotal } = calculateTotals();
+   const { cashTotal, accountTotal, stockValue, grandTotal } = calculateTotals();
     
     return (
       <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-50">
@@ -2934,6 +3009,28 @@ jobs.forEach(job => {
                         : 'text-red-600'
                     }`}>
                       {formatCurrency(grandTotal)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+                {/* NOUVEAU : Valeur du Stock (info seulement) */}
+              <div className="bg-purple-50 p-4 rounded-lg border border-purple-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="bg-purple-500 p-2 rounded-full">
+                      <span className="text-white text-lg">📦</span>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-purple-800">Valeur du Stock</h3>
+                      <p className="text-sm text-purple-600">À titre informatif</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-purple-600">
+                      {formatCurrency(stockValue)}
+                    </p>
+                    <p className="text-xs text-purple-500">
+                      {products.reduce((sum, p) => sum + (p.stock || 0), 0)} articles
                     </p>
                   </div>
                 </div>
