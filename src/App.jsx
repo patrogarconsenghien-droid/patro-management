@@ -73,9 +73,25 @@ const [newJob, setNewJob] = useState({
 });
 const [newScheduledJob, setNewScheduledJob] = useState({
   description: '', date: new Date().toISOString().split('T')[0],
-  time: '09:00', estimatedHours: 1, customRate: 10.00, brosNeeded: 1, 
+  timeStart: '09:00', estimatedHours: 1, location: '', customRate: 10.00, brosNeeded: 1, 
   registeredBros: [], status: 'planned'
 });
+const deleteScheduledJob = async (jobId) => {
+  const job = scheduledJobs.find(j => j.id === jobId);
+  if (!job) return;
+
+  const confirmMessage = `Êtes-vous sûr de vouloir supprimer ce boulot programmé ?\n\n"${job.description}"\nDate: ${formatDate(job.date)}\n\nCette action est irréversible.`;
+  
+  if (!confirm(confirmMessage)) return;
+
+  try {
+    await deleteFromFirebase('scheduledJobs', jobId);
+    alert('Boulot programmé supprimé avec succès !');
+  } catch (error) {
+    console.error('Erreur lors de la suppression du boulot programmé:', error);
+    alert('Erreur lors de la suppression du boulot programmé');
+  }
+};
 const [stockAdjustment, setStockAdjustment] = useState({ 
   productId: '', quantity: '', type: 'add', reason: '', 
   moneyFlow: 'none', amount: '', paymentMethod: ''
@@ -170,6 +186,8 @@ useEffect(() => {
   const addFinancialTransaction = async (type) => {
   const amount = parseFloat(newTransaction.amount);
   
+
+
   if (amount > 0 && newTransaction.description.trim()) {
     const transaction = {
       type: type, // 'income' ou 'expense'
@@ -221,6 +239,25 @@ useEffect(() => {
 
   const formatCurrency = (amount) => `€${amount.toFixed(2)}`;
   const formatDate = (date) => new Date(date).toLocaleDateString('fr-FR');
+
+  const calculateEndTime = (startTime, durationHours) => {
+  if (!startTime || !durationHours) return '';
+  
+  // Convertir l'heure de début en minutes
+  const [startHour, startMinute] = startTime.split(':').map(Number);
+  const startTotalMinutes = startHour * 60 + startMinute;
+  
+  // Ajouter la durée en minutes
+  const durationMinutes = durationHours * 60;
+  const endTotalMinutes = startTotalMinutes + durationMinutes;
+  
+  // Convertir en heures et minutes
+  const endHour = Math.floor(endTotalMinutes / 60) % 24; // % 24 pour gérer le passage à minuit
+  const endMinute = endTotalMinutes % 60;
+  
+  // Formater en HH:MM
+  return `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
+};
 
 const saveToFirebase = async (collectionName, data) => {
   setLoading(true);
@@ -772,6 +809,9 @@ const addScheduledJob = async () => {
     const scheduledJob = {
       description: newScheduledJob.description.trim(),
       date: newScheduledJob.date,
+      timeStart: newScheduledJob.timeStart,
+      estimatedHours: newScheduledJob.estimatedHours,
+      location: newScheduledJob.location.trim(),
       customRate: newScheduledJob.customRate,
       brosNeeded: newScheduledJob.brosNeeded,
       registeredBros: [],
@@ -781,14 +821,15 @@ const addScheduledJob = async () => {
     try {
       await saveToFirebase('scheduledJobs', scheduledJob);
       setNewScheduledJob({
-  description: '', 
-  date: new Date().toISOString().split('T')[0],
-  time: '09:00',
-  estimatedHours: 1,
-  customRate: hourlyRate, 
-  brosNeeded: 1, 
-  registeredBros: [], 
-  status: 'planned'
+        description: '', 
+        date: new Date().toISOString().split('T')[0],
+        timeStart: '09:00',
+        estimatedHours: 1,
+        location: '',
+        customRate: hourlyRate, 
+        brosNeeded: 1, 
+        registeredBros: [], 
+        status: 'planned'
       });
       setShowModal(false);
     } catch (error) {
@@ -1849,16 +1890,43 @@ if (currentScreen === 'boulots-scheduled') {
                         return (
                           <div key={job.id} className={`bg-white border rounded-lg shadow-sm ${statusColor} p-4`}>
                             <div className="flex items-start justify-between mb-2">
-                              <div className="flex-1">
-                                <h3 className="font-medium">{job.description}</h3>
-                                <p className="text-xs text-gray-500">Tarif: {formatCurrency(job.customRate)}/h</p>
-                              </div>
-                              <div className="text-right">
-                                <div className={`px-2 py-1 rounded-full text-xs font-medium ${statusTextColor} ${hasEnoughBros ? 'bg-green-100' : hasAtLeastOneBro ? 'bg-orange-100' : 'bg-red-100'}`}>
-                                  {statusText}
-                                </div>
-                              </div>
-                            </div>
+<div className="flex-1">
+  <h3 className="font-medium">{job.description}</h3>
+  <div className="space-y-1 mt-1">
+    <p className="text-xs text-gray-500">
+      💰 Tarif: {formatCurrency(job.customRate)}/h
+    </p>
+    {job.timeStart ? (
+      <p className="text-xs text-gray-500">
+        🕐 {job.timeStart} à {calculateEndTime(job.timeStart, job.estimatedHours || 1)}
+      </p>
+    ) : (
+      <p className="text-xs text-gray-400">🕐 Horaires à définir</p>
+    )}
+    {job.location ? (
+      <p className="text-xs text-gray-500">📍 {job.location}</p>
+    ) : (
+      <p className="text-xs text-gray-400">📍 Lieu à préciser</p>
+    )}
+  </div>
+</div>
+  <div className="text-right flex items-center space-x-2">
+    <div className={`px-2 py-1 rounded-full text-xs font-medium ${statusTextColor} ${hasEnoughBros ? 'bg-green-100' : hasAtLeastOneBro ? 'bg-orange-100' : 'bg-red-100'}`}>
+      {statusText}
+    </div>
+    <button
+      onClick={() => {
+        if (confirm(`Supprimer le boulot "${job.description}" ?`)) {
+          deleteScheduledJob(job.id);
+        }
+      }}
+      className="p-1 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
+      title="Supprimer ce boulot"
+    >
+      <Trash2 size={14} />
+    </button>
+  </div>
+</div>
                             
                             {/* Affichage des Bro inscrits */}
                             <div className="mt-3">
@@ -1947,9 +2015,10 @@ if (currentScreen === 'boulots-scheduled') {
         <Modal
           isOpen={showModal && modalType === 'schedule-job'}
           onClose={() => { setShowModal(false); setNewScheduledJob({
-            description: '', date: new Date().toISOString().split('T')[0],
-            customRate: hourlyRate, brosNeeded: 1, registeredBros: [], status: 'planned'
-          }); }}
+  description: '', date: new Date().toISOString().split('T')[0],
+  timeStart: '09:00', estimatedHours: 1, location: '', customRate: hourlyRate, brosNeeded: 1, 
+  registeredBros: [], status: 'planned'
+}); }}
           title="Programmer un boulot"
         >
           <div className="space-y-4">
@@ -1979,16 +2048,30 @@ if (currentScreen === 'boulots-scheduled') {
   />
 </div>
 
-{/* Heure de rendez-vous */}
+{/* Heure de début */}
 <div>
   <label className="block text-sm font-medium text-gray-700 mb-2">
-    🕐 Heure de rendez-vous *
+    🕐 Heure de début *
   </label>
   <input
     type="time"
-    value={newScheduledJob.time}
-    onChange={(e) => setNewScheduledJob({...newScheduledJob, time: e.target.value})}
+    value={newScheduledJob.timeStart}
+    onChange={(e) => setNewScheduledJob({...newScheduledJob, timeStart: e.target.value})}
     className="w-full p-3 border rounded-lg"
+  />
+</div>
+
+{/* Lieu */}
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    📍 Lieu de rendez-vous
+  </label>
+  <input
+    type="text"
+    value={newScheduledJob.location}
+    onChange={(e) => setNewScheduledJob({...newScheduledJob, location: e.target.value})}
+    className="w-full p-3 border rounded-lg"
+    placeholder="Ex: Salle principale, Local technique, Extérieur..."
   />
 </div>
 
@@ -2057,7 +2140,10 @@ if (currentScreen === 'boulots-scheduled') {
 <div className="bg-blue-50 p-3 rounded-lg">
   <h4 className="font-medium text-blue-800 mb-1">💡 Estimation :</h4>
   <div className="text-sm text-blue-700 space-y-1">
-    <p>📅 {formatDate(newScheduledJob.date)} à {newScheduledJob.time}</p>
+    <p>📅 {formatDate(newScheduledJob.date)} de {newScheduledJob.timeStart} à {calculateEndTime(newScheduledJob.timeStart, newScheduledJob.estimatedHours)}</p>
+{newScheduledJob.location && (
+  <p>📍 Lieu: {newScheduledJob.location}</p>
+)}
     <p>⏱️ Durée: {newScheduledJob.estimatedHours}h par personne</p>
     <p>💰 Tarif: {formatCurrency(newScheduledJob.customRate)}/heure</p>
     <p>👥 Bro requis: {newScheduledJob.brosNeeded} personne(s)</p>
