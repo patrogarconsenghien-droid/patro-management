@@ -54,6 +54,7 @@ const [stockMovements, setStockMovements] = useState([]);
   const [newBroName, setNewBroName] = useState('');
   const [showBroDropdown, setShowBroDropdown] = useState(false);
 const [financialTransactions, setFinancialTransactions] = useState([]);
+
 const [newTransaction, setNewTransaction] = useState({
   type: 'income', // 'income' ou 'expense'
   amount: '',
@@ -68,6 +69,8 @@ const [newProduct, setNewProduct] = useState({
   packSize: 1, pricePerPack: '', pricePer11: '', alertThreshold: 5,
   moneyFlow: 'none', amount: '', paymentMethod: ''
 });
+const [editingProduct, setEditingProduct] = useState(null);
+
 const [newJob, setNewJob] = useState({ 
   description: '', date: new Date().toISOString().split('T')[0],
   customRate: 10.00, bros: [], isPaid: false, paymentMethod: ''
@@ -796,6 +799,46 @@ const addProduct = async () => {
       setShowModal(false);
     } catch (error) {
       alert('Erreur lors de l\'ajout du produit');
+    }
+  }
+};
+
+const updateProduct = async () => {
+  const price = parseFloat(newProduct.price);
+  const stock = parseInt(newProduct.stock) || 0;
+  const alertThreshold = parseInt(newProduct.alertThreshold) || 5;
+  
+  if (newProduct.name.trim() && price > 0 && editingProduct) {
+    const updatedProduct = {
+      name: newProduct.name.trim(),
+      price: price,
+      category: newProduct.category,
+      stock: stock,
+      stockType: newProduct.stockType,
+      packSize: parseInt(newProduct.packSize) || 1,
+      alertThreshold: alertThreshold
+    };
+
+    if (newProduct.stockType === 'mixed') {
+      updatedProduct.pricePerPack = parseFloat(newProduct.pricePerPack) || 0;
+      updatedProduct.pricePer11 = parseFloat(newProduct.pricePer11) || 0;
+    }
+    
+    try {
+      await updateInFirebase('products', editingProduct.id, updatedProduct);
+      
+      // Réinitialiser le formulaire
+      setNewProduct({ 
+        name: '', price: '', category: 'Boissons', stock: '', stockType: 'unit',
+        packSize: 1, pricePerPack: '', pricePer11: '', alertThreshold: 5,
+        moneyFlow: 'none', amount: '', paymentMethod: ''
+      });
+      setEditingProduct(null);
+      setShowModal(false);
+      alert('Produit modifié avec succès !');
+    } catch (error) {
+      console.error('Erreur modification produit:', error);
+      alert('Erreur lors de la modification du produit');
     }
   }
 };
@@ -4257,12 +4300,41 @@ jobs.forEach(job => {
                               )}
                             </div>
                           </div>
-                          <button
-                            onClick={() => deleteProduct(product.id)}
-                            className="p-2 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          <div className="flex items-center space-x-2">
+  <button
+    onClick={() => {
+      // Pré-remplir le formulaire avec les données existantes
+      setNewProduct({
+        name: product.name,
+        price: product.price.toString(),
+        category: product.category,
+        stock: product.stock.toString(),
+        stockType: product.stockType || 'unit',
+        packSize: product.packSize || 1,
+        pricePerPack: product.pricePerPack?.toString() || '',
+        pricePer11: product.pricePer11?.toString() || '',
+        alertThreshold: product.alertThreshold || 5,
+        moneyFlow: 'none',
+        amount: '',
+        paymentMethod: ''
+      });
+      setEditingProduct(product);
+      setModalType('edit-product');
+      setShowModal(true);
+    }}
+    className="p-2 text-blue-500 hover:bg-blue-50 rounded active:scale-95 transition-transform"
+    title="Modifier ce produit"
+  >
+    <Settings size={16} />
+  </button>
+  <button
+    onClick={() => deleteProduct(product.id)}
+    className="p-2 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
+    title="Supprimer ce produit"
+  >
+    <Trash2 size={16} />
+  </button>
+</div>
                         </div>
                       </div>
                     );
@@ -4274,17 +4346,18 @@ jobs.forEach(job => {
         </div>
 
         <Modal
-          isOpen={showModal && modalType === 'add-product'}
-          onClose={() => { 
-            setShowModal(false); 
-            setNewProduct({ 
-              name: '', price: '', category: 'Boissons', stock: '', stockType: 'unit',
-              packSize: 1, pricePerPack: '', pricePer11: '', alertThreshold: 5,
-              moneyFlow: 'none', amount: '', paymentMethod: ''
-            }); 
-          }}
-          title="Ajouter un produit"
-        >
+  isOpen={showModal && (modalType === 'add-product' || modalType === 'edit-product')}
+  onClose={() => { 
+    setShowModal(false); 
+    setEditingProduct(null);
+    setNewProduct({ 
+      name: '', price: '', category: 'Boissons', stock: '', stockType: 'unit',
+      packSize: 1, pricePerPack: '', pricePer11: '', alertThreshold: 5,
+      moneyFlow: 'none', amount: '', paymentMethod: ''
+    }); 
+  }}
+  title={editingProduct ? "Modifier le produit" : "Ajouter un produit"}
+>
           <div className="space-y-4">
             {/* Nom du produit */}
             <div>
@@ -4430,7 +4503,7 @@ jobs.forEach(job => {
             </div>
 
             {/* Impact financier pour le stock initial */}
-            {parseInt(newProduct.stock) > 0 && (
+            {!editingProduct && parseInt(newProduct.stock) > 0 && (
               <>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -4534,17 +4607,17 @@ jobs.forEach(job => {
             
             {/* Bouton validation */}
             <button
-              onClick={addProduct}
-              disabled={
-                !newProduct.name.trim() || 
-                !newProduct.price || 
-                parseFloat(newProduct.price) <= 0 ||
-                (parseInt(newProduct.stock) > 0 && newProduct.moneyFlow === 'out' && (!newProduct.amount || !newProduct.paymentMethod))
-              }
-              className="w-full p-3 bg-purple-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
-            >
-              ✅ Ajouter le produit
-            </button>
+  onClick={editingProduct ? updateProduct : addProduct}
+  disabled={
+    !newProduct.name.trim() || 
+    !newProduct.price || 
+    parseFloat(newProduct.price) <= 0 ||
+    (!editingProduct && parseInt(newProduct.stock) > 0 && newProduct.moneyFlow === 'out' && (!newProduct.amount || !newProduct.paymentMethod))
+  }
+  className="w-full p-3 bg-purple-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
+>
+  {editingProduct ? "💾 Sauvegarder les modifications" : "✅ Ajouter le produit"}
+</button>
           </div>
         </Modal>
       </div>
