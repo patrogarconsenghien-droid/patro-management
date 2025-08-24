@@ -903,28 +903,28 @@ const completeScheduledJob = async (jobId, isPartial = false) => {
   if (!confirm(confirmMessage)) return;
 
   // Créer un boulot terminé pour chaque Bro inscrit
-  const completedJobs = job.registeredBros.map(registration => {
-    const bro = bros.find(b => b.id === registration.broId);
-    const defaultHours = 1; // Heures par défaut, peut être modifié plus tard
-    
-    return {
-      broId: registration.broId,
-      broName: bro ? bro.name : 'Inconnu',
-      description: isPartial 
-        ? `${job.description} (PARTIEL ${job.registeredBros.length}/${job.brosNeeded})`
-        : job.description,
-      hours: defaultHours,
-      date: job.date,
-      hourlyRate: job.customRate,
-      total: defaultHours * job.customRate,
-      isPaid: false,
-      paymentMethod: null,
-      originalScheduledJobId: jobId,
-      isPartialCompletion: isPartial,
-      originalBrosNeeded: job.brosNeeded,
-      actualBrosUsed: job.registeredBros.length
-    };
-  });
+const completedJobs = job.registeredBros.map(registration => {
+  const bro = bros.find(b => b.id === registration.broId);
+  const actualHours = job.estimatedHours || 1; // Utiliser la durée estimée
+  
+  return {
+    broId: registration.broId,
+    broName: bro ? bro.name : 'Inconnu',
+    description: isPartial 
+      ? `${job.description} (PARTIEL ${job.registeredBros.length}/${job.brosNeeded})`
+      : job.description,
+    hours: actualHours,
+    date: job.date,
+    hourlyRate: job.customRate,
+    total: actualHours * job.customRate,
+    isPaid: false,
+    paymentMethod: null,
+    originalScheduledJobId: jobId,
+    isPartialCompletion: isPartial,
+    originalBrosNeeded: job.brosNeeded,
+    actualBrosUsed: job.registeredBros.length
+  };
+});
 
   try {
     // Sauvegarder tous les boulots terminés
@@ -934,14 +934,15 @@ const completeScheduledJob = async (jobId, isPartial = false) => {
 
     // Mettre à jour les heures totales des Bro
     const broUpdates = job.registeredBros.map(registration => {
-      const bro = bros.find(b => b.id === registration.broId);
-      if (bro) {
-        return updateInFirebase('bros', bro.id, { 
-          totalHours: bro.totalHours + 1 // 1 heure par défaut
-        });
-      }
-      return Promise.resolve();
+  const bro = bros.find(b => b.id === registration.broId);
+  if (bro) {
+    const actualHours = job.estimatedHours || 1; // Même calcul
+    return updateInFirebase('bros', bro.id, { 
+      totalHours: bro.totalHours + actualHours
     });
+  }
+  return Promise.resolve();
+});
     await Promise.all(broUpdates);
 
     // Supprimer le boulot programmé
