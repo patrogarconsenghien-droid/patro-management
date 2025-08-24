@@ -801,8 +801,24 @@ const registerBroToJob = async (jobId, broId) => {
   const job = scheduledJobs.find(j => j.id === jobId);
   if (!job || job.registeredBros.length >= job.brosNeeded) return;
 
-  // Vérifier que le Bro n'est pas déjà inscrit
+  // Vérifier que le Bro n'est pas déjà inscrit sur ce boulot
   if (job.registeredBros.some(reg => reg.broId === broId)) return;
+
+  // NOUVELLE VÉRIFICATION : Conflit d'horaires
+  const conflictingJob = scheduledJobs.find(otherJob => 
+    otherJob.id !== jobId && 
+    otherJob.date === job.date && 
+    otherJob.registeredBros.some(reg => reg.broId === broId)
+  );
+
+  if (conflictingJob) {
+    const bro = bros.find(b => b.id === broId);
+    const confirmMessage = `⚠️ CONFLIT D'HORAIRE !\n\n${bro?.name || 'Ce Bro'} est déjà inscrit sur :\n"${conflictingJob.description}"\nle même jour (${formatDate(job.date)}).\n\nVoulez-vous quand même l'inscrire sur ce nouveau boulot ?`;
+    
+    if (!confirm(confirmMessage)) {
+      return; // Annuler l'inscription
+    }
+  }
 
   const newRegistration = {
     broId: broId,
@@ -820,21 +836,6 @@ const registerBroToJob = async (jobId, broId) => {
     setSelectedJob(null);
   } catch (error) {
     alert('Erreur lors de l\'inscription');
-  }
-};
-
-const removeBroFromScheduled = async (jobId, broId) => {
-  const job = scheduledJobs.find(j => j.id === jobId);
-  if (!job) return;
-
-  const updatedRegisteredBros = job.registeredBros.filter(reg => reg.broId !== broId);
-
-  try {
-    await updateInFirebase('scheduledJobs', jobId, { 
-      registeredBros: updatedRegisteredBros 
-    });
-  } catch (error) {
-    alert('Erreur lors de la désinscription');
   }
 };
 
@@ -1783,55 +1784,107 @@ if (currentScreen === 'boulots-scheduled') {
             </div>
           ) : (
             <div className="space-y-3">
-              {scheduledJobs.map(job => {
-                const hasEnoughBros = job.registeredBros.length >= job.brosNeeded;
-                const hasAtLeastOneBro = job.registeredBros.length > 0;
-                
-                // Code couleur plus nuancé
-                let statusColor, statusText, statusTextColor;
-                
-                if (hasEnoughBros) {
-                  statusColor = 'border-green-200 bg-green-50';
-                  statusText = 'Prêt';
-                  statusTextColor = 'text-green-700';
-                } else if (hasAtLeastOneBro) {
-                  statusColor = 'border-orange-200 bg-orange-50';
-                  statusText = `Partiel (${job.registeredBros.length}/${job.brosNeeded})`;
-                  statusTextColor = 'text-orange-700';
-                } else {
-                  statusColor = 'border-red-200 bg-red-50';
-                  statusText = `${job.brosNeeded} Bro manquant(s)`;
-                  statusTextColor = 'text-red-700';
-                }
-                
-                return (
-                  <div key={job.id} className={`bg-white border rounded-lg shadow-sm ${statusColor} p-4`}>
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <h3 className="font-medium">{job.description}</h3>
-                        <p className="text-sm text-gray-600">{formatDate(job.date)}</p>
-                        <p className="text-xs text-gray-500">Tarif: {formatCurrency(job.customRate)}/h</p>
+              {(() => {
+                // Grouper les boulots par date
+                const jobsByDate = scheduledJobs
+                  .sort((a, b) => new Date(a.date) - new Date(b.date))
+                  .reduce((groups, job) => {
+                    const dateKey = job.date;
+                    if (!groups[dateKey]) {
+                      groups[dateKey] = [];
+                    }
+                    groups[dateKey].push(job);
+                    return groups;
+                  }, {});
+
+                return Object.entries(jobsByDate).map(([date, jobs]) => (
+                  <div key={date}>
+                    {/* Séparateur de date */}
+                    <div className="flex items-center my-4">
+                      <div className="flex-1 border-t border-gray-300"></div>
+                      <div className="px-4 py-2 bg-gray-100 rounded-full">
+                        <span className="text-sm font-semibold text-gray-700">
+                          📅 {formatDate(date)}
+                          {(() => {
+                            const today = new Date().toISOString().split('T')[0];
+                            const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+                            
+                            if (date === today) return ' (Aujourd\'hui)';
+                            if (date === tomorrow) return ' (Demain)';
+                            
+                            const daysDiff = Math.ceil((new Date(date) - new Date()) / (1000 * 60 * 60 * 24));
+                            if (daysDiff < 0) return ` (Il y a ${Math.abs(daysDiff)} jour${Math.abs(daysDiff) > 1 ? 's' : ''})`;
+                            if (daysDiff <= 7) return ` (Dans ${daysDiff} jour${daysDiff > 1 ? 's' : ''})`;
+                            
+                            return '';
+                          })()}
+                        </span>
                       </div>
-                      <div className="text-right">
-                        <div className={`px-2 py-1 rounded-full text-xs font-medium ${statusTextColor} ${hasEnoughBros ? 'bg-green-100' : 'bg-red-100'}`}>
-                          {statusText}
-                        </div>
-                      </div>
+                      <div className="flex-1 border-t border-gray-300"></div>
                     </div>
                     
-                    {/* Affichage des Bro inscrits */}
-                    <div className="mt-3">
-                      <p className="text-sm font-medium text-gray-700 mb-2">
-                        Bro inscrits ({job.registeredBros.length}/{job.brosNeeded}) :
-                      </p>
-                      
-                      {job.registeredBros.length > 0 ? (
-                        <div className="flex flex-wrap gap-2 mb-3">
+                    {/* Boulots de cette date */}
+                    <div className="space-y-3">
+                      {jobs.map(job => {
+                        const hasEnoughBros = job.registeredBros.length >= job.brosNeeded;
+                        const hasAtLeastOneBro = job.registeredBros.length > 0;
+                        
+                        // Code couleur plus nuancé
+                        let statusColor, statusText, statusTextColor;
+                        
+                        if (hasEnoughBros) {
+                          statusColor = 'border-green-200 bg-green-50';
+                          statusText = 'Prêt';
+                          statusTextColor = 'text-green-700';
+                        } else if (hasAtLeastOneBro) {
+                          statusColor = 'border-orange-200 bg-orange-50';
+                          statusText = `Partiel (${job.registeredBros.length}/${job.brosNeeded})`;
+                          statusTextColor = 'text-orange-700';
+                        } else {
+                          statusColor = 'border-red-200 bg-red-50';
+                          statusText = `${job.brosNeeded} Bro manquant(s)`;
+                          statusTextColor = 'text-red-700';
+                        }
+                        
+                        return (
+                          <div key={job.id} className={`bg-white border rounded-lg shadow-sm ${statusColor} p-4`}>
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex-1">
+                                <h3 className="font-medium">{job.description}</h3>
+                                <p className="text-xs text-gray-500">Tarif: {formatCurrency(job.customRate)}/h</p>
+                              </div>
+                              <div className="text-right">
+                                <div className={`px-2 py-1 rounded-full text-xs font-medium ${statusTextColor} ${hasEnoughBros ? 'bg-green-100' : hasAtLeastOneBro ? 'bg-orange-100' : 'bg-red-100'}`}>
+                                  {statusText}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {/* Affichage des Bro inscrits */}
+                            <div className="mt-3">
+                              <p className="text-sm font-medium text-gray-700 mb-2">
+                                Bro inscrits ({job.registeredBros.length}/{job.brosNeeded}) :
+                              </p>
+                              
+                              {job.registeredBros.length > 0 ? (
+                                <div className="flex flex-wrap gap-2 mb-3">
                           {job.registeredBros.map((registration, index) => {
                             const bro = bros.find(b => b.id === registration.broId);
+                            
+                            // Vérifier si ce Bro a d'autres boulots le même jour
+                            const hasOtherJobsSameDay = scheduledJobs.some(otherJob => 
+                              otherJob.id !== job.id && 
+                              otherJob.date === job.date && 
+                              otherJob.registeredBros.some(reg => reg.broId === registration.broId)
+                            );
+                            
                             return (
-                              <div key={index} className="flex items-center bg-blue-100 px-2 py-1 rounded-full text-xs">
-                                <span className="mr-1">{bro?.name || 'Inconnu'}</span>
+                              <div key={index} className={`flex items-center px-2 py-1 rounded-full text-xs ${
+                                hasOtherJobsSameDay ? 'bg-orange-100 border border-orange-300' : 'bg-blue-100'
+                              }`}>
+                                <span className="mr-1">
+                                  {hasOtherJobsSameDay && '⚠️ '}{bro?.name || 'Inconnu'}
+                                </span>
                                 <button
                                   onClick={() => removeBroFromScheduled(job.id, registration.broId)}
                                   className="text-red-500 hover:text-red-700"
@@ -1842,48 +1895,50 @@ if (currentScreen === 'boulots-scheduled') {
                             );
                           })}
                         </div>
-                      ) : (
-                        <p className="text-xs text-gray-500 mb-3">Aucun Bro inscrit</p>
-                      )}
-                      
-                   
-                      
-{/* Bouton pour s'inscrire + validation partielle */}
-                      {job.registeredBros.length < job.brosNeeded && (
-                        <div className="flex items-center space-x-2">
-                          <button
-                            onClick={() => { setSelectedJob(job); setModalType('register-bro'); setShowModal(true); }}
-                            className="flex-1 p-2 bg-blue-500 text-white rounded text-sm active:scale-95 transition-transform"
-                          >
-                            Inscrire un Bro
-                          </button>
-                          
-                          {/* Petit bouton rond vert pour validation partielle */}
-                          {job.registeredBros.length > 0 && (
-                            <button
-                              onClick={() => completeScheduledJob(job.id, true)}
-                              className="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center active:scale-95 transition-transform"
-                              title={`Valider avec ${job.registeredBros.length} Bro sur ${job.brosNeeded}`}
-                            >
-                              <span className="text-sm font-bold">✓</span>
-                            </button>
-                          )}
-                        </div>
-                      )}
-                      
-                      {/* Bouton normal si quota atteint */}
-                      {hasEnoughBros && (
-                        <button
-                          onClick={() => completeScheduledJob(job.id, false)}
-                          className="w-full p-2 bg-green-500 text-white rounded text-sm active:scale-95 transition-transform"
-                        >
-                          ✅ Marquer comme terminé
-                        </button>
-                      )}
+                              ) : (
+                                <p className="text-xs text-gray-500 mb-3">Aucun Bro inscrit</p>
+                              )}
+                              
+                              {/* Bouton pour s'inscrire + validation partielle */}
+                              {job.registeredBros.length < job.brosNeeded && (
+                                <div className="flex items-center space-x-2">
+                                  <button
+                                    onClick={() => { setSelectedJob(job); setModalType('register-bro'); setShowModal(true); }}
+                                    className="flex-1 p-2 bg-blue-500 text-white rounded text-sm active:scale-95 transition-transform"
+                                  >
+                                    Inscrire un Bro
+                                  </button>
+                                  
+                                  {/* Petit bouton rond vert pour validation partielle */}
+                                  {job.registeredBros.length > 0 && (
+                                    <button
+                                      onClick={() => completeScheduledJob(job.id, true)}
+                                      className="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center active:scale-95 transition-transform"
+                                      title={`Valider avec ${job.registeredBros.length} Bro sur ${job.brosNeeded}`}
+                                    >
+                                      <span className="text-sm font-bold">✓</span>
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                              
+                              {/* Bouton normal si quota atteint */}
+                              {hasEnoughBros && (
+                                <button
+                                  onClick={() => completeScheduledJob(job.id, false)}
+                                  className="w-full p-2 bg-green-500 text-white rounded text-sm active:scale-95 transition-transform"
+                                >
+                                  ✅ Marquer comme terminé
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                );
-              })}
+                ));
+              })()}
             </div>
           )}
         </div>
@@ -2022,7 +2077,7 @@ if (currentScreen === 'boulots-scheduled') {
           </div>
         </Modal>
 
-        {/* Modal pour inscrire un Bro */}
+               {/* Modal pour inscrire un Bro */}
         <Modal
           isOpen={showModal && modalType === 'register-bro'}
           onClose={() => { setShowModal(false); setSelectedJob(null); }}
@@ -2033,24 +2088,58 @@ if (currentScreen === 'boulots-scheduled') {
               Boulot: <strong>{selectedJob?.description}</strong>
             </p>
             <p className="text-sm text-gray-600">
+              Date: <strong>{selectedJob ? formatDate(selectedJob.date) : ''}</strong>
+            </p>
+            <p className="text-sm text-gray-600">
               Places disponibles: <strong>{selectedJob ? selectedJob.brosNeeded - selectedJob.registeredBros.length : 0}</strong>
             </p>
             
             <div className="space-y-2">
               {bros.filter(bro => 
                 !selectedJob?.registeredBros.some(reg => reg.broId === bro.id)
-              ).map(bro => (
-                <button
-                  key={bro.id}
-                  onClick={() => registerBroToJob(selectedJob?.id, bro.id)}
-                  className="w-full text-left p-3 border rounded-lg hover:bg-gray-50 active:scale-95 transition-transform"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{bro.name}</span>
-                    <span className="text-sm text-gray-500">{bro.totalHours}h totales</span>
+              ).map(bro => {
+                // Vérifier si le Bro a un conflit d'horaire
+                const hasConflict = scheduledJobs.some(otherJob => 
+                  otherJob.id !== selectedJob?.id && 
+                  otherJob.date === selectedJob?.date && 
+                  otherJob.registeredBros.some(reg => reg.broId === bro.id)
+                );
+                
+                const conflictingJob = hasConflict ? scheduledJobs.find(otherJob => 
+                  otherJob.id !== selectedJob?.id && 
+                  otherJob.date === selectedJob?.date && 
+                  otherJob.registeredBros.some(reg => reg.broId === bro.id)
+                ) : null;
+
+                return (
+                  <div key={bro.id} className={`border rounded-lg p-3 ${hasConflict ? 'border-orange-300 bg-orange-50' : 'border-gray-200 bg-white'}`}>
+                    <button
+                      onClick={() => registerBroToJob(selectedJob?.id, bro.id)}
+                      className={`w-full text-left active:scale-95 transition-transform ${hasConflict ? 'opacity-75' : ''}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-medium">{bro.name}</span>
+                            {hasConflict && (
+                              <span className="px-2 py-1 bg-orange-200 text-orange-800 text-xs rounded-full">
+                                ⚠️ Conflit
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-sm text-gray-500">{bro.totalHours}h totales</span>
+                          {hasConflict && conflictingJob && (
+                            <div className="text-xs text-orange-600 mt-1">
+                              Déjà inscrit sur: "{conflictingJob.description}"
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-gray-400">→</div>
+                      </div>
+                    </button>
                   </div>
-                </button>
-              ))}
+                );
+              })}
             </div>
             
             {bros.filter(bro => 
@@ -2058,6 +2147,15 @@ if (currentScreen === 'boulots-scheduled') {
             ).length === 0 && (
               <p className="text-center text-gray-500">Tous les Bro sont déjà inscrits</p>
             )}
+            
+            {/* Légende */}
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <h4 className="font-medium text-gray-800 mb-2">💡 Légende :</h4>
+              <div className="text-sm text-gray-600 space-y-1">
+                <p>• <span className="font-medium">Normal</span> : Bro disponible</p>
+                <p>• <span className="font-medium text-orange-600">⚠️ Conflit</span> : Déjà inscrit ce jour-là (clic possible avec confirmation)</p>
+              </div>
+            </div>
           </div>
         </Modal>
       </div>
