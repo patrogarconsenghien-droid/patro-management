@@ -44,6 +44,7 @@ const [stockMovements, setStockMovements] = useState([]);
   const [modalType, setModalType] = useState('');
   const [selectedMember, setSelectedMember] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
+  const [editingScheduledJob, setEditingScheduledJob] = useState(null);
   const [cart, setCart] = useState({});
   const [cartTotal, setCartTotal] = useState(0);
   const [repaymentAmount, setRepaymentAmount] = useState('');
@@ -834,6 +835,44 @@ const addScheduledJob = async () => {
       setShowModal(false);
     } catch (error) {
       alert('Erreur lors de la programmation du boulot');
+    }
+  }
+};
+
+const updateScheduledJob = async () => {
+  if (newScheduledJob.description.trim() && newScheduledJob.brosNeeded > 0 && editingScheduledJob) {
+    const updatedJob = {
+      description: newScheduledJob.description.trim(),
+      date: newScheduledJob.date,
+      timeStart: newScheduledJob.timeStart,
+      estimatedHours: newScheduledJob.estimatedHours,
+      location: newScheduledJob.location.trim(),
+      customRate: newScheduledJob.customRate,
+      brosNeeded: newScheduledJob.brosNeeded,
+      // Garder les Bro déjà inscrits
+      registeredBros: editingScheduledJob.registeredBros,
+      status: editingScheduledJob.status
+    };
+    
+    try {
+      await updateInFirebase('scheduledJobs', editingScheduledJob.id, updatedJob);
+      setNewScheduledJob({
+        description: '', 
+        date: new Date().toISOString().split('T')[0],
+        timeStart: '09:00',
+        estimatedHours: 1,
+        location: '',
+        customRate: hourlyRate, 
+        brosNeeded: 1, 
+        registeredBros: [], 
+        status: 'planned'
+      });
+      setEditingScheduledJob(null);
+      setShowModal(false);
+      alert('Boulot modifié avec succès !');
+    } catch (error) {
+      console.error('Erreur modification boulot:', error);
+      alert('Erreur lors de la modification du boulot');
     }
   }
 };
@@ -1915,17 +1954,42 @@ if (currentScreen === 'boulots-scheduled') {
     <div className={`px-2 py-1 rounded-full text-xs font-medium ${statusTextColor} ${hasEnoughBros ? 'bg-green-100' : hasAtLeastOneBro ? 'bg-orange-100' : 'bg-red-100'}`}>
       {statusText}
     </div>
-    <button
-      onClick={() => {
-        if (confirm(`Supprimer le boulot "${job.description}" ?`)) {
-          deleteScheduledJob(job.id);
-        }
-      }}
-      className="p-1 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
-      title="Supprimer ce boulot"
-    >
-      <Trash2 size={14} />
-    </button>
+   <div className="flex items-center space-x-1">
+  <button
+    onClick={() => {
+      // Pré-remplir le formulaire avec les données existantes
+      setNewScheduledJob({
+        description: job.description,
+        date: job.date,
+        timeStart: job.timeStart || '09:00',
+        estimatedHours: job.estimatedHours || 1,
+        location: job.location || '',
+        customRate: job.customRate,
+        brosNeeded: job.brosNeeded,
+        registeredBros: job.registeredBros,
+        status: job.status
+      });
+      setEditingScheduledJob(job);
+      setModalType('edit-scheduled-job');
+      setShowModal(true);
+    }}
+    className="p-1 text-blue-500 hover:bg-blue-50 rounded active:scale-95 transition-transform"
+    title="Modifier ce boulot"
+  >
+    <Settings size={14} />
+  </button>
+  <button
+    onClick={() => {
+      if (confirm(`Supprimer le boulot "${job.description}" ?`)) {
+        deleteScheduledJob(job.id);
+      }
+    }}
+    className="p-1 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
+    title="Supprimer ce boulot"
+  >
+    <Trash2 size={14} />
+  </button>
+</div>
   </div>
 </div>
                             
@@ -2014,14 +2078,24 @@ if (currentScreen === 'boulots-scheduled') {
 
 {/* Modal pour programmer un boulot */}
         <Modal
-          isOpen={showModal && modalType === 'schedule-job'}
-          onClose={() => { setShowModal(false); setNewScheduledJob({
-  description: '', date: new Date().toISOString().split('T')[0],
-  timeStart: '09:00', estimatedHours: 1, location: '', customRate: hourlyRate, brosNeeded: 1, 
-  registeredBros: [], status: 'planned'
-}); }}
-          title="Programmer un boulot"
-        >
+  isOpen={showModal && (modalType === 'schedule-job' || modalType === 'edit-scheduled-job')}
+  onClose={() => { 
+    setShowModal(false); 
+    setEditingScheduledJob(null);
+    setNewScheduledJob({
+      description: '', 
+      date: new Date().toISOString().split('T')[0],
+      timeStart: '09:00',
+      estimatedHours: 1,
+      location: '',
+      customRate: hourlyRate, 
+      brosNeeded: 1, 
+      registeredBros: [], 
+      status: 'planned'
+    }); 
+  }}
+  title={editingScheduledJob ? "Modifier le boulot" : "Programmer un boulot"}
+>
           <div className="space-y-4">
             {/* Description */}
             <div>
@@ -2155,12 +2229,12 @@ if (currentScreen === 'boulots-scheduled') {
 </div>
             
             <button
-              onClick={addScheduledJob}
-              disabled={!newScheduledJob.description.trim() || newScheduledJob.brosNeeded < 1 || newScheduledJob.customRate <= 0}
-              className="w-full p-3 bg-green-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
-            >
-              ✅ Programmer le boulot
-            </button>
+  onClick={editingScheduledJob ? updateScheduledJob : addScheduledJob}
+  disabled={!newScheduledJob.description.trim() || newScheduledJob.brosNeeded < 1 || newScheduledJob.customRate <= 0}
+  className="w-full p-3 bg-green-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
+>
+  {editingScheduledJob ? "💾 Sauvegarder les modifications" : "✅ Programmer le boulot"}
+</button>
           </div>
         </Modal>
 
@@ -3725,14 +3799,14 @@ jobs.forEach(job => {
               <div className="text-center">
                 <div className="bg-green-100 p-3 rounded-lg">
                   <p className="text-2xl font-bold text-green-600">{formatCurrency(totalRevenue)}</p>
-                  <p className="text-sm text-green-700">Revenus Total</p>
+                  <p className="text-sm text-green-700">Revenus Totaux</p>
                 </div>
               </div>
               
               <div className="text-center">
                 <div className="bg-red-100 p-3 rounded-lg">
                   <p className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
-                  <p className="text-sm text-red-700">Dépenses Total</p>
+                  <p className="text-sm text-red-700">Dépenses Totales</p>
                 </div>
               </div>
               
