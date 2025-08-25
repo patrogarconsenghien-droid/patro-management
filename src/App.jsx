@@ -934,6 +934,8 @@ const registerBroToJob = async (jobId, broId) => {
     otherJob.registeredBros.some(reg => reg.broId === broId)
   );
 
+  
+
   if (conflictingJob) {
     const bro = bros.find(b => b.id === broId);
     const confirmMessage = `⚠️ CONFLIT D'HORAIRE !\n\n${bro?.name || 'Ce Bro'} est déjà inscrit sur :\n"${conflictingJob.description}"\nle même jour (${formatDate(job.date)}).\n\nVoulez-vous quand même l'inscrire sur ce nouveau boulot ?`;
@@ -959,6 +961,30 @@ const registerBroToJob = async (jobId, broId) => {
     setSelectedJob(null);
   } catch (error) {
     alert('Erreur lors de l\'inscription');
+  }
+};
+
+const removeBroFromScheduled = async (jobId, broId) => {
+  const job = scheduledJobs.find(j => j.id === jobId);
+  if (!job) return;
+
+  
+
+  // Retirer le Bro de la liste des inscrits
+  const updatedRegisteredBros = job.registeredBros.filter(
+    registration => registration.broId !== broId
+  );
+
+  try {
+    // Mettre à jour dans Firebase
+    await updateInFirebase('scheduledJobs', jobId, { 
+      registeredBros: updatedRegisteredBros 
+    });
+    
+    console.log('Bro retiré avec succès du boulot programmé');
+  } catch (error) {
+    console.error('Erreur lors du retrait du Bro:', error);
+    alert('Erreur lors du retrait du Bro');
   }
 };
 
