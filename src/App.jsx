@@ -3081,12 +3081,7 @@ if (currentScreen === 'boulots-history') {
           } else if (order.paymentMethod === 'account') {
             accountTotal += amount;
           }
-        } else if (order.type === 'order') {
-          // Les ventes rapportent de l'argent
-          const amount = order.amount || 0;
-          // Note: On pourrait déterminer le mode de paiement selon les préférences
-          cashTotal += amount; // Par défaut, les ventes sont en cash
-        }
+        } 
       });
       
       // Ajouter les paiements de boulots
