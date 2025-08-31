@@ -1783,7 +1783,9 @@ if (currentScreen === 'bar-order') {
             </div>
           ) : (
             <div className="space-y-3">
-              {orders.map(order => (
+              {orders
+  .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+  .map(order => (
                 <div key={order.id} className="bg-white p-4 rounded-lg shadow-sm">
                   <div className="flex items-start justify-between mb-2">
                     <div>
@@ -1975,7 +1977,9 @@ if (currentScreen === 'boulots-scheduled') {
                     
                     {/* Boulots de cette date */}
                     <div className="space-y-3">
-                      {jobs.map(job => {
+                      {jobs
+    .sort((a, b) => new Date(b.date) - new Date(a.date))
+    .map(job =>  {
                         const hasEnoughBros = job.registeredBros.length >= job.brosNeeded;
                         const hasAtLeastOneBro = job.registeredBros.length > 0;
                         
