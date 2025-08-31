@@ -1978,8 +1978,8 @@ if (currentScreen === 'boulots-scheduled') {
                     {/* Boulots de cette date */}
                     <div className="space-y-3">
                       {jobs
-    .sort((a, b) => new Date(b.date) - new Date(a.date))
-    .map(job =>  {
+                    .sort((a, b) => new Date(b.date) - new Date(a.date))
+                    .map(job =>  {
                         const hasEnoughBros = job.registeredBros.length >= job.brosNeeded;
                         const hasAtLeastOneBro = job.registeredBros.length > 0;
                         
@@ -2743,7 +2743,9 @@ if (currentScreen === 'boulots-history') {
             </div>
           ) : (
             <div className="space-y-3">
-              {jobs.map(job => (
+              {jobs
+  .sort((a, b) => new Date(b.date || b.timestamp || b.createdAt) - new Date(a.date || a.timestamp || a.createdAt))
+  .map(job => (
                 <div key={job.id} className="bg-white p-4 rounded-lg shadow-sm">
                   <div className="flex items-start justify-between mb-2">
                     <div className="flex-1">
@@ -5029,17 +5031,29 @@ jobs.forEach(job => {
   }
 
   if (currentScreen === 'settings-history') {
-   const allHistory = [
+const allHistory = [
   ...orders.map(o => ({ ...o, type: 'order-item', category: 'Commandes' })),
   ...jobs.map(j => ({ ...j, type: 'job-item', category: 'Boulots' })),
   ...financialTransactions.map(f => ({ 
     ...f, 
     type: 'financial-item', 
     category: f.type === 'income' ? 'Rentrées' : 'Frais',
-    memberName: f.description, // Pour réutiliser l'affichage existant
+    memberName: f.description,
     amount: f.amount
   }))
-].sort((a, b) => new Date(b.timestamp || b.createdAt) - new Date(a.timestamp || a.createdAt));
+].sort((a, b) => {
+  // Obtenir la date de chaque élément selon son type
+  const getDate = (item) => {
+    if (item.type === 'job-item') return item.date || item.createdAt || item.timestamp;
+    if (item.type === 'financial-item') return item.timestamp || item.createdAt;
+    return item.timestamp || item.createdAt; // orders
+  };
+  
+  const dateA = new Date(getDate(a));
+  const dateB = new Date(getDate(b));
+  
+  return dateB - dateA; // Plus récent en premier
+});
     return (
       <div className="min-h-screen bg-gray-50">
         <Header title="Historique complet" onBack={() => navigateTo('settings')} />
