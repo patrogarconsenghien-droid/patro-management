@@ -1,6 +1,6 @@
 // public/firebase-messaging-sw.js
-import { initializeApp } from 'firebase/app';
-import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw';
+importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.0.0/firebase-messaging-compat.js');
 
 const firebaseConfig = {
   apiKey: "AIzaSyBPLArT81P6fAyXFuvAZrEUM1KG-wYcRT0",
@@ -11,11 +11,12 @@ const firebaseConfig = {
   appId: "1:371769454761:web:782ae053effc3e4ca539b8"
 };
 
-const app = initializeApp(firebaseConfig);
-const messaging = getMessaging(app);
+firebase.initializeApp(firebaseConfig);
+const messaging = firebase.messaging();
 
-onBackgroundMessage(messaging, (payload) => {
-  console.log('🔔 Notification reçue !', payload);
+// Gérer les messages en arrière-plan
+messaging.onBackgroundMessage((payload) => {
+  console.log('🔔 Notification reçue en arrière-plan:', payload);
 
   const notificationTitle = payload.notification?.title || 'Nouveau boulot !';
   const notificationOptions = {
@@ -28,9 +29,12 @@ onBackgroundMessage(messaging, (payload) => {
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
+// Gérer les clics sur les notifications
 self.addEventListener('notificationclick', (event) => {
+  console.log('🖱️ Clic sur notification:', event);
   event.notification.close();
+  
   event.waitUntil(
-    clients.openWindow('/#boulots-scheduled')
+    clients.openWindow('/') // Ouvrir l'app
   );
 });
