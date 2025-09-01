@@ -13,3 +13,19 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+export let messaging = null;
+export const VAPID_KEY = "BEBfDWRNwW7ZiPMhuViDk21-kKddD0nHHehHA-S3s4MfeK7rjBYFY203rT5S7mOZ6bY9_htIyEeBR6X0UxgTRP4";
+if (typeof window !== 'undefined') {
+  try {
+    import('firebase/messaging').then(({ getMessaging, isSupported }) => {
+      isSupported().then((supported) => {
+        if (supported) {
+          messaging = getMessaging(app);
+          console.log('✅ Firebase Messaging prêt !');
+        }
+      });
+    });
+  } catch (error) {
+    console.log('Messaging non disponible:', error);
+  }
+}

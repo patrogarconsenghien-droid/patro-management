@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { db } from './firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { useNotifications } from './useNotifications';
 
 const Modal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
@@ -32,13 +33,13 @@ const PatroApp = () => {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [loading, setLoading] = useState(false);
   
-const [members, setMembers] = useState([]);
-const [bros, setBros] = useState([]);
-const [products, setProducts] = useState([]);
-const [orders, setOrders] = useState([]);
-const [jobs, setJobs] = useState([]);
-const [scheduledJobs, setScheduledJobs] = useState([]);
-const [stockMovements, setStockMovements] = useState([]);
+  const [members, setMembers] = useState([]);
+  const [bros, setBros] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [jobs, setJobs] = useState([]);
+  const [scheduledJobs, setScheduledJobs] = useState([]);
+  const [stockMovements, setStockMovements] = useState([]);
   const [memberSearch, setMemberSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState('');
@@ -53,7 +54,11 @@ const [stockMovements, setStockMovements] = useState([]);
   const [newMemberName, setNewMemberName] = useState('');
   const [newBroName, setNewBroName] = useState('');
   const [showBroDropdown, setShowBroDropdown] = useState(false);
-const [financialTransactions, setFinancialTransactions] = useState([]);
+  const [financialTransactions, setFinancialTransactions] = useState([]);
+  const { isSupported, permission, requestPermission } = useNotifications();
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
+
+  
 
 const [newTransaction, setNewTransaction] = useState({
   type: 'income', // 'income' ou 'expense'
@@ -130,6 +135,18 @@ const [newGoal, setNewGoal] = useState({
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+
+    useEffect(() => {
+    if (isSupported && permission === 'default') {
+      // Attendre 5 secondes avant de proposer les notifications
+      const timer = setTimeout(() => {
+        setShowNotificationPrompt(true);
+      }, 5000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [isSupported, permission]);
 
   useEffect(() => {
     const total = Object.values(cart).reduce((sum, cartItem) => {
@@ -876,7 +893,12 @@ const addScheduledJob = async () => {
         status: 'planned'
       });
       setShowModal(false);
+      
+      // Message de succès avec info notification
+      alert('🎉 Boulot programmé avec succès !\n📱 Notifications envoyées automatiquement aux Bro !');
+      
     } catch (error) {
+      console.error('Erreur programmation boulot:', error);
       alert('Erreur lors de la programmation du boulot');
     }
   }
