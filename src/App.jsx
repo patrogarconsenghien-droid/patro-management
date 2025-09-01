@@ -7,6 +7,8 @@ import {
 import { db } from './firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { useNotifications } from './useNotifications';
+import { Bell, Check, X } from 'lucide-react';
+
 
 const Modal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
@@ -58,6 +60,16 @@ const PatroApp = () => {
   const { isSupported, permission, requestPermission } = useNotifications();
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
 
+
+
+const activerNotifications = async () => {
+  const result = await requestPermission();
+  if (result === 'granted') {
+    alert('✅ Notifications activées !');
+  } else {
+    alert('❌ Permission refusée');
+  }
+};
   
 
 const [newTransaction, setNewTransaction] = useState({
@@ -3140,7 +3152,33 @@ jobs.forEach(job => {
     };
     
    const { cashTotal, accountTotal, stockValue, grandTotal } = calculateTotals();
-    
+   const { isSupported, permission, requestPermission, token } = useNotifications(); 
+  
+   const handleNotificationToggle = async () => {
+  if (permission === 'granted') {
+    alert('🔔 Les notifications sont déjà activées !\n\nPour les désactiver, allez dans les paramètres de votre navigateur.');
+    return;
+  }
+  
+  if (permission === 'denied') {
+    alert('❌ Les notifications sont bloquées.\n\nPour les réactiver :\n1. Cliquez sur 🔒 dans la barre d\'adresse\n2. Autorisez les notifications\n3. Rechargez la page');
+    return;
+  }
+  
+  // Permission par défaut - demander l'autorisation
+  try {
+    const result = await requestPermission();
+    if (result === 'granted') {
+      alert('✅ Notifications activées avec succès !\n\nVous recevrez maintenant les alertes pour les nouveaux boulots.');
+    }
+  } catch (error) {
+    console.error('Erreur permission:', error);
+    alert('❌ Erreur lors de l\'activation des notifications');
+  }
+};
+
+
+
     return (
       <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-50">
         <Header title="Section Finance" onBack={() => navigateTo('home')} />
@@ -4297,6 +4335,28 @@ jobs.forEach(job => {
               </div>
             </div>
           </button>
+          {/* NOTIFICATIONS */}
+<div className="bg-white rounded-lg shadow-md p-4 mb-4">
+  <h3 className="text-lg font-semibold mb-3 flex items-center">
+    <Bell className="mr-2" size={20} />
+    Notifications
+  </h3>
+  
+  <div className="mb-3">
+    <p className="text-sm text-gray-600">
+      Statut : {permission === 'granted' ? '✅ Activées' : permission === 'denied' ? '❌ Bloquées' : '🔔 À activer'}
+    </p>
+  </div>
+  
+  <button
+    onClick={activerNotifications}
+    className="w-full p-3 bg-blue-500 text-white rounded-lg"
+  >
+    🔔 Activer les notifications
+  </button>
+</div>
+
+
         </div>
       </div>
     );

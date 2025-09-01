@@ -1,7 +1,5 @@
-// useNotifications.js
 import { useState, useEffect } from 'react';
-import { messaging, VAPID_KEY } from './firebase';
-import { getToken, onMessage } from 'firebase/messaging';
+import { VAPID_KEY } from './firebase';
 import { collection, doc, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 
@@ -11,87 +9,69 @@ export const useNotifications = () => {
   const [token, setToken] = useState(null);
 
   useEffect(() => {
-    // Vérifier si les notifications sont supportées
-    if ('Notification' in window && 'serviceWorker' in navigator && messaging) {
+    if ('Notification' in window && 'serviceWorker' in navigator) {
       setIsSupported(true);
       setPermission(Notification.permission);
+      
+      // Importer Firebase Messaging seulement si supporté
+      import('firebase/messaging').then(async ({ getMessaging, getToken, isSupported }) => {
+        const supported = await isSupported();
+        if (supported) {
+          const { initializeApp } = await import('firebase/app');
+          const app = initializeApp({
+            apiKey: "AIzaSyBPLArT81P6fAyXFuvAZrEUM1KG-wYcRT0",
+            authDomain: "patro-management-2024.firebaseapp.com",
+            projectId: "patro-management-2024",
+            storageBucket: "patro-management-2024.firebasestorage.app",
+            messagingSenderId: "371769454761",
+            appId: "1:371769454761:web:782ae053effc3e4ca539b8"
+          });
+          window.messaging = getMessaging(app);
+        }
+      }).catch(err => console.log('Messaging non disponible:', err));
     }
   }, []);
 
-  // Sauvegarder le token
   const saveUserToken = async (token) => {
     try {
       await setDoc(doc(db, 'fcmTokens', token), {
         token: token,
         createdAt: new Date().toISOString(),
-        lastUsed: new Date().toISOString(),
-        userAgent: navigator.userAgent.substring(0, 200) // Limiter la taille
+        userAgent: navigator.userAgent.substring(0, 200)
       });
-      
-      console.log('✅ Token sauvegardé avec succès');
+      console.log('✅ Token sauvé');
     } catch (error) {
-      console.error('❌ Erreur sauvegarde token:', error);
+      console.error('❌ Erreur token:', error);
     }
   };
 
-  // Demander la permission
   const requestPermission = async () => {
-    console.log('🔔 Demande de permission...');
-    
     try {
       const permission = await Notification.requestPermission();
-      console.log('📋 Permission:', permission);
       setPermission(permission);
 
-      if (permission === 'granted') {
-        console.log('✅ Permission accordée, enregistrement du service worker...');
-        
-        // Enregistrer le Service Worker
+      if (permission === 'granted' && window.messaging) {
         const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-        console.log('✅ Service Worker enregistré:', registration);
+        const { getToken } = await import('firebase/messaging');
         
-        // Obtenir le token FCM
-        const token = await getToken(messaging, {
+        const token = await getToken(window.messaging, {
           vapidKey: VAPID_KEY,
           serviceWorkerRegistration: registration
         });
 
         if (token) {
-          console.log('✅ Token FCM obtenu:', token);
           setToken(token);
           await saveUserToken(token);
-          return token;
-        } else {
-          console.log('❌ Pas de token disponible');
+          return 'granted';
         }
-      } else {
-        console.log('❌ Permission refusée');
       }
+      
+      return permission;
     } catch (error) {
-      console.error('❌ Erreur permission notifications:', error);
-      alert('Erreur lors de la configuration des notifications: ' + error.message);
+      console.error('❌ Erreur permission:', error);
+      return 'denied';
     }
   };
-
-  // Écouter les messages quand l'app est ouverte
-  useEffect(() => {
-    if (messaging) {
-      const unsubscribe = onMessage(messaging, (payload) => {
-        console.log('📨 Message reçu (app ouverte):', payload);
-        
-        // Afficher une notification custom dans l'app
-        if (payload.notification) {
-          const title = payload.notification.title || 'Notification';
-          const body = payload.notification.body || '';
-          
-          // Tu peux personnaliser cette partie plus tard
-          alert(`📢 ${title}\n${body}`);
-        }
-      });
-
-      return unsubscribe;
-    }
-  }, []);
 
   return {
     isSupported,
