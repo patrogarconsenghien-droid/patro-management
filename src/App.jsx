@@ -3762,49 +3762,7 @@ const PatroApp = () => {
         }
       });
 
-      const processBankDeposit = async () => {
-        const amount = parseFloat(bankDeposit.amount);
-
-        if (amount > 0 && amount <= cashTotal) {
-          // Créer les 2 transactions : sortie cash + entrée compte
-          const transactions = [
-            {
-              type: 'expense',
-              amount: amount,
-              description: bankDeposit.description || `Dépôt bancaire du ${formatDate(new Date().toISOString())}`,
-              paymentMethod: 'cash',
-              category: 'bank_transfer',
-              timestamp: new Date().toISOString()
-            },
-            {
-              type: 'income',
-              amount: amount,
-              description: bankDeposit.description || `Dépôt bancaire du ${formatDate(new Date().toISOString())}`,
-              paymentMethod: 'account',
-              category: 'bank_transfer',
-              timestamp: new Date().toISOString()
-            }
-          ];
-
-          try {
-            // Sauvegarder les 2 transactions
-            await Promise.all(transactions.map(transaction =>
-              saveToFirebase('financialTransactions', transaction)
-            ));
-
-            // Reset du formulaire
-            setBankDeposit({ amount: '', description: '' });
-            setShowModal(false);
-
-            // Message de succès
-            alert(`Dépôt de ${formatCurrency(amount)} effectué avec succès !`);
-
-          } catch (error) {
-            console.error('Erreur dépôt bancaire:', error);
-            alert('Erreur lors du dépôt bancaire');
-          }
-        }
-      };
+      
 
       // Ajouter les ventes du bar (commandes)
       orders.forEach(order => {
