@@ -3129,7 +3129,92 @@ const PatroApp = () => {
       }
     };
 
-
+      const processBankDeposit = async () => {
+  const amount = parseFloat(bankDeposit.amount);
+  
+  // Calculer cashTotal dans la fonction
+  let currentCashTotal = 0;
+  let currentAccountTotal = 0;
+  
+  // Ajouter les transactions financiÃ¨res manuelles
+  financialTransactions.forEach(transaction => {
+    const transactionAmount = transaction.amount || 0;
+    if (transaction.paymentMethod === 'cash') {
+      currentCashTotal += transaction.type === 'income' ? transactionAmount : -transactionAmount;
+    } else if (transaction.paymentMethod === 'account') {
+      currentAccountTotal += transaction.type === 'income' ? transactionAmount : -transactionAmount;
+    }
+  });
+  
+  // Ajouter les remboursements/rechargements membres
+  orders.forEach(order => {
+    if (order.type === 'repayment' || order.type === 'recharge') {
+      const orderAmount = order.amount || 0;
+      if (order.paymentMethod === 'cash') {
+        currentCashTotal += orderAmount;
+      } else if (order.paymentMethod === 'account') {
+        currentAccountTotal += orderAmount;
+      }
+    } else if (order.type === 'order') {
+      const orderAmount = order.amount || 0;
+      currentCashTotal += orderAmount; // Les ventes vont en caisse par dÃ©faut
+    }
+  });
+  
+  // Ajouter les revenus des boulots payÃ©s
+  jobs.forEach(job => {
+    if (job.isPaid) {
+      const jobAmount = job.total || 0;
+      if (job.paymentMethod === 'cash') {
+        currentCashTotal += jobAmount;
+      } else if (job.paymentMethod === 'account') {
+        currentAccountTotal += jobAmount;
+      }
+    }
+  });
+  
+  if (amount > 0 && amount <= currentCashTotal) {
+    // CrÃ©er les 2 transactions : sortie cash + entrÃ©e compte
+    const transactions = [
+      {
+        type: 'expense',
+        amount: amount,
+        description: bankDeposit.description || `DÃ©pÃ´t bancaire du ${formatDate(new Date().toISOString())}`,
+        paymentMethod: 'cash',
+        category: 'bank_transfer',
+        timestamp: new Date().toISOString()
+      },
+      {
+        type: 'income',
+        amount: amount,
+        description: bankDeposit.description || `DÃ©pÃ´t bancaire du ${formatDate(new Date().toISOString())}`,
+        paymentMethod: 'account',
+        category: 'bank_transfer',
+        timestamp: new Date().toISOString()
+      }
+    ];
+    
+    try {
+      // Sauvegarder les 2 transactions
+      await Promise.all(transactions.map(transaction => 
+        saveToFirebase('financialTransactions', transaction)
+      ));
+      
+      // Reset du formulaire
+      setBankDeposit({ amount: '', description: '' });
+      setShowModal(false);
+      
+      // Message de succÃ¨s
+      alert(`DÃ©pÃ´t de ${formatCurrency(amount)} effectuÃ© avec succÃ¨s !`);
+      
+    } catch (error) {
+      console.error('Erreur dÃ©pÃ´t bancaire:', error);
+      alert('Erreur lors du dÃ©pÃ´t bancaire');
+    }
+  } else {
+    alert(`Impossible de dÃ©poser ${formatCurrency(amount)}. Caisse disponible: ${formatCurrency(currentCashTotal)}`);
+  }
+};
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-50">
