@@ -31,10 +31,10 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 };
 
 const PatroApp = () => {
+  
   const [currentScreen, setCurrentScreen] = useState('home');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [loading, setLoading] = useState(false);
-
   const [members, setMembers] = useState([]);
   const [bros, setBros] = useState([]);
   const [products, setProducts] = useState([]);
@@ -57,19 +57,13 @@ const PatroApp = () => {
   const [newBroName, setNewBroName] = useState('');
   const [showBroDropdown, setShowBroDropdown] = useState(false);
   const [financialTransactions, setFinancialTransactions] = useState([]);
-  const { isSupported, permission, requestPermission } = useNotifications();
-  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false); // ✅ Ici maintenant
 
 
 
-  const activerNotifications = async () => {
-    const result = await requestPermission();
-    if (result === 'granted') {
-      alert('✅ Notifications activées !');
-    } else {
-      alert('❌ Permission refusée');
-    }
-  };
+
+console.log('🔍 Rendu avec screen:', currentScreen); 
+
 
 
   const [newTransaction, setNewTransaction] = useState({
@@ -118,6 +112,8 @@ const PatroApp = () => {
     moneyFlow: 'none', amount: '', paymentMethod: ''
   });
 
+  
+
   const [bankDeposit, setBankDeposit] = useState({
     amount: '',
     description: ''
@@ -134,6 +130,8 @@ const PatroApp = () => {
     description: '',
     deadline: ''
   });
+  const [newRate, setNewRate] = useState(hourlyRate.toString());
+  const { isSupported, permission, requestPermission } = useNotifications(); // ✅ Maintenant ici
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -216,7 +214,7 @@ const PatroApp = () => {
       });
     };
 
-    
+
 
     setupListeners();
 
@@ -232,6 +230,14 @@ const PatroApp = () => {
       if (unsubscribeFinancialGoals) unsubscribeFinancialGoals();
     };
   }, []);
+  const activerNotifications = async () => {
+    const result = await requestPermission();
+    if (result === 'granted') {
+      alert('✅ Notifications activées !');
+    } else {
+      alert('❌ Permission refusée');
+    }
+  };
 
   const formatCurrency = (amount) => `€${amount.toFixed(2)}`;
   const formatDate = (date) => new Date(date).toLocaleDateString('fr-FR');
@@ -1479,8 +1485,8 @@ const PatroApp = () => {
                     type="button"
                     onClick={() => setPaymentMethod('cash')}
                     className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${paymentMethod === 'cash'
-                        ? 'bg-green-100 border-green-500 text-green-700'
-                        : 'bg-gray-50 border-gray-300 text-gray-600'
+                      ? 'bg-green-100 border-green-500 text-green-700'
+                      : 'bg-gray-50 border-gray-300 text-gray-600'
                       }`}
                   >
                     💵 Cash
@@ -1489,8 +1495,8 @@ const PatroApp = () => {
                     type="button"
                     onClick={() => setPaymentMethod('account')}
                     className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${paymentMethod === 'account'
-                        ? 'bg-blue-100 border-blue-500 text-blue-700'
-                        : 'bg-gray-50 border-gray-300 text-gray-600'
+                      ? 'bg-blue-100 border-blue-500 text-blue-700'
+                      : 'bg-gray-50 border-gray-300 text-gray-600'
                       }`}
                   >
                     🏦 Compte
@@ -2569,8 +2575,8 @@ const PatroApp = () => {
                         type="button"
                         onClick={() => setNewJob({ ...newJob, paymentMethod: 'cash' })}
                         className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${newJob.paymentMethod === 'cash'
-                            ? 'bg-green-100 border-green-500 text-green-700'
-                            : 'bg-gray-50 border-gray-300 text-gray-600'
+                          ? 'bg-green-100 border-green-500 text-green-700'
+                          : 'bg-gray-50 border-gray-300 text-gray-600'
                           }`}
                       >
                         💵 Cash
@@ -2579,8 +2585,8 @@ const PatroApp = () => {
                         type="button"
                         onClick={() => setNewJob({ ...newJob, paymentMethod: 'account' })}
                         className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${newJob.paymentMethod === 'account'
-                            ? 'bg-blue-100 border-blue-500 text-blue-700'
-                            : 'bg-gray-50 border-gray-300 text-gray-600'
+                          ? 'bg-blue-100 border-blue-500 text-blue-700'
+                          : 'bg-gray-50 border-gray-300 text-gray-600'
                           }`}
                       >
                         🏦 Compte
@@ -2748,8 +2754,8 @@ const PatroApp = () => {
                               setShowModal(true);
                             }}
                             className={`px-2 py-1 rounded-full text-xs font-medium active:scale-95 transition-transform ${job.isPaid
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-orange-100 text-orange-800'
+                              ? 'bg-green-100 text-green-800'
+                              : 'bg-orange-100 text-orange-800'
                               }`}
                           >
                             {job.isPaid ? (
@@ -2812,8 +2818,8 @@ const PatroApp = () => {
                       type="button"
                       onClick={() => setPaymentMethod('cash')}
                       className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${paymentMethod === 'cash'
-                          ? 'bg-green-100 border-green-500 text-green-700'
-                          : 'bg-gray-50 border-gray-300 text-gray-600'
+                        ? 'bg-green-100 border-green-500 text-green-700'
+                        : 'bg-gray-50 border-gray-300 text-gray-600'
                         }`}
                     >
                       💵 Cash
@@ -2822,8 +2828,8 @@ const PatroApp = () => {
                       type="button"
                       onClick={() => setPaymentMethod('account')}
                       className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${paymentMethod === 'account'
-                          ? 'bg-blue-100 border-blue-500 text-blue-700'
-                          : 'bg-gray-50 border-gray-300 text-gray-600'
+                        ? 'bg-blue-100 border-blue-500 text-blue-700'
+                        : 'bg-gray-50 border-gray-300 text-gray-600'
                         }`}
                     >
                       🏦 Compte
@@ -2941,8 +2947,8 @@ const PatroApp = () => {
                 <div key={bro.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center space-x-3">
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${index === 0 ? 'bg-yellow-500' :
-                        index === 1 ? 'bg-gray-400' :
-                          index === 2 ? 'bg-orange-600' : 'bg-gray-300'
+                      index === 1 ? 'bg-gray-400' :
+                        index === 2 ? 'bg-orange-600' : 'bg-gray-300'
                       }`}>
                       {index + 1}
                     </div>
@@ -3104,8 +3110,7 @@ const PatroApp = () => {
     };
 
     const { cashTotal, accountTotal, stockValue, grandTotal } = calculateTotals();
-    const { isSupported, permission, requestPermission, token } = useNotifications();
-
+    
     const handleNotificationToggle = async () => {
       if (permission === 'granted') {
         alert('🔔 Les notifications sont déjà activées !\n\nPour les désactiver, allez dans les paramètres de votre navigateur.');
@@ -3129,92 +3134,92 @@ const PatroApp = () => {
       }
     };
 
-      const processBankDeposit = async () => {
-  const amount = parseFloat(bankDeposit.amount);
-  
-  // Calculer cashTotal dans la fonction
-  let currentCashTotal = 0;
-  let currentAccountTotal = 0;
-  
-  // Ajouter les transactions financiÃ¨res manuelles
-  financialTransactions.forEach(transaction => {
-    const transactionAmount = transaction.amount || 0;
-    if (transaction.paymentMethod === 'cash') {
-      currentCashTotal += transaction.type === 'income' ? transactionAmount : -transactionAmount;
-    } else if (transaction.paymentMethod === 'account') {
-      currentAccountTotal += transaction.type === 'income' ? transactionAmount : -transactionAmount;
-    }
-  });
-  
-  // Ajouter les remboursements/rechargements membres
-  orders.forEach(order => {
-    if (order.type === 'repayment' || order.type === 'recharge') {
-      const orderAmount = order.amount || 0;
-      if (order.paymentMethod === 'cash') {
-        currentCashTotal += orderAmount;
-      } else if (order.paymentMethod === 'account') {
-        currentAccountTotal += orderAmount;
+    const processBankDeposit = async () => {
+      const amount = parseFloat(bankDeposit.amount);
+
+      // Calculer cashTotal dans la fonction
+      let currentCashTotal = 0;
+      let currentAccountTotal = 0;
+
+      // Ajouter les transactions financiÃ¨res manuelles
+      financialTransactions.forEach(transaction => {
+        const transactionAmount = transaction.amount || 0;
+        if (transaction.paymentMethod === 'cash') {
+          currentCashTotal += transaction.type === 'income' ? transactionAmount : -transactionAmount;
+        } else if (transaction.paymentMethod === 'account') {
+          currentAccountTotal += transaction.type === 'income' ? transactionAmount : -transactionAmount;
+        }
+      });
+
+      // Ajouter les remboursements/rechargements membres
+      orders.forEach(order => {
+        if (order.type === 'repayment' || order.type === 'recharge') {
+          const orderAmount = order.amount || 0;
+          if (order.paymentMethod === 'cash') {
+            currentCashTotal += orderAmount;
+          } else if (order.paymentMethod === 'account') {
+            currentAccountTotal += orderAmount;
+          }
+        } else if (order.type === 'order') {
+          const orderAmount = order.amount || 0;
+          currentCashTotal += orderAmount; // Les ventes vont en caisse par dÃ©faut
+        }
+      });
+
+      // Ajouter les revenus des boulots payÃ©s
+      jobs.forEach(job => {
+        if (job.isPaid) {
+          const jobAmount = job.total || 0;
+          if (job.paymentMethod === 'cash') {
+            currentCashTotal += jobAmount;
+          } else if (job.paymentMethod === 'account') {
+            currentAccountTotal += jobAmount;
+          }
+        }
+      });
+
+      if (amount > 0 && amount <= currentCashTotal) {
+        // CrÃ©er les 2 transactions : sortie cash + entrÃ©e compte
+        const transactions = [
+          {
+            type: 'expense',
+            amount: amount,
+            description: bankDeposit.description || `DÃ©pÃ´t bancaire du ${formatDate(new Date().toISOString())}`,
+            paymentMethod: 'cash',
+            category: 'bank_transfer',
+            timestamp: new Date().toISOString()
+          },
+          {
+            type: 'income',
+            amount: amount,
+            description: bankDeposit.description || `DÃ©pÃ´t bancaire du ${formatDate(new Date().toISOString())}`,
+            paymentMethod: 'account',
+            category: 'bank_transfer',
+            timestamp: new Date().toISOString()
+          }
+        ];
+
+        try {
+          // Sauvegarder les 2 transactions
+          await Promise.all(transactions.map(transaction =>
+            saveToFirebase('financialTransactions', transaction)
+          ));
+
+          // Reset du formulaire
+          setBankDeposit({ amount: '', description: '' });
+          setShowModal(false);
+
+          // Message de succÃ¨s
+          alert(`DÃ©pÃ´t de ${formatCurrency(amount)} effectuÃ© avec succÃ¨s !`);
+
+        } catch (error) {
+          console.error('Erreur dÃ©pÃ´t bancaire:', error);
+          alert('Erreur lors du dÃ©pÃ´t bancaire');
+        }
+      } else {
+        alert(`Impossible de dÃ©poser ${formatCurrency(amount)}. Caisse disponible: ${formatCurrency(currentCashTotal)}`);
       }
-    } else if (order.type === 'order') {
-      const orderAmount = order.amount || 0;
-      currentCashTotal += orderAmount; // Les ventes vont en caisse par dÃ©faut
-    }
-  });
-  
-  // Ajouter les revenus des boulots payÃ©s
-  jobs.forEach(job => {
-    if (job.isPaid) {
-      const jobAmount = job.total || 0;
-      if (job.paymentMethod === 'cash') {
-        currentCashTotal += jobAmount;
-      } else if (job.paymentMethod === 'account') {
-        currentAccountTotal += jobAmount;
-      }
-    }
-  });
-  
-  if (amount > 0 && amount <= currentCashTotal) {
-    // CrÃ©er les 2 transactions : sortie cash + entrÃ©e compte
-    const transactions = [
-      {
-        type: 'expense',
-        amount: amount,
-        description: bankDeposit.description || `DÃ©pÃ´t bancaire du ${formatDate(new Date().toISOString())}`,
-        paymentMethod: 'cash',
-        category: 'bank_transfer',
-        timestamp: new Date().toISOString()
-      },
-      {
-        type: 'income',
-        amount: amount,
-        description: bankDeposit.description || `DÃ©pÃ´t bancaire du ${formatDate(new Date().toISOString())}`,
-        paymentMethod: 'account',
-        category: 'bank_transfer',
-        timestamp: new Date().toISOString()
-      }
-    ];
-    
-    try {
-      // Sauvegarder les 2 transactions
-      await Promise.all(transactions.map(transaction => 
-        saveToFirebase('financialTransactions', transaction)
-      ));
-      
-      // Reset du formulaire
-      setBankDeposit({ amount: '', description: '' });
-      setShowModal(false);
-      
-      // Message de succÃ¨s
-      alert(`DÃ©pÃ´t de ${formatCurrency(amount)} effectuÃ© avec succÃ¨s !`);
-      
-    } catch (error) {
-      console.error('Erreur dÃ©pÃ´t bancaire:', error);
-      alert('Erreur lors du dÃ©pÃ´t bancaire');
-    }
-  } else {
-    alert(`Impossible de dÃ©poser ${formatCurrency(amount)}. Caisse disponible: ${formatCurrency(currentCashTotal)}`);
-  }
-};
+    };
 
     return (
       <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-50">
@@ -3246,12 +3251,12 @@ const PatroApp = () => {
                       {formatCurrency(grandTotal)} / {formatCurrency(financialGoal.amount)}
                     </span>
                     <span className={`font-bold ${(grandTotal / financialGoal.amount) * 100 >= 100
-                        ? 'text-green-600'
-                        : (grandTotal / financialGoal.amount) * 100 >= 75
-                          ? 'text-blue-600'
-                          : (grandTotal / financialGoal.amount) * 100 >= 50
-                            ? 'text-yellow-600'
-                            : 'text-red-600'
+                      ? 'text-green-600'
+                      : (grandTotal / financialGoal.amount) * 100 >= 75
+                        ? 'text-blue-600'
+                        : (grandTotal / financialGoal.amount) * 100 >= 50
+                          ? 'text-yellow-600'
+                          : 'text-red-600'
                       }`}>
                       {((grandTotal / financialGoal.amount) * 100).toFixed(1)}%
                     </span>
@@ -3260,12 +3265,12 @@ const PatroApp = () => {
                   <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
                     <div
                       className={`h-4 rounded-full transition-all duration-1000 ease-out ${(grandTotal / financialGoal.amount) * 100 >= 100
-                          ? 'bg-gradient-to-r from-green-400 to-green-600'
-                          : (grandTotal / financialGoal.amount) * 100 >= 75
-                            ? 'bg-gradient-to-r from-blue-400 to-blue-600'
-                            : (grandTotal / financialGoal.amount) * 100 >= 50
-                              ? 'bg-gradient-to-r from-yellow-400 to-yellow-600'
-                              : 'bg-gradient-to-r from-red-400 to-red-600'
+                        ? 'bg-gradient-to-r from-green-400 to-green-600'
+                        : (grandTotal / financialGoal.amount) * 100 >= 75
+                          ? 'bg-gradient-to-r from-blue-400 to-blue-600'
+                          : (grandTotal / financialGoal.amount) * 100 >= 50
+                            ? 'bg-gradient-to-r from-yellow-400 to-yellow-600'
+                            : 'bg-gradient-to-r from-red-400 to-red-600'
                         }`}
                       style={{ width: `${Math.min(100, (grandTotal / financialGoal.amount) * 100)}%` }}
                     ></div>
@@ -3337,12 +3342,12 @@ const PatroApp = () => {
               <h2 className="text-xl font-bold text-gray-800">💰 Trésorerie Actuelle</h2>
               {financialGoal.isActive && (
                 <div className={`px-3 py-1 rounded-full text-sm font-semibold ${(grandTotal / financialGoal.amount) * 100 >= 100
-                    ? 'bg-green-100 text-green-800'
-                    : (grandTotal / financialGoal.amount) * 100 >= 75
-                      ? 'bg-blue-100 text-blue-800'
-                      : (grandTotal / financialGoal.amount) * 100 >= 50
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-red-100 text-red-800'
+                  ? 'bg-green-100 text-green-800'
+                  : (grandTotal / financialGoal.amount) * 100 >= 75
+                    ? 'bg-blue-100 text-blue-800'
+                    : (grandTotal / financialGoal.amount) * 100 >= 50
+                      ? 'bg-yellow-100 text-yellow-800'
+                      : 'bg-red-100 text-red-800'
                   }`}>
                   {((grandTotal / financialGoal.amount) * 100).toFixed(1)}% de l'objectif
                 </div>
@@ -3392,14 +3397,14 @@ const PatroApp = () => {
 
               {/* Total */}
               <div className={`p-4 rounded-lg border ${financialGoal.isActive && grandTotal >= financialGoal.amount
-                  ? 'bg-green-50 border-green-200'
-                  : 'bg-yellow-50 border-yellow-200'
+                ? 'bg-green-50 border-green-200'
+                : 'bg-yellow-50 border-yellow-200'
                 }`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className={`p-2 rounded-full ${financialGoal.isActive && grandTotal >= financialGoal.amount
-                        ? 'bg-green-500'
-                        : 'bg-yellow-500'
+                      ? 'bg-green-500'
+                      : 'bg-yellow-500'
                       }`}>
                       <span className="text-white text-lg">
                         {financialGoal.isActive && grandTotal >= financialGoal.amount ? '🏆' : '💎'}
@@ -3407,15 +3412,15 @@ const PatroApp = () => {
                     </div>
                     <div>
                       <h3 className={`font-semibold ${financialGoal.isActive && grandTotal >= financialGoal.amount
-                          ? 'text-green-800'
-                          : 'text-yellow-800'
+                        ? 'text-green-800'
+                        : 'text-yellow-800'
                         }`}>
                         Total
                         {financialGoal.isActive && grandTotal >= financialGoal.amount && ' - Objectif Atteint !'}
                       </h3>
                       <p className={`text-sm ${financialGoal.isActive && grandTotal >= financialGoal.amount
-                          ? 'text-green-600'
-                          : 'text-yellow-600'
+                        ? 'text-green-600'
+                        : 'text-yellow-600'
                         }`}>
                         Trésorerie totale
                       </p>
@@ -3423,8 +3428,8 @@ const PatroApp = () => {
                   </div>
                   <div className="text-right">
                     <p className={`text-3xl font-bold ${grandTotal >= 0
-                        ? (financialGoal.isActive && grandTotal >= financialGoal.amount ? 'text-green-600' : 'text-yellow-600')
-                        : 'text-red-600'
+                      ? (financialGoal.isActive && grandTotal >= financialGoal.amount ? 'text-green-600' : 'text-yellow-600')
+                      : 'text-red-600'
                       }`}>
                       {formatCurrency(grandTotal)}
                     </p>
@@ -3689,8 +3694,8 @@ const PatroApp = () => {
                   type="button"
                   onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: 'cash' })}
                   className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${newTransaction.paymentMethod === 'cash'
-                      ? 'bg-green-100 border-green-500 text-green-700'
-                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                    ? 'bg-green-100 border-green-500 text-green-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-600'
                     }`}
                 >
                   💵 Cash
@@ -3699,8 +3704,8 @@ const PatroApp = () => {
                   type="button"
                   onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: 'account' })}
                   className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${newTransaction.paymentMethod === 'account'
-                      ? 'bg-blue-100 border-blue-500 text-blue-700'
-                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                    ? 'bg-blue-100 border-blue-500 text-blue-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-600'
                     }`}
                 >
                   🏦 Compte
@@ -3788,8 +3793,8 @@ const PatroApp = () => {
                   type="button"
                   onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: 'cash' })}
                   className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${newTransaction.paymentMethod === 'cash'
-                      ? 'bg-green-100 border-green-500 text-green-700'
-                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                    ? 'bg-green-100 border-green-500 text-green-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-600'
                     }`}
                 >
                   💵 Cash
@@ -3798,8 +3803,8 @@ const PatroApp = () => {
                   type="button"
                   onClick={() => setNewTransaction({ ...newTransaction, paymentMethod: 'account' })}
                   className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${newTransaction.paymentMethod === 'account'
-                      ? 'bg-blue-100 border-blue-500 text-blue-700'
-                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                    ? 'bg-blue-100 border-blue-500 text-blue-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-600'
                     }`}
                 >
                   🏦 Compte
@@ -3847,7 +3852,7 @@ const PatroApp = () => {
         }
       });
 
-      
+
 
       // Ajouter les ventes du bar (commandes)
       orders.forEach(order => {
@@ -4610,8 +4615,8 @@ const PatroApp = () => {
                       type="button"
                       onClick={() => setNewProduct({ ...newProduct, moneyFlow: 'none', amount: '', paymentMethod: '' })}
                       className={`w-full p-3 border rounded-lg text-sm font-medium text-left active:scale-95 transition-transform ${newProduct.moneyFlow === 'none'
-                          ? 'bg-gray-100 border-gray-500 text-gray-700'
-                          : 'bg-gray-50 border-gray-300 text-gray-600'
+                        ? 'bg-gray-100 border-gray-500 text-gray-700'
+                        : 'bg-gray-50 border-gray-300 text-gray-600'
                         }`}
                     >
                       🚫 Stock gratuit (don, échantillon)
@@ -4621,8 +4626,8 @@ const PatroApp = () => {
                       type="button"
                       onClick={() => setNewProduct({ ...newProduct, moneyFlow: 'out', amount: '', paymentMethod: '' })}
                       className={`w-full p-3 border rounded-lg text-sm font-medium text-left active:scale-95 transition-transform ${newProduct.moneyFlow === 'out'
-                          ? 'bg-red-100 border-red-500 text-red-700'
-                          : 'bg-gray-50 border-gray-300 text-gray-600'
+                        ? 'bg-red-100 border-red-500 text-red-700'
+                        : 'bg-gray-50 border-gray-300 text-gray-600'
                         }`}
                     >
                       📤 Stock acheté (coût d'achat)
@@ -4662,8 +4667,8 @@ const PatroApp = () => {
                           type="button"
                           onClick={() => setNewProduct({ ...newProduct, paymentMethod: 'cash' })}
                           className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${newProduct.paymentMethod === 'cash'
-                              ? 'bg-green-100 border-green-500 text-green-700'
-                              : 'bg-gray-50 border-gray-300 text-gray-600'
+                            ? 'bg-green-100 border-green-500 text-green-700'
+                            : 'bg-gray-50 border-gray-300 text-gray-600'
                             }`}
                         >
                           💵 Cash
@@ -4672,8 +4677,8 @@ const PatroApp = () => {
                           type="button"
                           onClick={() => setNewProduct({ ...newProduct, paymentMethod: 'account' })}
                           className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${newProduct.paymentMethod === 'account'
-                              ? 'bg-blue-100 border-blue-500 text-blue-700'
-                              : 'bg-gray-50 border-gray-300 text-gray-600'
+                            ? 'bg-blue-100 border-blue-500 text-blue-700'
+                            : 'bg-gray-50 border-gray-300 text-gray-600'
                             }`}
                         >
                           🏦 Compte
@@ -4852,8 +4857,8 @@ const PatroApp = () => {
                   type="button"
                   onClick={() => setStockAdjustment({ ...stockAdjustment, type: 'add' })}
                   className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${stockAdjustment.type === 'add'
-                      ? 'bg-green-100 border-green-500 text-green-700'
-                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                    ? 'bg-green-100 border-green-500 text-green-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-600'
                     }`}
                 >
                   ➕ Ajouter
@@ -4862,8 +4867,8 @@ const PatroApp = () => {
                   type="button"
                   onClick={() => setStockAdjustment({ ...stockAdjustment, type: 'remove' })}
                   className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${stockAdjustment.type === 'remove'
-                      ? 'bg-red-100 border-red-500 text-red-700'
-                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                    ? 'bg-red-100 border-red-500 text-red-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-600'
                     }`}
                 >
                   ➖ Retirer
@@ -4910,8 +4915,8 @@ const PatroApp = () => {
                   type="button"
                   onClick={() => setStockAdjustment({ ...stockAdjustment, moneyFlow: 'none', amount: '', paymentMethod: '' })}
                   className={`w-full p-3 border rounded-lg text-sm font-medium text-left active:scale-95 transition-transform ${stockAdjustment.moneyFlow === 'none'
-                      ? 'bg-gray-100 border-gray-500 text-gray-700'
-                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                    ? 'bg-gray-100 border-gray-500 text-gray-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-600'
                     }`}
                 >
                   🚫 Aucun impact financier
@@ -4921,8 +4926,8 @@ const PatroApp = () => {
                   type="button"
                   onClick={() => setStockAdjustment({ ...stockAdjustment, moneyFlow: 'out', amount: '', paymentMethod: '' })}
                   className={`w-full p-3 border rounded-lg text-sm font-medium text-left active:scale-95 transition-transform ${stockAdjustment.moneyFlow === 'out'
-                      ? 'bg-red-100 border-red-500 text-red-700'
-                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                    ? 'bg-red-100 border-red-500 text-red-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-600'
                     }`}
                 >
                   📤 Argent qui sort (achat, coût)
@@ -4932,8 +4937,8 @@ const PatroApp = () => {
                   type="button"
                   onClick={() => setStockAdjustment({ ...stockAdjustment, moneyFlow: 'in', amount: '', paymentMethod: '' })}
                   className={`w-full p-3 border rounded-lg text-sm font-medium text-left active:scale-95 transition-transform ${stockAdjustment.moneyFlow === 'in'
-                      ? 'bg-green-100 border-green-500 text-green-700'
-                      : 'bg-gray-50 border-gray-300 text-gray-600'
+                    ? 'bg-green-100 border-green-500 text-green-700'
+                    : 'bg-gray-50 border-gray-300 text-gray-600'
                     }`}
                 >
                   📥 Argent qui rentre (vente, recette)
@@ -4973,8 +4978,8 @@ const PatroApp = () => {
                       type="button"
                       onClick={() => setStockAdjustment({ ...stockAdjustment, paymentMethod: 'cash' })}
                       className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${stockAdjustment.paymentMethod === 'cash'
-                          ? 'bg-green-100 border-green-500 text-green-700'
-                          : 'bg-gray-50 border-gray-300 text-gray-600'
+                        ? 'bg-green-100 border-green-500 text-green-700'
+                        : 'bg-gray-50 border-gray-300 text-gray-600'
                         }`}
                     >
                       💵 Cash
@@ -4983,8 +4988,8 @@ const PatroApp = () => {
                       type="button"
                       onClick={() => setStockAdjustment({ ...stockAdjustment, paymentMethod: 'account' })}
                       className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${stockAdjustment.paymentMethod === 'account'
-                          ? 'bg-blue-100 border-blue-500 text-blue-700'
-                          : 'bg-gray-50 border-gray-300 text-gray-600'
+                        ? 'bg-blue-100 border-blue-500 text-blue-700'
+                        : 'bg-gray-50 border-gray-300 text-gray-600'
                         }`}
                     >
                       🏦 Compte
@@ -5033,7 +5038,7 @@ const PatroApp = () => {
   }
 
   if (currentScreen === 'settings-rate') {
-    const [newRate, setNewRate] = useState(hourlyRate.toString());
+    
 
     const updateRate = () => {
       const rate = parseFloat(newRate);
@@ -5188,14 +5193,14 @@ const PatroApp = () => {
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-1">
                           <span className={`text-xs px-2 py-1 rounded ${item.category === 'Rentrées'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
                             }`}>
                             {item.category}
                           </span>
                           <span className={`text-xs px-2 py-1 rounded ${item.paymentMethod === 'cash'
-                              ? 'bg-green-50 text-green-700'
-                              : 'bg-blue-50 text-blue-700'
+                            ? 'bg-green-50 text-green-700'
+                            : 'bg-blue-50 text-blue-700'
                             }`}>
                             {item.paymentMethod === 'cash' ? '💵 Cash' : '🏦 Compte'}
                           </span>
@@ -5243,8 +5248,8 @@ const PatroApp = () => {
                             {item.category}
                           </span>
                           <span className={`text-xs px-2 py-1 rounded ${item.isPaid
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-orange-100 text-orange-800'
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-orange-100 text-orange-800'
                             }`}>
                             {item.isPaid ? 'Payé' : 'Non payé'}
                           </span>
@@ -5382,12 +5387,12 @@ const PatroApp = () => {
                         {formatCurrency(grandTotal)} / {formatCurrency(financialGoal.amount)}
                       </span>
                       <span className={`font-bold ${(grandTotal / financialGoal.amount) * 100 >= 100
-                          ? 'text-green-600'
-                          : (grandTotal / financialGoal.amount) * 100 >= 75
-                            ? 'text-blue-600'
-                            : (grandTotal / financialGoal.amount) * 100 >= 50
-                              ? 'text-yellow-600'
-                              : 'text-red-600'
+                        ? 'text-green-600'
+                        : (grandTotal / financialGoal.amount) * 100 >= 75
+                          ? 'text-blue-600'
+                          : (grandTotal / financialGoal.amount) * 100 >= 50
+                            ? 'text-yellow-600'
+                            : 'text-red-600'
                         }`}>
                         {((grandTotal / financialGoal.amount) * 100).toFixed(1)}%
                       </span>
@@ -5396,12 +5401,12 @@ const PatroApp = () => {
                     <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
                       <div
                         className={`h-4 rounded-full transition-all duration-1000 ease-out ${(grandTotal / financialGoal.amount) * 100 >= 100
-                            ? 'bg-gradient-to-r from-green-400 to-green-600'
-                            : (grandTotal / financialGoal.amount) * 100 >= 75
-                              ? 'bg-gradient-to-r from-blue-400 to-blue-600'
-                              : (grandTotal / financialGoal.amount) * 100 >= 50
-                                ? 'bg-gradient-to-r from-yellow-400 to-yellow-600'
-                                : 'bg-gradient-to-r from-red-400 to-red-600'
+                          ? 'bg-gradient-to-r from-green-400 to-green-600'
+                          : (grandTotal / financialGoal.amount) * 100 >= 75
+                            ? 'bg-gradient-to-r from-blue-400 to-blue-600'
+                            : (grandTotal / financialGoal.amount) * 100 >= 50
+                              ? 'bg-gradient-to-r from-yellow-400 to-yellow-600'
+                              : 'bg-gradient-to-r from-red-400 to-red-600'
                           }`}
                         style={{ width: `${Math.min(100, (grandTotal / financialGoal.amount) * 100)}%` }}
                       ></div>
