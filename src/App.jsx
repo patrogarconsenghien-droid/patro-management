@@ -3445,15 +3445,35 @@ const PatroApp = () => {
         stockValue += quantity * unitPrice;
       });
 
+
+  // NOUVEAU : Calculer les soldes des membres
+  let totalMemberBalances = 0;
+ let positiveBalances = 0; // Argent qu'on doit aux membres (crédits)
+let negativeBalances = 0; // Argent que les membres nous doivent (dettes)
+  
+  members.forEach(member => {
+    const balance = member.balance || 0;
+    totalMemberBalances += balance;
+    
+    if (balance > 0) {
+      positiveBalances += balance;
+    } else {
+      negativeBalances += Math.abs(balance);
+    }
+  });
+
       return {
-        cashTotal,
-        accountTotal,
-        stockValue, // Nouvelle valeur pour info
-        grandTotal: cashTotal + accountTotal // Total reste inchangé
-      };
+    cashTotal,
+    accountTotal,
+    stockValue,
+    totalMemberBalances,
+    positiveBalances,
+    negativeBalances,
+    grandTotal: cashTotal + accountTotal
+  };
     };
 
-    const { cashTotal, accountTotal, stockValue, grandTotal } = calculateTotals();
+    const { cashTotal, accountTotal, stockValue, totalMemberBalances, positiveBalances, negativeBalances, grandTotal } = calculateTotals();
 
     const handleNotificationToggle = async () => {
       if (permission === 'granted') {
@@ -3802,6 +3822,34 @@ const PatroApp = () => {
                   </div>
                 </div>
               </div>
+              {/* NOUVEAU : Soldes des Membres */}
+<div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+  <div className="flex items-center justify-between">
+    <div className="flex items-center space-x-3">
+      <div className="bg-orange-500 p-2 rounded-full">
+        <span className="text-white text-lg">👥</span>
+      </div>
+      <div>
+        <h3 className="font-semibold text-orange-800">Soldes Membres</h3>
+        <p className="text-sm text-orange-600">Argent virtuel en circulation</p>
+      </div>
+    </div>
+    <div className="text-right">
+      <p className={`text-2xl font-bold ${totalMemberBalances >= 0 ? 'text-orange-600' : 'text-green-600'}`}>
+        {formatCurrency(-totalMemberBalances)}
+      </p>
+      <div className="text-xs text-orange-500 space-y-1">
+  {positiveBalances > 0 && (
+    <p>💰 creance : {formatCurrency(positiveBalances)}</p>
+  )}
+  {negativeBalances > 0 && (
+    <p>💸 credit: {formatCurrency(negativeBalances)}</p>
+  )}
+  <p>👤 {members.length} membre(s)</p>
+</div>
+    </div>
+  </div>
+</div>
             </div>
           </div>
 
@@ -4171,7 +4219,134 @@ const PatroApp = () => {
     );
 
   }
+if (currentScreen === 'finance-history') {
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header title="Historique Financier" onBack={() => navigateTo('finance')} />
 
+      <div className="p-4">
+        {/* Résumé rapide */}
+        <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+          <h3 className="font-semibold text-lg mb-3 text-center">📊 Résumé</h3>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="text-center">
+              <div className="bg-green-100 p-3 rounded-lg">
+                <p className="text-xl font-bold text-green-600">
+                  {financialTransactions.filter(t => t.type === 'income').length}
+                </p>
+                <p className="text-sm text-green-700">Rentrées</p>
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="bg-red-100 p-3 rounded-lg">
+                <p className="text-xl font-bold text-red-600">
+                  {financialTransactions.filter(t => t.type === 'expense').length}
+                </p>
+                <p className="text-sm text-red-700">Frais</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Liste des transactions */}
+        {financialTransactions.length === 0 ? (
+          <div className="text-center py-8 text-gray-500">
+            <div className="text-4xl mb-2">💰</div>
+            <p>Aucune transaction financière</p>
+            <p className="text-sm mt-1">Utilisez les boutons "Ajouter Rentrée" ou "Ajouter Frais"</p>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {financialTransactions
+              .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+              .map(transaction => (
+                <div key={transaction.id} className="bg-white p-4 rounded-lg shadow-sm">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        {/* Badge type de transaction */}
+                        <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                          transaction.type === 'income' 
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}>
+                          {transaction.type === 'income' ? '📈 Rentrée' : '📉 Frais'}
+                        </span>
+
+                        {/* Badge mode de paiement */}
+                        <span className={`text-xs px-2 py-1 rounded-full ${
+                          transaction.paymentMethod === 'cash'
+                            ? 'bg-green-50 text-green-700'
+                            : 'bg-blue-50 text-blue-700'
+                        }`}>
+                          {transaction.paymentMethod === 'cash' ? '💵 Cash' : '🏦 Compte'}
+                        </span>
+
+                        {/* Badge catégorie si elle existe */}
+                        {transaction.category && transaction.category !== 'other' && (
+                          <span className="text-xs px-2 py-1 rounded-full bg-purple-50 text-purple-700">
+                            {transaction.category === 'sales' ? 'Ventes' :
+                             transaction.category === 'events' ? 'Événements' :
+                             transaction.category === 'donations' ? 'Dons' :
+                             transaction.category === 'subsidies' ? 'Subsides' :
+                             transaction.category === 'supplies' ? 'Fournitures' :
+                             transaction.category === 'maintenance' ? 'Entretien' :
+                             transaction.category === 'utilities' ? 'Utilities' :
+                             'Autre'}
+                          </span>
+                        )}
+                      </div>
+
+                      <h3 className="font-medium text-gray-800 mb-1">{transaction.description}</h3>
+                      <p className="text-sm text-gray-600">{formatDateTime(transaction.timestamp)}</p>
+
+                      {/* Informations spéciales pour les transactions de stock */}
+                      {transaction.type === 'stock_adjustment' && (
+                        <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
+                          <p><strong>Ajustement stock:</strong> {transaction.productName}</p>
+                          <p>Quantité: {transaction.quantity} ({transaction.adjustmentType === 'add' ? 'Ajout' : 'Retrait'})</p>
+                        </div>
+                      )}
+
+                      {transaction.type === 'product_creation' && (
+                        <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
+                          <p><strong>Création produit:</strong> {transaction.productName}</p>
+                          <p>Stock initial: {transaction.quantity} unités</p>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="text-right ml-4">
+                      <div className="flex items-center space-x-2">
+                        <div>
+                          <p className={`text-xl font-bold ${
+                            transaction.type === 'income' ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (confirm(`Êtes-vous sûr de vouloir supprimer cette ${transaction.type === 'income' ? 'rentrée' : 'dépense'} ?\n\n"${transaction.description}"\n\nCela ajustera votre trésorerie.`)) {
+                              deleteFinancialTransaction(transaction.id);
+                            }
+                          }}
+                          className="p-2 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
+                          title="Supprimer cette transaction"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 
   if (currentScreen === 'finance-graph') {
