@@ -31,7 +31,7 @@ const Modal = ({ isOpen, onClose, title, children }) => {
 };
 
 const PatroApp = () => {
-  
+
   const [currentScreen, setCurrentScreen] = useState('home');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [loading, setLoading] = useState(false);
@@ -58,11 +58,14 @@ const PatroApp = () => {
   const [showBroDropdown, setShowBroDropdown] = useState(false);
   const [financialTransactions, setFinancialTransactions] = useState([]);
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false); // ✅ Ici maintenant
+  const [productSearch, setProductSearch] = useState('');
+  const [activeCategory, setActiveCategory] = useState('all');
+  const [showOnlyInStock, setShowOnlyInStock] = useState(false);
+  const [sortBy, setSortBy] = useState('name'); // 'name', 'price', 'stock'
 
 
 
-
-console.log('🔍 Rendu avec screen:', currentScreen); 
+  console.log('🔍 Rendu avec screen:', currentScreen);
 
 
 
@@ -112,11 +115,18 @@ console.log('🔍 Rendu avec screen:', currentScreen);
     moneyFlow: 'none', amount: '', paymentMethod: ''
   });
 
-  
+
 
   const [bankDeposit, setBankDeposit] = useState({
     amount: '',
     description: ''
+  });
+
+  const [orderConfirmation, setOrderConfirmation] = useState({
+    show: false,
+    member: null,
+    items: [],
+    total: 0
   });
 
   const [financialGoal, setFinancialGoal] = useState({
@@ -131,6 +141,8 @@ console.log('🔍 Rendu avec screen:', currentScreen);
     deadline: ''
   });
   const [newRate, setNewRate] = useState(hourlyRate.toString());
+  const [tempPopularProducts, setTempPopularProducts] = useState([]);
+  const [popularProducts, setPopularProducts] = useState([]);
   const { isSupported, permission, requestPermission } = useNotifications(); // ✅ Maintenant ici
 
   useEffect(() => {
@@ -197,6 +209,7 @@ console.log('🔍 Rendu avec screen:', currentScreen);
     let unsubscribeScheduledJobs = null;
     let unsubscribeFinancialTransactions = null;
     let unsubscribeFinancialGoals = null;
+    let unsubscribePopularProducts = null;
 
     const setupListeners = async () => {
       unsubscribeMembers = await loadFromFirebase('members', setMembers);
@@ -210,6 +223,23 @@ console.log('🔍 Rendu avec screen:', currentScreen);
       unsubscribeFinancialGoals = await loadFromFirebase('financialGoals', (goals) => {
         if (goals && goals.length > 0) {
           setFinancialGoal(goals[0]); // Prendre le premier objectif actif
+        }
+      });
+      unsubscribePopularProducts = await loadFromFirebase('popularProducts', (popular) => {
+        if (popular && popular.length > 0) {
+          // Trier par date de mise à jour pour prendre le plus récent
+          const sortedPopular = popular.sort((a, b) => {
+            const dateA = new Date(a.lastUpdated || a.createdAt || 0);
+            const dateB = new Date(b.lastUpdated || b.createdAt || 0);
+            return dateB - dateA; // Plus récent en premier
+          });
+
+          console.log('Produits populaires chargés :', sortedPopular[0].products);
+          setPopularProducts(sortedPopular[0].products || ['Jupiler', 'Coca', 'Stella', 'Fanta']);
+        } else {
+          // Valeurs par défaut si aucun document
+          console.log('Aucun produit populaire trouvé, utilisation des valeurs par défaut');
+          setPopularProducts(['Jupiler', 'Coca', 'Stella', 'Fanta']);
         }
       });
     };
@@ -228,6 +258,7 @@ console.log('🔍 Rendu avec screen:', currentScreen);
       if (unsubscribeScheduledJobs) unsubscribeScheduledJobs();
       if (unsubscribeFinancialTransactions) unsubscribeFinancialTransactions();
       if (unsubscribeFinancialGoals) unsubscribeFinancialGoals();
+      if (unsubscribePopularProducts) unsubscribePopularProducts();
     };
   }, []);
   const activerNotifications = async () => {
@@ -241,6 +272,17 @@ console.log('🔍 Rendu avec screen:', currentScreen);
 
   const formatCurrency = (amount) => `€${amount.toFixed(2)}`;
   const formatDate = (date) => new Date(date).toLocaleDateString('fr-FR');
+
+  const formatDateTime = (date) => {
+    const dateObj = new Date(date);
+    return dateObj.toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   const calculateEndTime = (startTime, durationHours) => {
     if (!startTime || !durationHours) return '';
@@ -402,6 +444,43 @@ console.log('🔍 Rendu avec screen:', currentScreen);
     }
   };
 
+  const getFilteredProducts = () => {
+    let filtered = products;
+
+    // Filtrer par recherche
+    if (productSearch.trim()) {
+      filtered = filtered.filter(product =>
+        product.name.toLowerCase().includes(productSearch.toLowerCase())
+      );
+    }
+
+    // Filtrer par catégorie
+    if (activeCategory !== 'all') {
+      filtered = filtered.filter(product => product.category === activeCategory);
+    }
+
+    // Filtrer par stock
+    if (showOnlyInStock) {
+      filtered = filtered.filter(product => product.stock > 0);
+    }
+
+    // Trier
+    filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'price':
+          return a.price - b.price;
+        case 'stock':
+          return b.stock - a.stock;
+        case 'name':
+        default:
+          return a.name.localeCompare(b.name);
+      }
+    });
+
+    return filtered;
+  };
+
+
   const deleteMember = async (memberId) => {
     await deleteFromFirebase('members', memberId);
     setMembers(members.filter(m => m.id !== memberId));
@@ -504,7 +583,58 @@ console.log('🔍 Rendu avec screen:', currentScreen);
     });
   };
 
-  const validateOrder = async () => {
+  const confirmOrder = async () => {
+    const { member, items, total } = orderConfirmation;
+
+    if (!member || items.length === 0) return;
+
+    // Calculer les unités totales nécessaires
+    const totalUnitsNeeded = {};
+    Object.values(cart).forEach(cartItem => {
+      if (!totalUnitsNeeded[cartItem.productId]) {
+        totalUnitsNeeded[cartItem.productId] = 0;
+      }
+      totalUnitsNeeded[cartItem.productId] += cartItem.quantity;
+    });
+
+    const order = {
+      memberId: member.id,
+      memberName: member.name,
+      type: 'order',
+      amount: total,
+      timestamp: new Date().toISOString(),
+      items: items
+    };
+
+    const newBalance = member.balance - total;
+
+    try {
+      // Mettre à jour le stock
+      Object.entries(totalUnitsNeeded).forEach(([productId, totalNeeded]) => {
+        updateStock(productId, -totalNeeded, `Vente à ${member.name}`);
+      });
+
+      // Sauvegarder la commande et mettre à jour le solde
+      await Promise.all([
+        saveToFirebase('orders', order),
+        updateInFirebase('members', member.id, { balance: newBalance })
+      ]);
+
+      // Fermer le modal et vider le panier
+      setOrderConfirmation({ show: false, member: null, items: [], total: 0 });
+      setCart({});
+
+      // Retourner à la sélection de membre pour une nouvelle commande
+      setSelectedMember(null);
+      navigateTo('bar-order');
+
+    } catch (error) {
+      console.error('Erreur validation commande:', error);
+      alert('Erreur lors de la validation de la commande');
+    }
+  };
+
+  const validateOrder = () => {
     if (Object.keys(cart).length === 0 || !selectedMember) return;
 
     const stockIssues = [];
@@ -531,6 +661,7 @@ console.log('🔍 Rendu avec screen:', currentScreen);
       return;
     }
 
+    // Préparer les données pour le modal de confirmation
     const orderItems = Object.values(cart).map(cartItem => {
       const product = products.find(p => p.id === cartItem.productId);
       let displayName = product.name;
@@ -551,28 +682,13 @@ console.log('🔍 Rendu avec screen:', currentScreen);
       };
     });
 
-    const order = {
-      memberId: selectedMember.id,
-      memberName: selectedMember.name,
-      type: 'order',
-      amount: cartTotal,
-      timestamp: new Date().toISOString(),
-      items: orderItems
-    };
-
-    const newBalance = selectedMember.balance - cartTotal;
-
-    // Mettre à jour le stock
-    Object.entries(totalUnitsNeeded).forEach(([productId, totalNeeded]) => {
-      updateStock(productId, -totalNeeded, `Vente à ${selectedMember.name}`);
+    // Afficher le modal de confirmation au lieu de valider directement
+    setOrderConfirmation({
+      show: true,
+      member: selectedMember,
+      items: orderItems,
+      total: cartTotal
     });
-    await Promise.all([
-      saveToFirebase('orders', order),
-      updateInFirebase('members', selectedMember.id, { balance: newBalance })
-    ]);
-
-    setCart({});
-    navigateTo('bar-history');
   };
 
   const addBro = async () => {
@@ -1239,7 +1355,7 @@ console.log('🔍 Rendu avec screen:', currentScreen);
     }
   };
 
-  const categories = ['Alcool', 'Boissons', 'Snacks', 'Nourriture', 'Autre'].filter(cat =>
+  const categories = ['Alcool', 'Bière', 'Boissons', 'Snacks', 'Nourriture', 'Autre'].filter(cat =>
     products.some(p => p.category === cat)
   );
 
@@ -1586,6 +1702,12 @@ console.log('🔍 Rendu avec screen:', currentScreen);
   }
 
   if (currentScreen === 'bar-products') {
+    const filteredProducts = getFilteredProducts();
+    const categoriesWithCount = categories.map(cat => ({
+      name: cat,
+      count: products.filter(p => p.category === cat && p.stock > 0).length
+    }));
+
     return (
       <div className="min-h-screen bg-gray-50 pb-20">
         <Header
@@ -1594,164 +1716,323 @@ console.log('🔍 Rendu avec screen:', currentScreen);
         />
 
         <div className="p-4">
-          {categories.map(category => {
-            const categoryProducts = products.filter(p => p.category === category);
-            return (
-              <div key={category} className="mb-6">
-                <h3 className="text-lg font-semibold mb-3 text-gray-800">{category}</h3>
-                <div className="grid grid-cols-1 gap-3">
-                  {categoryProducts.map(product => {
+          {/* Barre de recherche */}
+          <div className="mb-4">
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="🔍 Rechercher un produit..."
+                value={productSearch}
+                onChange={(e) => setProductSearch(e.target.value)}
+                className="w-full p-3 pl-4 pr-12 border rounded-lg bg-white shadow-sm"
+              />
+              {productSearch && (
+                <button
+                  onClick={() => setProductSearch('')}
+                  className="absolute right-3 top-3 text-gray-400 hover:text-gray-600"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Filtres rapides */}
+          <div className="mb-4 space-y-3">
+            {/* Onglets de catégories */}
+            <div className="flex overflow-x-auto space-x-2 pb-2">
+              <button
+                onClick={() => setActiveCategory('all')}
+                className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap active:scale-95 transition-transform ${activeCategory === 'all'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  }`}
+              >
+                Tout ({products.filter(p => p.stock > 0).length})
+              </button>
+              {categoriesWithCount.map(category => (
+                <button
+                  key={category.name}
+                  onClick={() => setActiveCategory(category.name)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap active:scale-95 transition-transform ${activeCategory === category.name
+                    ? 'bg-blue-500 text-white'
+                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                >
+                  {category.name} ({category.count})
+                </button>
+              ))}
+            </div>
+
+            {/* Options de tri et filtrage */}
+            <div className="flex space-x-2 overflow-x-auto">
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="px-3 py-2 border rounded-lg text-sm bg-white"
+              >
+                <option value="name">Tri: A-Z</option>
+                <option value="price">Tri: Prix ↑</option>
+                <option value="stock">Tri: Stock ↓</option>
+              </select>
+
+              <button
+                onClick={() => setShowOnlyInStock(!showOnlyInStock)}
+                className={`px-3 py-2 rounded-lg text-sm font-medium whitespace-nowrap active:scale-95 transition-transform ${showOnlyInStock
+                  ? 'bg-green-500 text-white'
+                  : 'bg-gray-200 text-gray-700'
+                  }`}
+              >
+                {showOnlyInStock ? '✓ En stock' : 'En stock'}
+              </button>
+            </div>
+          </div>
+
+          {/* Résultats de recherche */}
+          {productSearch && (
+            <div className="mb-4 text-sm text-gray-600">
+              {filteredProducts.length} résultat(s) pour "{productSearch}"
+            </div>
+          )}
+
+          {/* Produits les plus vendus (si pas de recherche) */}
+          {!productSearch && activeCategory === 'all' && (
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold mb-3 text-gray-800">⭐ Populaires</h3>
+
+              {/* 🔍 DÉBOGAGE - Affiche les infos dans l'interface */}
+              <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
+                <p><strong>Debug:</strong></p>
+                <p>Produits populaires configurés: {JSON.stringify(popularProducts)}</p>
+                <p>Produits trouvés: {products.filter(p => popularProducts.includes(p.name)).map(p => p.name).join(', ')}</p>
+                <p>En stock: {products.filter(p => popularProducts.includes(p.name) && p.stock > 0).map(p => p.name).join(', ')}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                {(() => {
+                  // 🔍 DÉBOGAGE dans la console
+                  console.log('=== DÉBOGAGE PRODUITS POPULAIRES ===');
+                  console.log('popularProducts array:', popularProducts);
+                  console.log('products disponibles:', products.map(p => p.name));
+
+                  const filteredProducts = products
+                    .filter(p => {
+                      const isPopular = popularProducts.includes(p.name);
+                      const hasStock = p.stock > 0;
+                      console.log(`${p.name}: populaire=${isPopular}, stock=${p.stock}, hasStock=${hasStock}`);
+                      return isPopular && hasStock;
+                    })
+                    .slice(0, 4);
+
+                  console.log('produits filtrés finaux:', filteredProducts.map(p => p.name));
+                  console.log('=====================================');
+
+                  return filteredProducts.map(product => {
                     const stockStatus = getStockStatus(product);
                     const isOutOfStock = product.stock <= 0;
-
-                    // Calculer les quantités dans le panier pour ce produit
                     const unitQuantity = cart[`${product.id}-unit`]?.quantity || 0;
-                    const packQuantity = cart[`${product.id}-pack`]?.quantity || 0;
-                    const elevenQuantity = cart[`${product.id}-eleven`]?.quantity || 0;
-                    const totalRequested = unitQuantity + packQuantity + elevenQuantity;
-                    const availableStock = product.stock - totalRequested;
 
                     return (
-                      <div key={product.id} className={`bg-white p-4 rounded-lg shadow-sm ${isOutOfStock ? 'opacity-50' : ''}`}>
-                        <div className="flex justify-between items-start mb-2">
-                          <div className="flex-1">
-                            <h4 className="font-medium text-sm">{product.name}</h4>
-                            <p className="text-blue-600 font-semibold">Prix unitaire: {formatCurrency(product.price)}</p>
-
-                            <div className={`text-xs px-2 py-1 rounded-full inline-block mt-1 ${stockStatus.bg} ${stockStatus.color}`}>
-                              Stock: {product.stock}
-                              {product.stockType === 'mixed' && product.packSize > 1 && (
-                                <span> ({Math.floor(product.stock / product.packSize)} bacs)</span>
-                              )}
+                      <div key={product.id} className={`bg-white p-3 rounded-lg shadow-sm border-2 border-yellow-200 ${isOutOfStock ? 'opacity-50' : ''}`}>
+                        <div className="text-center">
+                          <h4 className="font-medium text-sm mb-1">{product.name}</h4>
+                          <p className="text-blue-600 font-semibold text-sm">{formatCurrency(product.price)}</p>
+                          <div className={`text-xs px-2 py-1 rounded-full inline-block mt-1 ${stockStatus.bg} ${stockStatus.color}`}>
+                            {product.stock}
+                          </div>
+                          {unitQuantity > 0 && (
+                            <div className="text-xs text-orange-600 mt-1 font-bold">
+                              Panier: {unitQuantity}
                             </div>
-
-                            {totalRequested > 0 && (
-                              <div className="text-xs text-orange-600 mt-1">
-                                Dans le panier: {totalRequested} | Restant: {availableStock}
-                              </div>
+                          )}
+                          <div className="flex items-center justify-center space-x-2 mt-3">
+                            {unitQuantity > 0 && (
+                              <button
+                                onClick={() => removeFromCart(product.id, 'unit')}
+                                className="w-6 h-6 bg-red-500 text-white rounded-full text-xs active:scale-95 transition-transform"
+                              >
+                                -
+                              </button>
                             )}
+                            <button
+                              onClick={() => addToCart(product.id, 'unit')}
+                              disabled={isOutOfStock}
+                              className="w-12 h-12 bg-yellow-500 text-white rounded-lg text-xl font-bold disabled:bg-gray-300 active:scale-95 transition-transform shadow-md"
+                            >
+                              +
+                            </button>
                           </div>
                         </div>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          )}
 
-                        {product.stockType === 'mixed' ? (
-                          <div className="space-y-2">
-                            {/* Vente à l'unité - EN PREMIER */}
-                            <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                              <div className="text-sm">
-                                <span className="font-medium">À l'unité</span>
-                                <span className="text-gray-600 ml-2 font-semibold">{formatCurrency(product.price)}</span>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <button
-                                  onClick={() => removeFromCart(product.id, 'unit')}
-                                  disabled={!cart[`${product.id}-unit`] || isOutOfStock}
-                                  className="p-1 bg-red-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                                >
-                                  <Minus size={12} />
-                                </button>
-                                <span className="font-medium w-8 text-center">{unitQuantity}</span>
-                                <button
-                                  onClick={() => addToCart(product.id, 'unit')}
-                                  disabled={isOutOfStock || availableStock <= 0}
-                                  className="p-1 bg-green-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                                >
-                                  <Plus size={12} />
-                                </button>
-                              </div>
+          {/* Liste des produits filtrés */}
+          <div className="space-y-4">
+            {filteredProducts.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <div className="text-4xl mb-2">🔍</div>
+                <p>Aucun produit trouvé</p>
+                {productSearch && (
+                  <button
+                    onClick={() => setProductSearch('')}
+                    className="mt-2 text-blue-500 hover:underline"
+                  >
+                    Effacer la recherche
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {filteredProducts.map(product => {
+                  const stockStatus = getStockStatus(product);
+                  const isOutOfStock = product.stock <= 0;
+
+                  // Calculer les quantités dans le panier
+                  const unitQuantity = cart[`${product.id}-unit`]?.quantity || 0;
+                  const packQuantity = cart[`${product.id}-pack`]?.quantity || 0;
+                  const elevenQuantity = cart[`${product.id}-eleven`]?.quantity || 0;
+                  const totalRequested = unitQuantity + packQuantity + elevenQuantity;
+                  const availableStock = product.stock - totalRequested;
+
+                  return (
+                    <div key={product.id} className={`bg-white p-3 rounded-lg shadow-sm ${isOutOfStock ? 'opacity-50' : ''}`}>
+                      {/* Header du produit */}
+                      <div className="mb-3">
+                        <h4 className="font-medium text-sm mb-1 leading-tight">{product.name}</h4>
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-blue-600 font-semibold text-sm">{formatCurrency(product.price)}</p>
+                          <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                            {product.category}
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between">
+                          <div className={`text-xs px-2 py-1 rounded-full ${stockStatus.bg} ${stockStatus.color}`}>
+                            Stock: {product.stock}
+                          </div>
+                          {totalRequested > 0 && (
+                            <div className="text-xs text-orange-600 font-medium">
+                              Panier: {totalRequested}
                             </div>
+                          )}
+                        </div>
+                      </div>
 
-                            {/* Vente par 11 (mètre) - EN SECOND */}
-                            {product.stock >= 11 && (
-                              <div className="flex items-center justify-between p-2 bg-green-50 rounded">
-                                <div className="text-sm">
-                                  <span className="font-medium">Mètre (11 bières)</span>
-                                  <span className="text-green-600 ml-2 font-semibold">{formatCurrency(product.pricePer11)}</span>
-                                  <div className="text-xs text-gray-500">
-                                    ({formatCurrency(product.pricePer11 / 11)}/unité)
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <button
-                                    onClick={() => removeFromCart(product.id, 'eleven')}
-                                    disabled={!cart[`${product.id}-eleven`]}
-                                    className="p-1 bg-red-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                                  >
-                                    <Minus size={12} />
-                                  </button>
-                                  <span className="font-medium w-8 text-center">
-                                    {Math.floor(elevenQuantity / 11)}
-                                  </span>
-                                  <button
-                                    onClick={() => addToCart(product.id, 'eleven')}
-                                    disabled={product.stock < 11}
-                                    className="p-1 bg-green-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                                  >
-                                    <Plus size={12} />
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Vente par bac - EN DERNIER */}
-                            {product.stock >= product.packSize && (
-                              <div className="flex items-center justify-between p-2 bg-blue-50 rounded">
-                                <div className="text-sm">
-                                  <span className="font-medium">Bac de {product.packSize}</span>
-                                  <span className="text-blue-600 ml-2 font-semibold">{formatCurrency(product.pricePerPack)}</span>
-                                  <div className="text-xs text-gray-500">
-                                    ({formatCurrency(product.pricePerPack / product.packSize)}/unité)
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <button
-                                    onClick={() => removeFromCart(product.id, 'pack')}
-                                    disabled={!cart[`${product.id}-pack`]}
-                                    className="p-1 bg-red-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                                  >
-                                    <Minus size={12} />
-                                  </button>
-                                  <span className="font-medium w-8 text-center">
-                                    {Math.floor(packQuantity / product.packSize)}
-                                  </span>
-                                  <button
-                                    onClick={() => addToCart(product.id, 'pack')}
-                                    disabled={product.stock < product.packSize}
-                                    className="p-1 bg-blue-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                                  >
-                                    <Plus size={12} />
-                                  </button>
-                                </div>
-                              </div>
+                      {/* Zone de commande principale - À l'unité */}
+                      <div className="mb-3">
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm">
+                            <span className="font-medium">Unité</span>
+                            {unitQuantity > 0 && (
+                              <span className="ml-2 text-orange-600 font-bold">x{unitQuantity}</span>
                             )}
                           </div>
-                        ) : (
-                          <div className="flex items-center justify-between mt-2">
-                            <button
-                              onClick={() => removeFromCart(product.id, 'unit')}
-                              disabled={!cart[`${product.id}-unit`] || isOutOfStock}
-                              className="p-1 bg-red-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
-                            >
-                              <Minus size={16} />
-                            </button>
-                            <span className="font-medium">{unitQuantity}</span>
+                          <div className="flex items-center space-x-2">
+                            {/* Bouton - petit */}
+                            {unitQuantity > 0 && (
+                              <button
+                                onClick={() => removeFromCart(product.id, 'unit')}
+                                className="w-6 h-6 bg-red-500 text-white rounded-full text-xs flex items-center justify-center active:scale-95 transition-transform"
+                              >
+                                -
+                              </button>
+                            )}
+                            {/* Bouton + GRAND */}
                             <button
                               onClick={() => addToCart(product.id, 'unit')}
                               disabled={isOutOfStock || availableStock <= 0}
-                              className="p-1 bg-green-500 text-white rounded disabled:bg-gray-300 active:scale-95 transition-transform"
+                              className="w-12 h-12 bg-green-500 text-white rounded-lg text-xl font-bold disabled:bg-gray-300 active:scale-95 transition-transform shadow-md"
                             >
-                              <Plus size={16} />
+                              +
                             </button>
                           </div>
-                        )}
+                        </div>
                       </div>
-                    );
-                  })}
-                </div>
+
+                      {/* Options de vente pour les produits mixtes */}
+                      {product.stockType === 'mixed' && !isOutOfStock && (
+                        <div className="space-y-2 border-t pt-2">
+                          {/* Vente par 11 (mètre) */}
+                          {product.stock >= 11 && (
+                            <div className="bg-green-50 p-2 rounded">
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs">
+                                  <div className="font-medium">Mètre (11)</div>
+                                  <div className="text-green-600 font-semibold">{formatCurrency(product.pricePer11)}</div>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                  {Math.floor(elevenQuantity / 11) > 0 && (
+                                    <button
+                                      onClick={() => removeFromCart(product.id, 'eleven')}
+                                      className="w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center active:scale-95 transition-transform"
+                                    >
+                                      -
+                                    </button>
+                                  )}
+                                  {Math.floor(elevenQuantity / 11) > 0 && (
+                                    <span className="text-xs font-bold text-green-700 min-w-[15px] text-center">
+                                      {Math.floor(elevenQuantity / 11)}
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={() => addToCart(product.id, 'eleven')}
+                                    className="w-8 h-8 bg-green-500 text-white rounded text-sm font-bold active:scale-95 transition-transform"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Vente par bac */}
+                          {product.stock >= product.packSize && (
+                            <div className="bg-blue-50 p-2 rounded">
+                              <div className="flex items-center justify-between">
+                                <div className="text-xs">
+                                  <div className="font-medium">Bac {product.packSize}</div>
+                                  <div className="text-blue-600 font-semibold">{formatCurrency(product.pricePerPack)}</div>
+                                </div>
+                                <div className="flex items-center space-x-1">
+                                  {Math.floor(packQuantity / product.packSize) > 0 && (
+                                    <button
+                                      onClick={() => removeFromCart(product.id, 'pack')}
+                                      className="w-5 h-5 bg-red-500 text-white rounded-full text-xs flex items-center justify-center active:scale-95 transition-transform"
+                                    >
+                                      -
+                                    </button>
+                                  )}
+                                  {Math.floor(packQuantity / product.packSize) > 0 && (
+                                    <span className="text-xs font-bold text-blue-700 min-w-[15px] text-center">
+                                      {Math.floor(packQuantity / product.packSize)}
+                                    </span>
+                                  )}
+                                  <button
+                                    onClick={() => addToCart(product.id, 'pack')}
+                                    className="w-8 h-8 bg-blue-500 text-white rounded text-sm font-bold active:scale-95 transition-transform"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            )}
+          </div>
         </div>
 
+        {/* Panier fixe en bas */}
         {Object.keys(cart).length > 0 && (
           <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4">
             <div className="flex items-center justify-between mb-2">
@@ -1765,6 +2046,69 @@ console.log('🔍 Rendu avec screen:', currentScreen);
             </div>
           </div>
         )}
+
+        {/* Modal de confirmation */}
+        <Modal
+          isOpen={orderConfirmation.show}
+          onClose={() => setOrderConfirmation({ show: false, member: null, items: [], total: 0 })}
+          title="Confirmer la commande"
+        >
+          <div className="space-y-4">
+            {orderConfirmation.member && (
+              <>
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <h3 className="font-semibold text-blue-800">
+                    Commande de {orderConfirmation.member.name}
+                  </h3>
+                  <p className="text-sm text-blue-600">
+                    Solde actuel: {formatCurrency(orderConfirmation.member.balance)}
+                  </p>
+                  <p className="text-sm text-blue-600">
+                    Nouveau solde: {formatCurrency(orderConfirmation.member.balance - orderConfirmation.total)}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <h4 className="font-medium text-gray-700">Articles commandés :</h4>
+                  {orderConfirmation.items.map((item, index) => (
+                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
+                      <div>
+                        <span className="font-medium">{item.quantity}x {item.productName}</span>
+                      </div>
+                      <span className="font-semibold text-green-600">
+                        {formatCurrency(item.total)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bg-green-50 p-3 rounded-lg">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-green-800">Total :</span>
+                    <span className="text-xl font-bold text-green-600">
+                      {formatCurrency(orderConfirmation.total)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex space-x-3 pt-4">
+                  <button
+                    onClick={() => setOrderConfirmation({ show: false, member: null, items: [], total: 0 })}
+                    className="flex-1 p-3 bg-gray-500 text-white rounded-lg active:scale-95 transition-transform"
+                  >
+                    Retour à la commande
+                  </button>
+                  <button
+                    onClick={confirmOrder}
+                    className="flex-1 p-3 bg-green-500 text-white rounded-lg active:scale-95 transition-transform"
+                  >
+                    Valider la commande
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        </Modal>
       </div>
     );
   }
@@ -1789,7 +2133,7 @@ console.log('🔍 Rendu avec screen:', currentScreen);
                     <div className="flex items-start justify-between mb-2">
                       <div>
                         <h3 className="font-medium">{order.memberName}</h3>
-                        <p className="text-sm text-gray-600">{formatDate(order.timestamp)}</p>
+                        <p className="text-sm text-gray-600">{formatDateTime(order.timestamp)}</p>
                       </div>
                       <div className="text-right">
                         {order.type === 'repayment' || order.type === 'recharge' ? (
@@ -3110,7 +3454,7 @@ console.log('🔍 Rendu avec screen:', currentScreen);
     };
 
     const { cashTotal, accountTotal, stockValue, grandTotal } = calculateTotals();
-    
+
     const handleNotificationToggle = async () => {
       if (permission === 'granted') {
         alert('🔔 Les notifications sont déjà activées !\n\nPour les désactiver, allez dans les paramètres de votre navigateur.');
@@ -4295,6 +4639,20 @@ console.log('🔍 Rendu avec screen:', currentScreen);
               </div>
             </div>
           </button>
+          <button
+            onClick={() => navigateTo('settings-popular')}
+            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center space-x-3">
+              <span className="text-purple-500 text-2xl">⭐</span>
+              <div className="text-left">
+                <h3 className="font-semibold">Produits Populaires</h3>
+                <p className="text-gray-600 text-sm">
+                  Personnaliser l'affichage rapide
+                </p>
+              </div>
+            </div>
+          </button>
 
           <button
             onClick={() => navigateTo('settings-goal')}
@@ -4504,6 +4862,7 @@ console.log('🔍 Rendu avec screen:', currentScreen);
                 className="w-full p-3 border rounded-lg"
               >
                 <option value="Boissons">Boissons</option>
+                <option value="Bière">Bière</option>
                 <option value="Alcool">Alcool</option>
                 <option value="Snacks">Snacks</option>
                 <option value="Nourriture">Nourriture</option>
@@ -5037,8 +5396,9 @@ console.log('🔍 Rendu avec screen:', currentScreen);
     );
   }
 
+
   if (currentScreen === 'settings-rate') {
-    
+
 
     const updateRate = () => {
       const rate = parseFloat(newRate);
@@ -5707,6 +6067,175 @@ console.log('🔍 Rendu avec screen:', currentScreen);
             </button>
           </div>
         </Modal>
+      </div>
+    );
+  }
+
+  if (currentScreen === 'settings-popular') {
+
+    if (tempPopularProducts.length === 0 && popularProducts.length > 0) {
+      console.log('Initialisation de tempPopularProducts avec:', popularProducts);
+      setTempPopularProducts([...popularProducts]);
+    }
+    const addPopularProduct = (productName) => {
+      if (!tempPopularProducts.includes(productName) && tempPopularProducts.length < 6) {
+        setTempPopularProducts([...tempPopularProducts, productName]);
+      }
+    };
+
+    const removePopularProduct = (productName) => {
+      setTempPopularProducts(tempPopularProducts.filter(name => name !== productName));
+    };
+
+    const savePopularProducts = async () => {
+      try {
+        console.log('Sauvegarde des produits populaires :', tempPopularProducts);
+
+        // Sauvegarder la nouvelle configuration
+        await saveToFirebase('popularProducts', {
+          products: tempPopularProducts,
+          lastUpdated: new Date().toISOString()
+        });
+
+        // Mettre à jour l'état local immédiatement
+        setPopularProducts(tempPopularProducts);
+
+        alert('✅ Produits populaires mis à jour !');
+        navigateTo('settings');
+      } catch (error) {
+        console.error('Erreur sauvegarde produits populaires:', error);
+        alert('Erreur lors de la sauvegarde');
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header title="Produits Populaires" onBack={() => navigateTo('settings')} />
+
+        <div className="p-4 space-y-6">
+          {/* Explication */}
+          <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+            <h3 className="font-semibold text-blue-800 mb-2">⭐ Affichage Rapide</h3>
+            <p className="text-sm text-blue-700">
+              Sélectionnez jusqu'à 6 produits qui apparaîtront en premier lors des commandes
+              pour un accès rapide.
+            </p>
+          </div>
+
+          {/* Produits actuellement populaires */}
+          <div className="bg-white rounded-lg shadow-sm p-4">
+            <h3 className="font-semibold mb-3">
+              🎯 Produits populaires actuels ({tempPopularProducts.length}/6)
+            </h3>
+
+            {tempPopularProducts.length === 0 ? (
+              <p className="text-gray-500 text-center py-4">
+                Aucun produit sélectionné
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {tempPopularProducts.map((productName, index) => {
+                  const product = products.find(p => p.name === productName);
+                  return (
+                    <div key={productName} className="flex items-center justify-between p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                      <div className="flex items-center space-x-3">
+                        <div className="bg-yellow-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold">
+                          {index + 1}
+                        </div>
+                        <div>
+                          <h4 className="font-medium">{productName}</h4>
+                          {product && (
+                            <p className="text-sm text-gray-600">
+                              {formatCurrency(product.price)} - Stock: {product.stock}
+                            </p>
+                          )}
+                          {!product && (
+                            <p className="text-sm text-red-600">⚠️ Produit introuvable</p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => removePopularProduct(productName)}
+                        className="p-2 text-red-500 hover:bg-red-50 rounded-full active:scale-95 transition-transform"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Ajouter des produits */}
+          {tempPopularProducts.length < 6 && (
+            <div className="bg-white rounded-lg shadow-sm p-4">
+              <h3 className="font-semibold mb-3">
+                ➕ Ajouter des produits ({6 - tempPopularProducts.length} places restantes)
+              </h3>
+
+              <div className="space-y-3">
+                {products
+                  .filter(product => !tempPopularProducts.includes(product.name))
+                  .sort((a, b) => a.name.localeCompare(b.name))
+                  .map(product => (
+                    <div key={product.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex-1">
+                        <h4 className="font-medium">{product.name}</h4>
+                        <div className="flex items-center space-x-3 text-sm text-gray-600">
+                          <span>{formatCurrency(product.price)}</span>
+                          <span>•</span>
+                          <span>{product.category}</span>
+                          <span>•</span>
+                          <span className={product.stock > 0 ? 'text-green-600' : 'text-red-600'}>
+                            Stock: {product.stock}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => addPopularProduct(product.name)}
+                        disabled={tempPopularProducts.length >= 6}
+                        className="p-2 bg-green-500 text-white rounded-full hover:bg-green-600 disabled:bg-gray-300 active:scale-95 transition-transform"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Boutons d'action */}
+          <div className="flex space-x-3">
+            <button
+              onClick={() => {
+                setTempPopularProducts([...popularProducts]);
+                navigateTo('settings');
+              }}
+              className="flex-1 p-3 bg-gray-500 text-white rounded-lg active:scale-95 transition-transform"
+            >
+              Annuler
+            </button>
+            <button
+              onClick={savePopularProducts}
+              disabled={JSON.stringify(tempPopularProducts) === JSON.stringify(popularProducts)}
+              className="flex-1 p-3 bg-purple-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
+            >
+              💾 Sauvegarder
+            </button>
+          </div>
+
+          {/* Conseils */}
+          <div className="bg-green-50 border border-green-200 p-4 rounded-lg">
+            <h4 className="font-semibold text-green-800 mb-2">💡 Conseils :</h4>
+            <div className="text-sm text-green-700 space-y-1">
+              <p>• Choisissez vos produits les plus vendus</p>
+              <p>• Mélangez différentes catégories (bières, sodas, snacks)</p>
+              <p>• Vérifiez que les produits sont en stock</p>
+              <p>• L'ordre dans la liste = ordre d'affichage</p>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
