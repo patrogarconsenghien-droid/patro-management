@@ -144,6 +144,7 @@ const PatroApp = () => {
   const [tempPopularProducts, setTempPopularProducts] = useState([]);
   const [popularProducts, setPopularProducts] = useState([]);
   const { isSupported, permission, requestPermission } = useNotifications(); // ✅ Maintenant ici
+  const [selectedDay, setSelectedDay] = useState(null);
 
   // NOUVELLE FONCTION : Créer un lien Google Calendar
   const createGoogleCalendarLink = (job) => {
@@ -3937,6 +3938,7 @@ ${job.registeredBros.map(reg => {
             </button>
           </div>
 
+
           {/* Navigation vers autres sections */}
           <div className="space-y-3">
             <button
@@ -3951,6 +3953,19 @@ ${job.registeredBros.map(reg => {
                 </div>
               </div>
             </button>
+
+            <button
+            onClick={() => navigateTo('finance-bar-report')}
+            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center space-x-3">
+              <Beer className="text-yellow-500" size={24} />
+              <div className="text-left">
+                <h3 className="font-semibold">Rapport Bar</h3>
+                <p className="text-gray-600 text-sm">Chiffre d'affaires par jour d'ouverture</p>
+              </div>
+            </div>
+          </button>
 
             <button
               onClick={() => navigateTo('finance-history')}
@@ -4391,6 +4406,302 @@ ${job.registeredBros.map(reg => {
       </div>
     );
   }
+
+  if (currentScreen === 'finance-bar-report') {
+  // Fonction pour calculer les jours d'ouverture du bar
+  const calculateBarOpenDays = () => {
+    const dayGroups = {};
+    
+    // Grouper les commandes par jour (10h-10h le lendemain)
+    orders.filter(order => order.type === 'order').forEach(order => {
+      const orderDate = new Date(order.timestamp);
+      
+// Calculer le jour de service (de 10h à 10h le lendemain)
+let serviceDate;
+if (orderDate.getHours() < 10) {
+  // Si avant 10h, c'est la continuation de la soirée de la veille
+  serviceDate = new Date(orderDate);
+  serviceDate.setDate(serviceDate.getDate() ); // On garde cette ligne
+} else {
+  // Si après 10h, c'est le jour actuel
+  serviceDate = new Date(orderDate);
+}
+      
+      const dayKey = serviceDate.toISOString().split('T')[0];
+      
+      if (!dayGroups[dayKey]) {
+        dayGroups[dayKey] = {
+          date: dayKey,
+          orders: [],
+          totalRevenue: 0,
+          totalItems: 0,
+          totalBottles: 0
+        };
+      }
+      
+      dayGroups[dayKey].orders.push(order);
+      dayGroups[dayKey].totalRevenue += order.amount || 0;
+      
+      // Compter les articles et bouteilles
+      if (order.items) {
+        order.items.forEach(item => {
+          const quantity = item.quantity || 0;
+          dayGroups[dayKey].totalItems += quantity;
+          
+          // Considérer comme bouteille si c'est dans les catégories boissons
+          const product = products.find(p => p.id === item.productId);
+          if (product && ['Boissons', 'Bière', 'Alcool'].includes(product.category)) {
+            dayGroups[dayKey].totalBottles += quantity;
+          }
+        });
+      }
+    });
+    
+    // Filtrer les jours avec plus de 8 bouteilles (bar ouvert)
+    return Object.values(dayGroups)
+      .filter(day => day.totalBottles > 8)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+  };
+
+  const openDays = calculateBarOpenDays();
+  
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header title="Rapport Bar" onBack={() => navigateTo('finance')} />
+
+      <div className="p-4 space-y-6">
+        {/* Statistiques globales */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4 text-center">🍺 Statistiques Bar</h2>
+          
+          <div className="grid grid-cols-2 gap-4 mb-4">
+            <div className="text-center">
+              <div className="bg-blue-100 p-3 rounded-lg">
+                <p className="text-2xl font-bold text-blue-600">{openDays.length}</p>
+                <p className="text-sm text-blue-700">Jours d'ouverture</p>
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="bg-green-100 p-3 rounded-lg">
+                <p className="text-2xl font-bold text-green-600">
+                  {formatCurrency(openDays.reduce((sum, day) => sum + day.totalRevenue, 0))}
+                </p>
+                <p className="text-sm text-green-700">CA Total Bar</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center">
+              <div className="bg-orange-100 p-3 rounded-lg">
+                <p className="text-xl font-bold text-orange-600">
+                  {openDays.reduce((sum, day) => sum + day.totalItems, 0)}
+                </p>
+                <p className="text-xs text-orange-700">Articles vendus</p>
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="bg-purple-100 p-3 rounded-lg">
+                <p className="text-xl font-bold text-purple-600">
+                  {openDays.reduce((sum, day) => sum + day.totalBottles, 0)}
+                </p>
+                <p className="text-xs text-purple-700">Bouteilles vendues</p>
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="bg-yellow-100 p-3 rounded-lg">
+                <p className="text-xl font-bold text-yellow-600">
+                  {openDays.length > 0 ? formatCurrency(openDays.reduce((sum, day) => sum + day.totalRevenue, 0) / openDays.length) : '0€'}
+                </p>
+                <p className="text-xs text-yellow-700">CA moyen/jour</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Liste des jours d'ouverture */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">📅 Jours d'Ouverture</h2>
+          
+          {openDays.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <div className="text-4xl mb-2">🍺</div>
+              <p>Aucun jour d'ouverture détecté</p>
+              <p className="text-sm mt-1">Critère: plus de 8 bouteilles vendues entre 10h-10h</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {openDays.map(day => (
+                <button
+                  key={day.date}
+                  onClick={() => setSelectedDay(day)}
+                  className="w-full p-4 bg-gray-50 hover:bg-blue-50 rounded-lg text-left active:scale-95 transition-transform"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-gray-800">
+                        {new Date(day.date).toLocaleDateString('fr-FR', { 
+                          weekday: 'long', 
+                          year: 'numeric', 
+                          month: 'long', 
+                          day: 'numeric' 
+                        })}
+                      </h3>
+                      <div className="flex items-center space-x-4 mt-1 text-sm text-gray-600">
+                        <span>🛍️ {day.totalItems} articles</span>
+                        <span>🍺 {day.totalBottles} bouteilles</span>
+                        <span>👥 {day.orders.length} commandes</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-bold text-green-600">
+                        {formatCurrency(day.totalRevenue)}
+                      </p>
+                      <p className="text-xs text-gray-500">CA du jour</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Conseils */}
+        <div className="bg-gradient-to-r from-blue-100 to-indigo-100 rounded-xl p-4">
+          <h3 className="font-semibold text-blue-800 mb-2">💡 Analyse</h3>
+          <div className="text-sm text-blue-700 space-y-1">
+            {openDays.length > 0 ? (
+              <>
+                <p>• Le bar a été ouvert {openDays.length} jour(s) au total</p>
+                <p>• Meilleur jour: {(() => {
+                  const bestDay = openDays.reduce((best, day) => 
+                    day.totalRevenue > best.totalRevenue ? day : best
+                  );
+                  return `${formatDate(bestDay.date)} (${formatCurrency(bestDay.totalRevenue)})`;
+                })()}</p>
+                <p>• Critère d'ouverture: minimum 8 bouteilles vendues par jour</p>
+              </>
+            ) : (
+              <p>• Aucune activité bar détectée selon les critères (8+ bouteilles/jour)</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal détail du jour */}
+      <Modal
+        isOpen={selectedDay !== null}
+        onClose={() => setSelectedDay(null)}
+        title={selectedDay ? `Détail du ${formatDate(selectedDay.date)}` : ''}
+      >
+        {selectedDay && (
+          <div className="space-y-4">
+            {/* Résumé du jour */}
+            <div className="bg-blue-50 p-3 rounded-lg">
+              <h4 className="font-semibold text-blue-800 mb-2">
+                📊 Résumé du {new Date(selectedDay.date).toLocaleDateString('fr-FR', { 
+                  weekday: 'long', 
+                  day: 'numeric', 
+                  month: 'long' 
+                })}
+              </h4>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="bg-white p-2 rounded">
+                  <p className="font-medium text-green-600">{formatCurrency(selectedDay.totalRevenue)}</p>
+                  <p className="text-gray-600">Chiffre d'affaires</p>
+                </div>
+                <div className="bg-white p-2 rounded">
+                  <p className="font-medium text-blue-600">{selectedDay.orders.length}</p>
+                  <p className="text-gray-600">Commandes</p>
+                </div>
+                <div className="bg-white p-2 rounded">
+                  <p className="font-medium text-purple-600">{selectedDay.totalItems}</p>
+                  <p className="text-gray-600">Articles vendus</p>
+                </div>
+                <div className="bg-white p-2 rounded">
+                  <p className="font-medium text-orange-600">{selectedDay.totalBottles}</p>
+                  <p className="text-gray-600">Bouteilles</p>
+                </div>
+              </div>
+            </div>
+{/* Détail des ventes */}
+<div>
+  <h4 className="font-semibold text-gray-800 mb-3">🛒 Détail des Ventes</h4>
+  <div className="max-h-64 overflow-y-auto space-y-2">
+    {selectedDay.orders
+      .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+      .map(order => (
+      <div key={order.id} className="bg-gray-50 p-3 rounded-lg">
+        <div className="flex items-center justify-between mb-2">
+          <span className="font-medium">{order.memberName}</span>
+          <span className="font-semibold text-green-600">
+            {formatCurrency(order.amount)}
+          </span>
+        </div>
+        <div className="text-sm text-gray-600">
+          <p className="mb-1">{new Date(order.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
+          {order.items && order.items.length > 0 && (
+            <div className="space-y-1">
+              {order.items.map((item, idx) => (
+                <div key={idx} className="flex justify-between">
+                  <span>{item.quantity}x {item.productName}</span>
+                  <span>{formatCurrency(item.total)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
+            {/* Analyse des produits */}
+            <div>
+              <h4 className="font-semibold text-gray-800 mb-3">📈 Top Produits du Jour</h4>
+              <div className="space-y-2">
+                {(() => {
+                  const productStats = {};
+                  selectedDay.orders.forEach(order => {
+                    if (order.items) {
+                      order.items.forEach(item => {
+                        if (!productStats[item.productName]) {
+                          productStats[item.productName] = {
+                            name: item.productName,
+                            quantity: 0,
+                            revenue: 0
+                          };
+                        }
+                        productStats[item.productName].quantity += item.quantity;
+                        productStats[item.productName].revenue += item.total;
+                      });
+                    }
+                  });
+
+                  return Object.values(productStats)
+                    .sort((a, b) => b.quantity - a.quantity)
+                    .slice(0, 5)
+                    .map((product, idx) => (
+                      <div key={product.name} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                        <div className="flex items-center space-x-2">
+                          <span className="text-sm font-bold text-gray-500">#{idx + 1}</span>
+                          <span className="font-medium">{product.name}</span>
+                        </div>
+                        <div className="text-right text-sm">
+                          <p className="font-semibold">{product.quantity} vendus</p>
+                          <p className="text-green-600">{formatCurrency(product.revenue)}</p>
+                        </div>
+                      </div>
+                    ));
+                })()}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
 
 
   if (currentScreen === 'finance-graph') {
