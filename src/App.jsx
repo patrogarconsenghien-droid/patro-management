@@ -147,6 +147,7 @@ const PatroApp = () => {
   const [popularProducts, setPopularProducts] = useState([]);
   const { isSupported, permission, requestPermission } = useNotifications(); // ✅ Maintenant ici
   const [selectedDay, setSelectedDay] = useState(null);
+  const [salesStatsSortBy, setSalesStatsSortBy] = useState('quantity');
 
   // NOUVELLE FONCTION : Créer un lien Google Calendar
   const createGoogleCalendarLink = (job) => {
@@ -249,48 +250,44 @@ ${job.registeredBros.map(reg => {
     let unsubscribeFinancialTransactions = null;
     let unsubscribeFinancialGoals = null;
     let unsubscribePopularProducts = null;
+    let unsubscribeBarSettings = null;
 
-    const setupListeners = async () => {
-      unsubscribeMembers = await loadFromFirebase('members', setMembers);
-      unsubscribeBros = await loadFromFirebase('bros', setBros);
-      unsubscribeProducts = await loadFromFirebase('products', setProducts);
-      unsubscribeOrders = await loadFromFirebase('orders', setOrders);
-      unsubscribeJobs = await loadFromFirebase('jobs', setJobs);
-      unsubscribeStockMovements = await loadFromFirebase('stockMovements', setStockMovements);
-      unsubscribeScheduledJobs = await loadFromFirebase('scheduledJobs', setScheduledJobs);
-      unsubscribeFinancialTransactions = await loadFromFirebase('financialTransactions', setFinancialTransactions);
-      unsubscribeFinancialGoals = await loadFromFirebase('financialGoals', (goals) => {
-        if (goals && goals.length > 0) {
-          setFinancialGoal(goals[0]); // Prendre le premier objectif actif
-        }
+  const setupListeners = async () => {
+  unsubscribeMembers = await loadFromFirebase('members', setMembers);
+  unsubscribeBros = await loadFromFirebase('bros', setBros);
+  unsubscribeProducts = await loadFromFirebase('products', setProducts);
+  unsubscribeOrders = await loadFromFirebase('orders', setOrders);
+  unsubscribeJobs = await loadFromFirebase('jobs', setJobs);
+  unsubscribeStockMovements = await loadFromFirebase('stockMovements', setStockMovements);
+  unsubscribeScheduledJobs = await loadFromFirebase('scheduledJobs', setScheduledJobs);
+  unsubscribeFinancialTransactions = await loadFromFirebase('financialTransactions', setFinancialTransactions);
+  unsubscribeFinancialGoals = await loadFromFirebase('financialGoals', (goals) => {
+    if (goals && goals.length > 0) {
+      setFinancialGoal(goals[0]);
+    }
+  });
+  unsubscribePopularProducts = await loadFromFirebase('popularProducts', (popular) => {
+    if (popular && popular.length > 0) {
+      const sortedPopular = popular.sort((a, b) => {
+        const dateA = new Date(a.lastUpdated || a.createdAt || 0);
+        const dateB = new Date(b.lastUpdated || b.createdAt || 0);
+        return dateB - dateA;
       });
-      unsubscribePopularProducts = await loadFromFirebase('popularProducts', (popular) => {
-        if (popular && popular.length > 0) {
-          // Trier par date de mise à jour pour prendre le plus récent
-          const sortedPopular = popular.sort((a, b) => {
-            const dateA = new Date(a.lastUpdated || a.createdAt || 0);
-            const dateB = new Date(b.lastUpdated || b.createdAt || 0);
-            return dateB - dateA; // Plus récent en premier
-          });
-
-          console.log('Produits populaires chargés :', sortedPopular[0].products);
-          setPopularProducts(sortedPopular[0].products || ['Jupiler', 'Coca', 'Stella', 'Fanta']);
-        } else {
-          // Valeurs par défaut si aucun document
-          console.log('Aucun produit populaire trouvé, utilisation des valeurs par défaut');
-          setPopularProducts(['Jupiler', 'Coca', 'Stella', 'Fanta']);
-        }
-      });
-      // Charger le seuil d'ouverture du bar
-      const unsubscribeBarSettings = await loadFromFirebase('barSettings', (settings) => {
-        if (settings && settings.length > 0) {
-          const latestSettings = settings.sort((a, b) =>
-            new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
-          )[0];
-          setBarOpenThreshold(latestSettings.openThreshold || 8);
-        }
-      });
-    };
+      setPopularProducts(sortedPopular[0].products || ['Jupiler', 'Coca', 'Stella', 'Fanta']);
+    } else {
+      setPopularProducts(['Jupiler', 'Coca', 'Stella', 'Fanta']);
+    }
+  });
+  // Charger le seuil d'ouverture du bar
+  unsubscribeBarSettings = await loadFromFirebase('barSettings', (settings) => {
+    if (settings && settings.length > 0) {
+      const latestSettings = settings.sort((a, b) =>
+        new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
+      )[0];
+      setBarOpenThreshold(latestSettings.openThreshold || 8);
+    }
+  });
+};
 
 
 
@@ -3764,20 +3761,7 @@ ${job.registeredBros.map(reg => {
         }
       });
 
-      {/* Après le bouton "Historique Complet" */ }
-      <button
-        onClick={() => navigateTo('finance-scheduled-income')}
-        className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
-      >
-        <div className="flex items-center space-x-3">
-          <Wrench className="text-yellow-500" size={24} />
-          <div className="text-left">
-            <h3 className="font-semibold">Revenus Futurs Boulots</h3>
-            <p className="text-gray-600 text-sm">Argent des boulots programmés</p>
-          </div>
-        </div>
-      </button>
-
+     
       return {
         cashTotal,
         accountTotal,
@@ -4247,6 +4231,30 @@ ${job.registeredBros.map(reg => {
                 </div>
               </div>
             </button>
+            <button
+  onClick={() => navigateTo('finance-scheduled-income')}
+  className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+>
+  <div className="flex items-center space-x-3">
+    <Wrench className="text-yellow-500" size={24} />
+    <div className="text-left">
+      <h3 className="font-semibold">Revenus Futurs Boulots</h3>
+      <p className="text-gray-600 text-sm">Argent des boulots programmés</p>
+    </div>
+  </div>
+</button>
+<button
+  onClick={() => navigateTo('finance-sales-stats')}
+  className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+>
+  <div className="flex items-center space-x-3">
+    <ShoppingCart className="text-yellow-500" size={24} />
+    <div className="text-left">
+      <h3 className="font-semibold">Statistiques de Vente</h3>
+      <p className="text-gray-600 text-sm">Total vendu par produit</p>
+    </div>
+  </div>
+</button>
           </div>
         </div>
 
@@ -4331,6 +4339,7 @@ ${job.registeredBros.map(reg => {
                 </div>
               </div>
             )}
+            
 
             <button
               onClick={processBankDeposit}
@@ -4544,11 +4553,222 @@ ${job.registeredBros.map(reg => {
           </div>
         </Modal>
       </div>
+      
 
 
     );
 
   }
+  if (currentScreen === 'finance-sales-stats') {
+  // Calculer les statistiques de vente par produit
+  const calculateSalesStats = () => {
+    const productStats = {};
+
+    // Parcourir toutes les commandes
+    orders
+      .filter(order => order.type === 'order' && order.items)
+      .forEach(order => {
+        order.items.forEach(item => {
+          const productName = item.productName;
+          
+          if (!productStats[productName]) {
+            productStats[productName] = {
+              name: productName,
+              totalQuantity: 0,
+              totalRevenue: 0,
+              orderCount: 0,
+              averagePrice: 0
+            };
+          }
+
+          productStats[productName].totalQuantity += item.quantity || 0;
+          productStats[productName].totalRevenue += item.total || 0;
+          productStats[productName].orderCount += 1;
+        });
+      });
+
+    // Calculer le prix moyen pour chaque produit
+    Object.values(productStats).forEach(stat => {
+      stat.averagePrice = stat.totalQuantity > 0 ? stat.totalRevenue / stat.totalQuantity : 0;
+    });
+
+    // Convertir en array et trier
+    const statsArray = Object.values(productStats);
+    
+    return {
+      byQuantity: [...statsArray].sort((a, b) => b.totalQuantity - a.totalQuantity),
+      byRevenue: [...statsArray].sort((a, b) => b.totalRevenue - a.totalRevenue),
+      totalProducts: statsArray.length,
+      totalQuantitySold: statsArray.reduce((sum, stat) => sum + stat.totalQuantity, 0),
+      totalRevenue: statsArray.reduce((sum, stat) => sum + stat.totalRevenue, 0)
+    };
+  };
+
+  const { byQuantity, byRevenue, totalProducts, totalQuantitySold, totalRevenue } = calculateSalesStats();
+
+  const currentStats = salesStatsSortBy === 'quantity' ? byQuantity : byRevenue;
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Header title="Statistiques de Vente" onBack={() => navigateTo('finance')} />
+
+      <div className="p-4 space-y-6">
+        {/* Résumé global */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4 text-center">🛍️ Résumé des Ventes</h2>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="text-center">
+              <div className="bg-blue-100 p-3 rounded-lg">
+                <p className="text-2xl font-bold text-blue-600">{totalProducts}</p>
+                <p className="text-sm text-blue-700">Produits vendus</p>
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="bg-green-100 p-3 rounded-lg">
+                <p className="text-2xl font-bold text-green-600">{totalQuantitySold}</p>
+                <p className="text-sm text-green-700">Articles vendus</p>
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="bg-purple-100 p-3 rounded-lg">
+                <p className="text-2xl font-bold text-purple-600">{formatCurrency(totalRevenue)}</p>
+                <p className="text-sm text-purple-700">CA total</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Filtres de tri */}
+        <div className="bg-white rounded-lg shadow-sm p-4">
+          <h3 className="font-semibold mb-3">📊 Trier par :</h3>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => setSalesStatsSortBy('quantity')}
+              className={`flex-1 p-3 rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                salesStatsSortBy === 'quantity'
+                  ? 'bg-blue-500 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              📦 Quantité vendue
+            </button>
+            <button
+              onClick={() => setSortBy('revenue')}
+              className={`flex-1 p-3 rounded-lg text-sm font-medium active:scale-95 transition-transform ${
+                salesStatsSortBy  === 'revenue'
+                  ? 'bg-green-500 text-white'
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              💰 Chiffre d'affaires
+            </button>
+          </div>
+        </div>
+
+        {/* Liste des produits */}
+        <div className="bg-white rounded-xl shadow-lg p-6">
+          <h2 className="text-xl font-bold text-gray-800 mb-4">
+            📋 Classement {salesStatsSortBy === 'quantity' ? 'par Quantité' : 'par CA'}
+          </h2>
+
+          {currentStats.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <ShoppingCart size={48} className="mx-auto mb-2 opacity-50" />
+              <p>Aucune vente enregistrée</p>
+              <p className="text-sm mt-1">Commencez à vendre pour voir les statistiques</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {currentStats.map((stat, index) => {
+                const currentProduct = products.find(p => p.name === stat.name);
+                const stockStatus = currentProduct ? getStockStatus(currentProduct) : null;
+
+                return (
+                  <div key={stat.name} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center space-x-4">
+                      {/* Position */}
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                        index === 0 ? 'bg-yellow-500' :
+                        index === 1 ? 'bg-gray-400' :
+                        index === 2 ? 'bg-orange-600' : 'bg-gray-300'
+                      }`}>
+                        {index + 1}
+                      </div>
+
+                      {/* Info produit */}
+                      <div>
+                        <h4 className="font-semibold text-gray-800">{stat.name}</h4>
+                        <div className="flex items-center space-x-3 text-sm">
+                          <span className="text-blue-600">
+                            📦 {stat.totalQuantity} vendus
+                          </span>
+                          <span className="text-green-600">
+                            💰 {formatCurrency(stat.totalRevenue)}
+                          </span>
+                          <span className="text-purple-600">
+                            📊 {stat.orderCount} commandes
+                          </span>
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          Prix moyen: {formatCurrency(stat.averagePrice)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Stock actuel */}
+                    <div className="text-right">
+                      {currentProduct ? (
+                        <div className={`px-3 py-1 rounded-full text-sm font-medium ${stockStatus.bg} ${stockStatus.color}`}>
+                          Stock: {currentProduct.stock}
+                        </div>
+                      ) : (
+                        <div className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
+                          Produit supprimé
+                        </div>
+                      )}
+
+                      {/* Barre de progression relative */}
+                      <div className="mt-2 w-20">
+                        <div className="bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full ${
+                              salesStatsSortBy  === 'quantity' ? 'bg-blue-500' : 'bg-green-500'
+                            }`}
+                            style={{
+                              width: `${
+                                salesStatsSortBy  === 'quantity'
+                                  ? (stat.totalQuantity / currentStats[0].totalQuantity) * 100
+                                  : (stat.totalRevenue / currentStats[0].totalRevenue) * 100
+                              }%`
+                            }}
+                          ></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Conseils */}
+        {currentStats.length > 0 && (
+          <div className="bg-gradient-to-r from-blue-100 to-indigo-100 rounded-xl p-4">
+            <h3 className="font-semibold text-blue-800 mb-2">💡 Analyse</h3>
+            <div className="text-sm text-blue-700 space-y-1">
+              <p>🏆 Produit le plus vendu: <strong>{byQuantity[0]?.name}</strong> ({byQuantity[0]?.totalQuantity} unités)</p>
+              <p>💰 Produit le plus rentable: <strong>{byRevenue[0]?.name}</strong> ({formatCurrency(byRevenue[0]?.totalRevenue)})</p>
+              <p>📊 Panier moyen: <strong>{formatCurrency(totalRevenue / orders.filter(o => o.type === 'order').length || 0)}</strong></p>
+              <p>🔄 Articles par commande: <strong>{Math.round(totalQuantitySold / orders.filter(o => o.type === 'order').length || 0)}</strong></p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
   if (currentScreen === 'finance-scheduled-income') {
     // Calculer les revenus futurs des boulots programmés
