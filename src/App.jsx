@@ -252,42 +252,42 @@ ${job.registeredBros.map(reg => {
     let unsubscribePopularProducts = null;
     let unsubscribeBarSettings = null;
 
-  const setupListeners = async () => {
-  unsubscribeMembers = await loadFromFirebase('members', setMembers);
-  unsubscribeBros = await loadFromFirebase('bros', setBros);
-  unsubscribeProducts = await loadFromFirebase('products', setProducts);
-  unsubscribeOrders = await loadFromFirebase('orders', setOrders);
-  unsubscribeJobs = await loadFromFirebase('jobs', setJobs);
-  unsubscribeStockMovements = await loadFromFirebase('stockMovements', setStockMovements);
-  unsubscribeScheduledJobs = await loadFromFirebase('scheduledJobs', setScheduledJobs);
-  unsubscribeFinancialTransactions = await loadFromFirebase('financialTransactions', setFinancialTransactions);
-  unsubscribeFinancialGoals = await loadFromFirebase('financialGoals', (goals) => {
-    if (goals && goals.length > 0) {
-      setFinancialGoal(goals[0]);
-    }
-  });
-  unsubscribePopularProducts = await loadFromFirebase('popularProducts', (popular) => {
-    if (popular && popular.length > 0) {
-      const sortedPopular = popular.sort((a, b) => {
-        const dateA = new Date(a.lastUpdated || a.createdAt || 0);
-        const dateB = new Date(b.lastUpdated || b.createdAt || 0);
-        return dateB - dateA;
+    const setupListeners = async () => {
+      unsubscribeMembers = await loadFromFirebase('members', setMembers);
+      unsubscribeBros = await loadFromFirebase('bros', setBros);
+      unsubscribeProducts = await loadFromFirebase('products', setProducts);
+      unsubscribeOrders = await loadFromFirebase('orders', setOrders);
+      unsubscribeJobs = await loadFromFirebase('jobs', setJobs);
+      unsubscribeStockMovements = await loadFromFirebase('stockMovements', setStockMovements);
+      unsubscribeScheduledJobs = await loadFromFirebase('scheduledJobs', setScheduledJobs);
+      unsubscribeFinancialTransactions = await loadFromFirebase('financialTransactions', setFinancialTransactions);
+      unsubscribeFinancialGoals = await loadFromFirebase('financialGoals', (goals) => {
+        if (goals && goals.length > 0) {
+          setFinancialGoal(goals[0]);
+        }
       });
-      setPopularProducts(sortedPopular[0].products || ['Jupiler', 'Coca', 'Stella', 'Fanta']);
-    } else {
-      setPopularProducts(['Jupiler', 'Coca', 'Stella', 'Fanta']);
-    }
-  });
-  // Charger le seuil d'ouverture du bar
-  unsubscribeBarSettings = await loadFromFirebase('barSettings', (settings) => {
-    if (settings && settings.length > 0) {
-      const latestSettings = settings.sort((a, b) =>
-        new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
-      )[0];
-      setBarOpenThreshold(latestSettings.openThreshold || 8);
-    }
-  });
-};
+      unsubscribePopularProducts = await loadFromFirebase('popularProducts', (popular) => {
+        if (popular && popular.length > 0) {
+          const sortedPopular = popular.sort((a, b) => {
+            const dateA = new Date(a.lastUpdated || a.createdAt || 0);
+            const dateB = new Date(b.lastUpdated || b.createdAt || 0);
+            return dateB - dateA;
+          });
+          setPopularProducts(sortedPopular[0].products || ['Jupiler', 'Coca', 'Stella', 'Fanta']);
+        } else {
+          setPopularProducts(['Jupiler', 'Coca', 'Stella', 'Fanta']);
+        }
+      });
+      // Charger le seuil d'ouverture du bar
+      unsubscribeBarSettings = await loadFromFirebase('barSettings', (settings) => {
+        if (settings && settings.length > 0) {
+          const latestSettings = settings.sort((a, b) =>
+            new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
+          )[0];
+          setBarOpenThreshold(latestSettings.openThreshold || 8);
+        }
+      });
+    };
 
 
 
@@ -3761,7 +3761,7 @@ ${job.registeredBros.map(reg => {
         }
       });
 
-     
+
       return {
         cashTotal,
         accountTotal,
@@ -4232,29 +4232,29 @@ ${job.registeredBros.map(reg => {
               </div>
             </button>
             <button
-  onClick={() => navigateTo('finance-scheduled-income')}
-  className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
->
-  <div className="flex items-center space-x-3">
-    <Wrench className="text-yellow-500" size={24} />
-    <div className="text-left">
-      <h3 className="font-semibold">Revenus Futurs Boulots</h3>
-      <p className="text-gray-600 text-sm">Argent des boulots programmés</p>
-    </div>
-  </div>
-</button>
-<button
-  onClick={() => navigateTo('finance-sales-stats')}
-  className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
->
-  <div className="flex items-center space-x-3">
-    <ShoppingCart className="text-yellow-500" size={24} />
-    <div className="text-left">
-      <h3 className="font-semibold">Statistiques de Vente</h3>
-      <p className="text-gray-600 text-sm">Total vendu par produit</p>
-    </div>
-  </div>
-</button>
+              onClick={() => navigateTo('finance-scheduled-income')}
+              className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+            >
+              <div className="flex items-center space-x-3">
+                <Wrench className="text-yellow-500" size={24} />
+                <div className="text-left">
+                  <h3 className="font-semibold">Revenus Futurs Boulots</h3>
+                  <p className="text-gray-600 text-sm">Argent des boulots programmés</p>
+                </div>
+              </div>
+            </button>
+            <button
+              onClick={() => navigateTo('finance-sales-stats')}
+              className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+            >
+              <div className="flex items-center space-x-3">
+                <ShoppingCart className="text-yellow-500" size={24} />
+                <div className="text-left">
+                  <h3 className="font-semibold">Statistiques de Vente</h3>
+                  <p className="text-gray-600 text-sm">Total vendu par produit</p>
+                </div>
+              </div>
+            </button>
           </div>
         </div>
 
@@ -4339,7 +4339,7 @@ ${job.registeredBros.map(reg => {
                 </div>
               </div>
             )}
-            
+
 
             <button
               onClick={processBankDeposit}
@@ -4553,14 +4553,14 @@ ${job.registeredBros.map(reg => {
           </div>
         </Modal>
       </div>
-      
+
 
 
     );
 
   }
-  if (currentScreen === 'finance-sales-stats') {
-  // Calculer les statistiques de vente par produit
+if (currentScreen === 'finance-sales-stats') {
+  // Calculer les statistiques de vente par produit (regroupées)
   const calculateSalesStats = () => {
     const productStats = {};
 
@@ -4569,110 +4569,74 @@ ${job.registeredBros.map(reg => {
       .filter(order => order.type === 'order' && order.items)
       .forEach(order => {
         order.items.forEach(item => {
-          const productName = item.productName;
+          // Nettoyer le nom du produit pour regrouper les conditionnements
+          let cleanProductName = item.productName;
           
-          if (!productStats[productName]) {
-            productStats[productName] = {
-              name: productName,
+          // Enlever les suffixes comme "(Bac de 24)", "(Lot de 11)", etc.
+          cleanProductName = cleanProductName
+            .replace(/\s*\(Bac de \d+\)$/i, '')
+            .replace(/\s*\(Lot de \d+\)$/i, '')
+            .replace(/\s*\(Mètre\)$/i, '')
+            .trim();
+          
+          if (!productStats[cleanProductName]) {
+            productStats[cleanProductName] = {
+              name: cleanProductName,
               totalQuantity: 0,
-              totalRevenue: 0,
-              orderCount: 0,
-              averagePrice: 0
+              orderCount: 0
             };
           }
 
-          productStats[productName].totalQuantity += item.quantity || 0;
-          productStats[productName].totalRevenue += item.total || 0;
-          productStats[productName].orderCount += 1;
+          productStats[cleanProductName].totalQuantity += item.quantity || 0;
+          productStats[cleanProductName].orderCount += 1;
         });
       });
 
-    // Calculer le prix moyen pour chaque produit
-    Object.values(productStats).forEach(stat => {
-      stat.averagePrice = stat.totalQuantity > 0 ? stat.totalRevenue / stat.totalQuantity : 0;
-    });
-
-    // Convertir en array et trier
-    const statsArray = Object.values(productStats);
+    // Convertir en array et trier par quantité
+    const statsArray = Object.values(productStats)
+      .sort((a, b) => b.totalQuantity - a.totalQuantity);
     
     return {
-      byQuantity: [...statsArray].sort((a, b) => b.totalQuantity - a.totalQuantity),
-      byRevenue: [...statsArray].sort((a, b) => b.totalRevenue - a.totalRevenue),
+      productStats: statsArray,
       totalProducts: statsArray.length,
-      totalQuantitySold: statsArray.reduce((sum, stat) => sum + stat.totalQuantity, 0),
-      totalRevenue: statsArray.reduce((sum, stat) => sum + stat.totalRevenue, 0)
+      totalQuantitySold: statsArray.reduce((sum, stat) => sum + stat.totalQuantity, 0)
     };
   };
 
-  const { byQuantity, byRevenue, totalProducts, totalQuantitySold, totalRevenue } = calculateSalesStats();
-
-  const currentStats = salesStatsSortBy === 'quantity' ? byQuantity : byRevenue;
+  const { productStats, totalProducts, totalQuantitySold } = calculateSalesStats();
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <Header title="Statistiques de Vente" onBack={() => navigateTo('finance')} />
+      <Header title="Quantités Vendues" onBack={() => navigateTo('finance')} />
 
       <div className="p-4 space-y-6">
         {/* Résumé global */}
         <div className="bg-white rounded-xl shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-4 text-center">🛍️ Résumé des Ventes</h2>
+          <h2 className="text-xl font-bold text-gray-800 mb-4 text-center">📦 Résumé des Quantités</h2>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div className="text-center">
-              <div className="bg-blue-100 p-3 rounded-lg">
-                <p className="text-2xl font-bold text-blue-600">{totalProducts}</p>
-                <p className="text-sm text-blue-700">Produits vendus</p>
+              <div className="bg-blue-100 p-4 rounded-lg">
+                <p className="text-3xl font-bold text-blue-600">{totalProducts}</p>
+                <p className="text-sm text-blue-700">Produits différents vendus</p>
               </div>
             </div>
             <div className="text-center">
-              <div className="bg-green-100 p-3 rounded-lg">
-                <p className="text-2xl font-bold text-green-600">{totalQuantitySold}</p>
-                <p className="text-sm text-green-700">Articles vendus</p>
+              <div className="bg-green-100 p-4 rounded-lg">
+                <p className="text-3xl font-bold text-green-600">{totalQuantitySold}</p>
+                <p className="text-sm text-green-700">Articles vendus au total</p>
               </div>
             </div>
-            <div className="text-center">
-              <div className="bg-purple-100 p-3 rounded-lg">
-                <p className="text-2xl font-bold text-purple-600">{formatCurrency(totalRevenue)}</p>
-                <p className="text-sm text-purple-700">CA total</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Filtres de tri */}
-        <div className="bg-white rounded-lg shadow-sm p-4">
-          <h3 className="font-semibold mb-3">📊 Trier par :</h3>
-          <div className="flex space-x-2">
-            <button
-              onClick={() => setSalesStatsSortBy('quantity')}
-              className={`flex-1 p-3 rounded-lg text-sm font-medium active:scale-95 transition-transform ${
-                salesStatsSortBy === 'quantity'
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              📦 Quantité vendue
-            </button>
-            <button
-              onClick={() => setSortBy('revenue')}
-              className={`flex-1 p-3 rounded-lg text-sm font-medium active:scale-95 transition-transform ${
-                salesStatsSortBy  === 'revenue'
-                  ? 'bg-green-500 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              💰 Chiffre d'affaires
-            </button>
           </div>
         </div>
 
         {/* Liste des produits */}
         <div className="bg-white rounded-xl shadow-lg p-6">
           <h2 className="text-xl font-bold text-gray-800 mb-4">
-            📋 Classement {salesStatsSortBy === 'quantity' ? 'par Quantité' : 'par CA'}
+            🏆 Classement par Quantité Vendue
           </h2>
 
-          {currentStats.length === 0 ? (
+          {productStats.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <ShoppingCart size={48} className="mx-auto mb-2 opacity-50" />
               <p>Aucune vente enregistrée</p>
@@ -4680,70 +4644,70 @@ ${job.registeredBros.map(reg => {
             </div>
           ) : (
             <div className="space-y-3">
-              {currentStats.map((stat, index) => {
+              {productStats.map((stat, index) => {
                 const currentProduct = products.find(p => p.name === stat.name);
                 const stockStatus = currentProduct ? getStockStatus(currentProduct) : null;
+                const maxQuantity = productStats[0].totalQuantity;
 
                 return (
                   <div key={stat.name} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-4">
-                      {/* Position */}
-                      <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm ${
+                    <div className="flex items-center space-x-4 flex-1">
+                      {/* Position avec médailles */}
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
                         index === 0 ? 'bg-yellow-500' :
                         index === 1 ? 'bg-gray-400' :
                         index === 2 ? 'bg-orange-600' : 'bg-gray-300'
                       }`}>
-                        {index + 1}
+                        {index < 3 ? (
+                          <span className="text-lg">
+                            {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                          </span>
+                        ) : (
+                          index + 1
+                        )}
                       </div>
 
                       {/* Info produit */}
-                      <div>
-                        <h4 className="font-semibold text-gray-800">{stat.name}</h4>
-                        <div className="flex items-center space-x-3 text-sm">
-                          <span className="text-blue-600">
-                            📦 {stat.totalQuantity} vendus
-                          </span>
-                          <span className="text-green-600">
-                            💰 {formatCurrency(stat.totalRevenue)}
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-gray-800 text-lg">{stat.name}</h4>
+                        <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
+                          <span className="font-medium text-blue-600">
+                            📦 {stat.totalQuantity} unités vendues
                           </span>
                           <span className="text-purple-600">
-                            📊 {stat.orderCount} commandes
+                            📊 {stat.orderCount} fois commandé
                           </span>
                         </div>
-                        <p className="text-xs text-gray-500">
-                          Prix moyen: {formatCurrency(stat.averagePrice)}
-                        </p>
+
+                        {/* Barre de progression */}
+                        <div className="mt-2 w-full max-w-xs">
+                          <div className="bg-gray-200 rounded-full h-3">
+                            <div
+                              className="bg-gradient-to-r from-blue-400 to-blue-600 h-3 rounded-full transition-all duration-1000 ease-out"
+                              style={{
+                                width: `${(stat.totalQuantity / maxQuantity) * 100}%`
+                              }}
+                            ></div>
+                          </div>
+                        </div>
                       </div>
-                    </div>
 
-                    {/* Stock actuel */}
-                    <div className="text-right">
-                      {currentProduct ? (
-                        <div className={`px-3 py-1 rounded-full text-sm font-medium ${stockStatus.bg} ${stockStatus.color}`}>
-                          Stock: {currentProduct.stock}
-                        </div>
-                      ) : (
-                        <div className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
-                          Produit supprimé
-                        </div>
-                      )}
-
-                      {/* Barre de progression relative */}
-                      <div className="mt-2 w-20">
-                        <div className="bg-gray-200 rounded-full h-2">
-                          <div
-                            className={`h-2 rounded-full ${
-                              salesStatsSortBy  === 'quantity' ? 'bg-blue-500' : 'bg-green-500'
-                            }`}
-                            style={{
-                              width: `${
-                                salesStatsSortBy  === 'quantity'
-                                  ? (stat.totalQuantity / currentStats[0].totalQuantity) * 100
-                                  : (stat.totalRevenue / currentStats[0].totalRevenue) * 100
-                              }%`
-                            }}
-                          ></div>
-                        </div>
+                      {/* Stock actuel */}
+                      <div className="text-right">
+                        {currentProduct ? (
+                          <div>
+                            <div className={`px-3 py-1 rounded-full text-sm font-medium ${stockStatus.bg} ${stockStatus.color} mb-1`}>
+                              Stock: {currentProduct.stock}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {currentProduct.category}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
+                            Produit supprimé
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -4753,15 +4717,66 @@ ${job.registeredBros.map(reg => {
           )}
         </div>
 
-        {/* Conseils */}
-        {currentStats.length > 0 && (
+        {/* Top 3 podium */}
+        {productStats.length >= 3 && (
+          <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-6 text-center">🏆 Podium des Ventes</h2>
+            
+            <div className="flex justify-center items-end space-x-4">
+              {/* 2ème place */}
+              <div className="text-center">
+                <div className="bg-gray-400 text-white rounded-lg p-4 mb-2 h-20 flex items-center justify-center">
+                  <div>
+                    <div className="text-2xl">🥈</div>
+                  </div>
+                </div>
+                <p className="font-semibold text-gray-800">{productStats[1].name}</p>
+                <p className="text-sm text-gray-600">{productStats[1].totalQuantity} unités</p>
+              </div>
+
+              {/* 1ère place */}
+              <div className="text-center">
+                <div className="bg-yellow-500 text-white rounded-lg p-4 mb-2 h-24 flex items-center justify-center">
+                  <div>
+                    <div className="text-3xl">🥇</div>
+                  </div>
+                </div>
+                <p className="font-bold text-gray-800 text-lg">{productStats[0].name}</p>
+                <p className="text-sm text-gray-600 font-semibold">{productStats[0].totalQuantity} unités</p>
+              </div>
+
+              {/* 3ème place */}
+              <div className="text-center">
+                <div className="bg-orange-600 text-white rounded-lg p-4 mb-2 h-16 flex items-center justify-center">
+                  <div>
+                    <div className="text-xl">🥉</div>
+                  </div>
+                </div>
+                <p className="font-semibold text-gray-800">{productStats[2].name}</p>
+                <p className="text-sm text-gray-600">{productStats[2].totalQuantity} unités</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Conseils pratiques */}
+        {productStats.length > 0 && (
           <div className="bg-gradient-to-r from-blue-100 to-indigo-100 rounded-xl p-4">
-            <h3 className="font-semibold text-blue-800 mb-2">💡 Analyse</h3>
+            <h3 className="font-semibold text-blue-800 mb-2">💡 Conseils Stock</h3>
             <div className="text-sm text-blue-700 space-y-1">
-              <p>🏆 Produit le plus vendu: <strong>{byQuantity[0]?.name}</strong> ({byQuantity[0]?.totalQuantity} unités)</p>
-              <p>💰 Produit le plus rentable: <strong>{byRevenue[0]?.name}</strong> ({formatCurrency(byRevenue[0]?.totalRevenue)})</p>
-              <p>📊 Panier moyen: <strong>{formatCurrency(totalRevenue / orders.filter(o => o.type === 'order').length || 0)}</strong></p>
-              <p>🔄 Articles par commande: <strong>{Math.round(totalQuantitySold / orders.filter(o => o.type === 'order').length || 0)}</strong></p>
+              <p>🏆 Produit star: <strong>{productStats[0]?.name}</strong> ({productStats[0]?.totalQuantity} vendus)</p>
+              <p>📊 Moyenne par produit: <strong>{Math.round(totalQuantitySold / totalProducts)}</strong> unités</p>
+              {(() => {
+                const lowStock = productStats.filter(stat => {
+                  const product = products.find(p => p.name === stat.name);
+                  return product && product.stock <= product.alertThreshold;
+                });
+                return lowStock.length > 0 ? (
+                  <p>⚠️ Attention stock faible: <strong>{lowStock.map(s => s.name).join(', ')}</strong></p>
+                ) : (
+                  <p>✅ Tous les best-sellers ont un stock correct</p>
+                );
+              })()}
             </div>
           </div>
         )}
@@ -4874,8 +4889,8 @@ ${job.registeredBros.map(reg => {
                   .sort((a, b) => new Date(a.date) - new Date(b.date))
                   .map(job => (
                     <div key={job.id} className={`p-4 rounded-lg border-2 ${job.isReady ? 'border-green-200 bg-green-50' :
-                        job.registeredBros.length > 0 ? 'border-orange-200 bg-orange-50' :
-                          'border-red-200 bg-red-50'
+                      job.registeredBros.length > 0 ? 'border-orange-200 bg-orange-50' :
+                        'border-red-200 bg-red-50'
                       }`}>
                       <div className="flex items-start justify-between mb-3">
                         <div className="flex-1">
@@ -4886,8 +4901,8 @@ ${job.registeredBros.map(reg => {
                           </p>
                         </div>
                         <div className={`px-3 py-1 rounded-full text-xs font-medium ${job.isReady ? 'bg-green-100 text-green-800' :
-                            job.registeredBros.length > 0 ? 'bg-orange-100 text-orange-800' :
-                              'bg-red-100 text-red-800'
+                          job.registeredBros.length > 0 ? 'bg-orange-100 text-orange-800' :
+                            'bg-red-100 text-red-800'
                           }`}>
                           {job.registeredBros.length}/{job.brosNeeded} Bro
                         </div>
