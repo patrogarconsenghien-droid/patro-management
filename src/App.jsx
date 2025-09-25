@@ -1578,25 +1578,25 @@ ${job.registeredBros.map(reg => {
                   <div className="flex-1">
                     <h3 className="font-medium">{member.name}</h3>
                     {(() => {
-  // Calculer le solde réel à partir des transactions
-  const memberOrders = orders.filter(order => order.memberId === member.id);
-  
-  const totalSpent = memberOrders
-    .filter(order => order.type === 'order')
-    .reduce((sum, order) => sum + (order.amount || 0), 0);
-  
-  const totalRecharged = memberOrders
-    .filter(order => order.type === 'repayment' || order.type === 'recharge')
-    .reduce((sum, order) => sum + (order.amount || 0), 0);
-  
-  const realBalance = totalRecharged - totalSpent;
-  
-  return (
-    <p className={`text-sm font-semibold ${realBalance < 0 ? 'text-red-500' : 'text-green-500'}`}>
-      Solde: {formatCurrency(realBalance)}
-    </p>
-  );
-})()}
+                      // Calculer le solde réel à partir des transactions
+                      const memberOrders = orders.filter(order => order.memberId === member.id);
+
+                      const totalSpent = memberOrders
+                        .filter(order => order.type === 'order')
+                        .reduce((sum, order) => sum + (order.amount || 0), 0);
+
+                      const totalRecharged = memberOrders
+                        .filter(order => order.type === 'repayment' || order.type === 'recharge')
+                        .reduce((sum, order) => sum + (order.amount || 0), 0);
+
+                      const realBalance = totalRecharged - totalSpent;
+
+                      return (
+                        <p className={`text-sm font-semibold ${realBalance < 0 ? 'text-red-500' : 'text-green-500'}`}>
+                          Solde: {formatCurrency(realBalance)}
+                        </p>
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center space-x-2">
                     <button
@@ -1650,9 +1650,23 @@ ${job.registeredBros.map(reg => {
           ) : (
             <div className="space-y-4">
               <p>Membre: <strong>{selectedMember?.name}</strong></p>
-              <p>Solde actuel: <strong className={selectedMember?.balance < 0 ? 'text-red-500' : 'text-green-500'}>
-                {formatCurrency(selectedMember?.balance || 0)}
-              </strong></p>
+              {(() => {
+                // Calculer le solde réel
+                const memberOrders = orders.filter(order => order.memberId === selectedMember?.id);
+                const totalSpent = memberOrders
+                  .filter(order => order.type === 'order')
+                  .reduce((sum, order) => sum + (order.amount || 0), 0);
+                const totalRecharged = memberOrders
+                  .filter(order => order.type === 'repayment' || order.type === 'recharge')
+                  .reduce((sum, order) => sum + (order.amount || 0), 0);
+                const realBalance = totalRecharged - totalSpent;
+
+                return (
+                  <p>Solde actuel: <strong className={realBalance < 0 ? 'text-red-500' : 'text-green-500'}>
+                    {formatCurrency(realBalance)}
+                  </strong></p>
+                );
+              })()}
 
               <input
                 type="number"
@@ -1757,9 +1771,23 @@ ${job.registeredBros.map(reg => {
                     <div className="flex items-center justify-between">
                       <div>
                         <h3 className="font-medium">{member.name}</h3>
-                        <p className={`text-sm ${member.balance < 0 ? 'text-red-500' : 'text-green-500'}`}>
-                          Solde: {formatCurrency(member.balance)}
-                        </p>
+                        {(() => {
+                          // Calculer le solde réel
+                          const memberOrders = orders.filter(order => order.memberId === member.id);
+                          const totalSpent = memberOrders
+                            .filter(order => order.type === 'order')
+                            .reduce((sum, order) => sum + (order.amount || 0), 0);
+                          const totalRecharged = memberOrders
+                            .filter(order => order.type === 'repayment' || order.type === 'recharge')
+                            .reduce((sum, order) => sum + (order.amount || 0), 0);
+                          const realBalance = totalRecharged - totalSpent;
+
+                          return (
+                            <p className={`text-sm ${realBalance < 0 ? 'text-red-500' : 'text-green-500'}`}>
+                              Solde: {formatCurrency(realBalance)}
+                            </p>
+                          );
+                        })()}
                       </div>
                       <div className="text-gray-400">→</div>
                     </div>
@@ -3736,6 +3764,20 @@ ${job.registeredBros.map(reg => {
         }
       });
 
+      {/* Après le bouton "Historique Complet" */ }
+      <button
+        onClick={() => navigateTo('finance-scheduled-income')}
+        className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+      >
+        <div className="flex items-center space-x-3">
+          <Wrench className="text-yellow-500" size={24} />
+          <div className="text-left">
+            <h3 className="font-semibold">Revenus Futurs Boulots</h3>
+            <p className="text-gray-600 text-sm">Argent des boulots programmés</p>
+          </div>
+        </div>
+      </button>
+
       return {
         cashTotal,
         accountTotal,
@@ -4507,6 +4549,192 @@ ${job.registeredBros.map(reg => {
     );
 
   }
+
+  if (currentScreen === 'finance-scheduled-income') {
+    // Calculer les revenus futurs des boulots programmés
+    const calculateScheduledIncome = () => {
+      let totalIncomeComplete = 0;
+      let totalIncomePartial = 0;
+      const jobAnalysis = [];
+
+      scheduledJobs.forEach(job => {
+        const costPerBro = job.customRate * job.estimatedHours;
+        const totalCostComplete = costPerBro * job.brosNeeded;
+        const totalCostPartial = costPerBro * job.registeredBros.length;
+
+        totalIncomeComplete += totalCostComplete;
+        totalIncomePartial += totalCostPartial;
+
+        jobAnalysis.push({
+          ...job,
+          costPerBro,
+          totalCostComplete,
+          totalCostPartial,
+          isReady: job.registeredBros.length >= job.brosNeeded,
+          missingBros: Math.max(0, job.brosNeeded - job.registeredBros.length)
+        });
+      });
+
+      return {
+        totalIncomeComplete,
+        totalIncomePartial,
+        jobAnalysis,
+        totalJobs: scheduledJobs.length
+      };
+    };
+
+    const { totalIncomeComplete, totalIncomePartial, jobAnalysis, totalJobs } = calculateScheduledIncome();
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header title="Revenus Futurs Boulots" onBack={() => navigateTo('finance')} />
+
+        <div className="p-4 space-y-6">
+          {/* Résumé financier */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-4 text-center">💰 Revenus Prévisionnels</h2>
+
+            <div className="grid grid-cols-1 gap-4 mb-4">
+              {/* Revenus si tous complets */}
+              <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-green-800">Si tous les boulots sont complets</h3>
+                    <p className="text-sm text-green-600">{totalJobs} boulots à quota plein</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-green-600">{formatCurrency(totalIncomeComplete)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Revenus actuels */}
+              <div className="bg-orange-50 p-4 rounded-lg border border-orange-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-orange-800">Avec inscriptions actuelles</h3>
+                    <p className="text-sm text-orange-600">État actuel des inscriptions</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-orange-600">{formatCurrency(totalIncomePartial)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Différence */}
+              <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-blue-800">Revenus potentiels supplémentaires</h3>
+                    <p className="text-sm text-blue-600">Si tous les quotas sont atteints</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-2xl font-bold text-blue-600">
+                      +{formatCurrency(totalIncomeComplete - totalIncomePartial)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Liste des boulots */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">📋 Détail par Boulot</h2>
+
+            {totalJobs === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Wrench size={48} className="mx-auto mb-2 opacity-50" />
+                <p>Aucun boulot programmé</p>
+                <p className="text-sm mt-1">Programmez des boulots pour voir les revenus futurs</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {jobAnalysis
+                  .sort((a, b) => new Date(a.date) - new Date(b.date))
+                  .map(job => (
+                    <div key={job.id} className={`p-4 rounded-lg border-2 ${job.isReady ? 'border-green-200 bg-green-50' :
+                        job.registeredBros.length > 0 ? 'border-orange-200 bg-orange-50' :
+                          'border-red-200 bg-red-50'
+                      }`}>
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-gray-800">{job.description}</h3>
+                          <p className="text-sm text-gray-600">{formatDate(job.date)}</p>
+                          <p className="text-xs text-gray-500">
+                            {job.timeStart || '09:00'} • {job.estimatedHours}h • {formatCurrency(job.customRate)}/h
+                          </p>
+                        </div>
+                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${job.isReady ? 'bg-green-100 text-green-800' :
+                            job.registeredBros.length > 0 ? 'bg-orange-100 text-orange-800' :
+                              'bg-red-100 text-red-800'
+                          }`}>
+                          {job.registeredBros.length}/{job.brosNeeded} Bro
+                        </div>
+                      </div>
+
+                      {/* Calculs financiers */}
+                      <div className="grid grid-cols-2 gap-3 text-sm">
+                        <div className="bg-white bg-opacity-70 p-3 rounded">
+                          <p className="text-gray-600">Revenus si complet:</p>
+                          <p className="font-bold text-green-600">{formatCurrency(job.totalCostComplete)}</p>
+                          <p className="text-xs text-gray-500">{job.brosNeeded} × {formatCurrency(job.costPerBro)}</p>
+                        </div>
+                        <div className="bg-white bg-opacity-70 p-3 rounded">
+                          <p className="text-gray-600">Revenus actuels:</p>
+                          <p className="font-bold text-orange-600">{formatCurrency(job.totalCostPartial)}</p>
+                          <p className="text-xs text-gray-500">{job.registeredBros.length} × {formatCurrency(job.costPerBro)}</p>
+                        </div>
+                      </div>
+
+                      {/* Bro inscrits */}
+                      <div className="mt-3">
+                        <p className="text-sm font-medium text-gray-700 mb-2">Bro inscrits:</p>
+                        {job.registeredBros.length > 0 ? (
+                          <div className="flex flex-wrap gap-1">
+                            {job.registeredBros.map((registration, index) => {
+                              const bro = bros.find(b => b.id === registration.broId);
+                              return (
+                                <span key={index} className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                  {bro?.name || 'Inconnu'}
+                                </span>
+                              );
+                            })}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-500">Aucun bro inscrit</p>
+                        )}
+
+                        {job.missingBros > 0 && (
+                          <p className="text-xs text-red-600 mt-1">
+                            ⚠️ Il manque encore {job.missingBros} bro(s)
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+
+          {/* Conseils */}
+          {totalJobs > 0 && (
+            <div className="bg-gradient-to-r from-blue-100 to-indigo-100 rounded-xl p-4">
+              <h3 className="font-semibold text-blue-800 mb-2">💡 Analyse</h3>
+              <div className="text-sm text-blue-700 space-y-1">
+                <p>• Boulots prêts: {jobAnalysis.filter(j => j.isReady).length}/{totalJobs}</p>
+                <p>• Boulots partiels: {jobAnalysis.filter(j => j.registeredBros.length > 0 && !j.isReady).length}</p>
+                <p>• Boulots sans inscription: {jobAnalysis.filter(j => j.registeredBros.length === 0).length}</p>
+                <p>• Revenus garantis: {formatCurrency(totalIncomePartial)} (inscriptions actuelles)</p>
+                <p>• Revenus potentiels: +{formatCurrency(totalIncomeComplete - totalIncomePartial)} si quotas complets</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   if (currentScreen === 'finance-history') {
     return (
       <div className="min-h-screen bg-gray-50">
