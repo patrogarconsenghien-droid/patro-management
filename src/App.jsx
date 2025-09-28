@@ -64,6 +64,9 @@ const PatroApp = () => {
   const [sortBy, setSortBy] = useState('name'); // 'name', 'price', 'stock'
   const [barOpenThreshold, setBarOpenThreshold] = useState(8); // Seuil par défaut : 8 bouteilles
   const [newThreshold, setNewThreshold] = useState(barOpenThreshold.toString());
+  const [settingsAuthenticated, setSettingsAuthenticated] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [selectedBro, setSelectedBro] = useState(null);
 
 
 
@@ -460,14 +463,15 @@ ${job.registeredBros.map(reg => {
     return { color: 'text-green-600', bg: 'bg-green-50' };
   };
 
-  const navigateTo = (screen, member = null) => {
+  const navigateTo = (screen, member = null, bro = null) => {
     setCurrentScreen(screen);
     setSelectedMember(member);
+    setSelectedBro(bro);
     setCart({});
 
     // Pousser l'état dans l'historique pour la navigation mobile
     window.history.pushState(
-      { screen: screen, selectedMember: member },
+      { screen: screen, selectedMember: member, selectedBro: bro },
       '',
       `#${screen}`
     );
@@ -1477,7 +1481,13 @@ ${job.registeredBros.map(reg => {
           </button>
 
           <button
-            onClick={() => navigateTo('settings')}
+            onClick={() => {
+              if (settingsAuthenticated) {
+                navigateTo('settings');
+              } else {
+                navigateTo('settings-password');
+              }
+            }}
             className="w-full p-6 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl shadow-lg active:scale-95 transition-transform"
           >
             <div className="flex items-center space-x-4">
@@ -1717,6 +1727,82 @@ ${job.registeredBros.map(reg => {
             </div>
           )}
         </Modal>
+      </div>
+    );
+  }
+
+  if (currentScreen === 'settings-password') {
+    const handlePasswordSubmit = () => {
+      if (passwordInput === '2107') {
+        setSettingsAuthenticated(true);
+        setPasswordInput('');
+        navigateTo('settings');
+      } else {
+        alert('❌ Mot de passe incorrect !');
+        setPasswordInput('');
+      }
+    };
+
+    const handleKeyPress = (e) => {
+      if (e.key === 'Enter') {
+        handlePasswordSubmit();
+      }
+    };
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-purple-100">
+        <Header title="Accès Paramètres" onBack={() => navigateTo('home')} />
+
+        <div className="p-6 flex items-center justify-center min-h-[60vh]">
+          <div className="bg-white rounded-xl shadow-lg p-8 w-full max-w-md">
+            <div className="text-center mb-6">
+              <div className="text-6xl mb-4">🔒</div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">Zone Protégée</h2>
+              <p className="text-gray-600">Accès aux paramètres restreint</p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  🔑 Mot de passe *
+                </label>
+                <input
+                  type="password"
+                  value={passwordInput}
+                  onChange={(e) => setPasswordInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder="Entrez le mot de passe"
+                  className="w-full p-4 border-2 border-purple-200 rounded-lg text-center text-lg font-mono tracking-wider focus:border-purple-500 focus:outline-none"
+                  autoFocus
+                />
+              </div>
+
+              <button
+                onClick={handlePasswordSubmit}
+                disabled={!passwordInput.trim()}
+                className="w-full p-4 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg font-semibold disabled:bg-gray-300 disabled:cursor-not-allowed active:scale-95 transition-transform"
+              >
+                🚀 Déverrouiller
+              </button>
+
+              <div className="text-center">
+                <button
+                  onClick={() => navigateTo('home')}
+                  className="text-purple-600 hover:text-purple-800 text-sm"
+                >
+                  ← Retour à l'accueil
+                </button>
+              </div>
+            </div>
+
+            {/* Indices visuels */}
+            <div className="mt-6 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+              <p className="text-xs text-purple-700 text-center">
+                💡 Protection contre les modifications accidentelles
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
@@ -3055,32 +3141,43 @@ ${job.registeredBros.map(reg => {
 
           <div className="space-y-3">
             {bros.map(bro => (
-              <div key={bro.id} className="bg-white p-4 rounded-lg shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-medium">{bro.name}</h3>
-                    <p className="text-sm text-gray-600">
-                      Heures totales: <span className="font-semibold text-green-600">{bro.totalHours}h</span>
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Gains estimés: <span className="font-semibold text-green-600">
-                        {formatCurrency(bro.totalHours * hourlyRate)}
-                      </span>
-                    </p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <div className="text-right">
-                      <div className="text-sm text-gray-500">
-                        {jobs.filter(j => j.broId === bro.id).length} boulots
-                      </div>
+              <div key={bro.id} className="bg-white rounded-lg shadow-sm overflow-hidden">
+                <button
+                  onClick={() => navigateTo('bro-details', null, bro)}
+                  className="w-full p-4 text-left hover:bg-gray-50 active:scale-95 transition-transform"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-medium">{bro.name}</h3>
+                      <p className="text-sm text-gray-600">
+                        Heures totales: <span className="font-semibold text-green-600">{bro.totalHours}h</span>
+                      </p>
+                      <p className="text-sm text-gray-600">
+                        Gains estimés: <span className="font-semibold text-green-600">
+                          {formatCurrency(bro.totalHours * hourlyRate)}
+                        </span>
+                      </p>
                     </div>
-                    <button
-                      onClick={() => deleteBro(bro.id)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="flex items-center space-x-2">
+                      <div className="text-right">
+                        <div className="text-sm text-gray-500">
+                          {jobs.filter(j => j.broId === bro.id).length} boulots
+                        </div>
+                      </div>
+                      <div className="text-gray-400">→</div>
+                    </div>
                   </div>
+                </button>
+                <div className="px-4 pb-4 flex justify-end">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteBro(bro.id);
+                    }}
+                    className="p-2 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
               </div>
             ))}
@@ -3383,7 +3480,16 @@ ${job.registeredBros.map(reg => {
           ) : (
             <div className="space-y-3">
               {jobs
-                .sort((a, b) => new Date(b.date || b.timestamp || b.createdAt) - new Date(a.date || a.timestamp || a.createdAt))
+                .sort((a, b) => {
+                  // 1. Priorité : non payés d'abord
+                  if (a.isPaid !== b.isPaid) {
+                    return a.isPaid - b.isPaid; // false (0) avant true (1)
+                  }
+
+                  // 2. Ensuite : ordre chronologique (plus récent d'abord)
+                  const getDate = (job) => new Date(job.date || job.timestamp || job.createdAt);
+                  return getDate(b) - getDate(a);
+                })
                 .map(job => (
                   <div key={job.id} className="bg-white p-4 rounded-lg shadow-sm">
                     <div className="flex items-start justify-between mb-2">
@@ -4559,231 +4665,230 @@ ${job.registeredBros.map(reg => {
     );
 
   }
-if (currentScreen === 'finance-sales-stats') {
-  // Calculer les statistiques de vente par produit (regroupées)
-  const calculateSalesStats = () => {
-    const productStats = {};
+  if (currentScreen === 'finance-sales-stats') {
+    // Calculer les statistiques de vente par produit (regroupées)
+    const calculateSalesStats = () => {
+      const productStats = {};
 
-    // Parcourir toutes les commandes
-    orders
-      .filter(order => order.type === 'order' && order.items)
-      .forEach(order => {
-        order.items.forEach(item => {
-          // Nettoyer le nom du produit pour regrouper les conditionnements
-          let cleanProductName = item.productName;
-          
-          // Enlever les suffixes comme "(Bac de 24)", "(Lot de 11)", etc.
-          cleanProductName = cleanProductName
-            .replace(/\s*\(Bac de \d+\)$/i, '')
-            .replace(/\s*\(Lot de \d+\)$/i, '')
-            .replace(/\s*\(Mètre\)$/i, '')
-            .trim();
-          
-          if (!productStats[cleanProductName]) {
-            productStats[cleanProductName] = {
-              name: cleanProductName,
-              totalQuantity: 0,
-              orderCount: 0
-            };
-          }
+      // Parcourir toutes les commandes
+      orders
+        .filter(order => order.type === 'order' && order.items)
+        .forEach(order => {
+          order.items.forEach(item => {
+            // Nettoyer le nom du produit pour regrouper les conditionnements
+            let cleanProductName = item.productName;
 
-          productStats[cleanProductName].totalQuantity += item.quantity || 0;
-          productStats[cleanProductName].orderCount += 1;
+            // Enlever les suffixes comme "(Bac de 24)", "(Lot de 11)", etc.
+            cleanProductName = cleanProductName
+              .replace(/\s*\(Bac de \d+\)$/i, '')
+              .replace(/\s*\(Lot de \d+\)$/i, '')
+              .replace(/\s*\(Mètre\)$/i, '')
+              .trim();
+
+            if (!productStats[cleanProductName]) {
+              productStats[cleanProductName] = {
+                name: cleanProductName,
+                totalQuantity: 0,
+                orderCount: 0
+              };
+            }
+
+            productStats[cleanProductName].totalQuantity += item.quantity || 0;
+            productStats[cleanProductName].orderCount += 1;
+          });
         });
-      });
 
-    // Convertir en array et trier par quantité
-    const statsArray = Object.values(productStats)
-      .sort((a, b) => b.totalQuantity - a.totalQuantity);
-    
-    return {
-      productStats: statsArray,
-      totalProducts: statsArray.length,
-      totalQuantitySold: statsArray.reduce((sum, stat) => sum + stat.totalQuantity, 0)
+      // Convertir en array et trier par quantité
+      const statsArray = Object.values(productStats)
+        .sort((a, b) => b.totalQuantity - a.totalQuantity);
+
+      return {
+        productStats: statsArray,
+        totalProducts: statsArray.length,
+        totalQuantitySold: statsArray.reduce((sum, stat) => sum + stat.totalQuantity, 0)
+      };
     };
-  };
 
-  const { productStats, totalProducts, totalQuantitySold } = calculateSalesStats();
+    const { productStats, totalProducts, totalQuantitySold } = calculateSalesStats();
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <Header title="Quantités Vendues" onBack={() => navigateTo('finance')} />
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header title="Quantités Vendues" onBack={() => navigateTo('finance')} />
 
-      <div className="p-4 space-y-6">
-        {/* Résumé global */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-4 text-center">📦 Résumé des Quantités</h2>
+        <div className="p-4 space-y-6">
+          {/* Résumé global */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-4 text-center">📦 Résumé des Quantités</h2>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="text-center">
-              <div className="bg-blue-100 p-4 rounded-lg">
-                <p className="text-3xl font-bold text-blue-600">{totalProducts}</p>
-                <p className="text-sm text-blue-700">Produits différents vendus</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-center">
+                <div className="bg-blue-100 p-4 rounded-lg">
+                  <p className="text-3xl font-bold text-blue-600">{totalProducts}</p>
+                  <p className="text-sm text-blue-700">Produits différents vendus</p>
+                </div>
               </div>
-            </div>
-            <div className="text-center">
-              <div className="bg-green-100 p-4 rounded-lg">
-                <p className="text-3xl font-bold text-green-600">{totalQuantitySold}</p>
-                <p className="text-sm text-green-700">Articles vendus au total</p>
+              <div className="text-center">
+                <div className="bg-green-100 p-4 rounded-lg">
+                  <p className="text-3xl font-bold text-green-600">{totalQuantitySold}</p>
+                  <p className="text-sm text-green-700">Articles vendus au total</p>
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* Liste des produits */}
-        <div className="bg-white rounded-xl shadow-lg p-6">
-          <h2 className="text-xl font-bold text-gray-800 mb-4">
-            🏆 Classement par Quantité Vendue
-          </h2>
+          {/* Liste des produits */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h2 className="text-xl font-bold text-gray-800 mb-4">
+              🏆 Classement par Quantité Vendue
+            </h2>
 
-          {productStats.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <ShoppingCart size={48} className="mx-auto mb-2 opacity-50" />
-              <p>Aucune vente enregistrée</p>
-              <p className="text-sm mt-1">Commencez à vendre pour voir les statistiques</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {productStats.map((stat, index) => {
-                const currentProduct = products.find(p => p.name === stat.name);
-                const stockStatus = currentProduct ? getStockStatus(currentProduct) : null;
-                const maxQuantity = productStats[0].totalQuantity;
+            {productStats.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <ShoppingCart size={48} className="mx-auto mb-2 opacity-50" />
+                <p>Aucune vente enregistrée</p>
+                <p className="text-sm mt-1">Commencez à vendre pour voir les statistiques</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {productStats.map((stat, index) => {
+                  const currentProduct = products.find(p => p.name === stat.name);
+                  const stockStatus = currentProduct ? getStockStatus(currentProduct) : null;
+                  const maxQuantity = productStats[0].totalQuantity;
 
-                return (
-                  <div key={stat.name} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                    <div className="flex items-center space-x-4 flex-1">
-                      {/* Position avec médailles */}
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
-                        index === 0 ? 'bg-yellow-500' :
-                        index === 1 ? 'bg-gray-400' :
-                        index === 2 ? 'bg-orange-600' : 'bg-gray-300'
-                      }`}>
-                        {index < 3 ? (
-                          <span className="text-lg">
-                            {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
-                          </span>
-                        ) : (
-                          index + 1
-                        )}
-                      </div>
-
-                      {/* Info produit */}
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-gray-800 text-lg">{stat.name}</h4>
-                        <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
-                          <span className="font-medium text-blue-600">
-                            📦 {stat.totalQuantity} unités vendues
-                          </span>
-                          <span className="text-purple-600">
-                            📊 {stat.orderCount} fois commandé
-                          </span>
+                  return (
+                    <div key={stat.name} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div className="flex items-center space-x-4 flex-1">
+                        {/* Position avec médailles */}
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${index === 0 ? 'bg-yellow-500' :
+                          index === 1 ? 'bg-gray-400' :
+                            index === 2 ? 'bg-orange-600' : 'bg-gray-300'
+                          }`}>
+                          {index < 3 ? (
+                            <span className="text-lg">
+                              {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
+                            </span>
+                          ) : (
+                            index + 1
+                          )}
                         </div>
 
-                        {/* Barre de progression */}
-                        <div className="mt-2 w-full max-w-xs">
-                          <div className="bg-gray-200 rounded-full h-3">
-                            <div
-                              className="bg-gradient-to-r from-blue-400 to-blue-600 h-3 rounded-full transition-all duration-1000 ease-out"
-                              style={{
-                                width: `${(stat.totalQuantity / maxQuantity) * 100}%`
-                              }}
-                            ></div>
+                        {/* Info produit */}
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-gray-800 text-lg">{stat.name}</h4>
+                          <div className="flex items-center space-x-4 text-sm text-gray-600 mt-1">
+                            <span className="font-medium text-blue-600">
+                              📦 {stat.totalQuantity} unités vendues
+                            </span>
+                            <span className="text-purple-600">
+                              📊 {stat.orderCount} fois commandé
+                            </span>
+                          </div>
+
+                          {/* Barre de progression */}
+                          <div className="mt-2 w-full max-w-xs">
+                            <div className="bg-gray-200 rounded-full h-3">
+                              <div
+                                className="bg-gradient-to-r from-blue-400 to-blue-600 h-3 rounded-full transition-all duration-1000 ease-out"
+                                style={{
+                                  width: `${(stat.totalQuantity / maxQuantity) * 100}%`
+                                }}
+                              ></div>
+                            </div>
                           </div>
                         </div>
-                      </div>
 
-                      {/* Stock actuel */}
-                      <div className="text-right">
-                        {currentProduct ? (
-                          <div>
-                            <div className={`px-3 py-1 rounded-full text-sm font-medium ${stockStatus.bg} ${stockStatus.color} mb-1`}>
-                              Stock: {currentProduct.stock}
+                        {/* Stock actuel */}
+                        <div className="text-right">
+                          {currentProduct ? (
+                            <div>
+                              <div className={`px-3 py-1 rounded-full text-sm font-medium ${stockStatus.bg} ${stockStatus.color} mb-1`}>
+                                Stock: {currentProduct.stock}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {currentProduct.category}
+                              </div>
                             </div>
-                            <div className="text-xs text-gray-500">
-                              {currentProduct.category}
+                          ) : (
+                            <div className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
+                              Produit supprimé
                             </div>
-                          </div>
-                        ) : (
-                          <div className="px-3 py-1 rounded-full text-sm font-medium bg-gray-100 text-gray-600">
-                            Produit supprimé
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Top 3 podium */}
+          {productStats.length >= 3 && (
+            <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl shadow-lg p-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-6 text-center">🏆 Podium des Ventes</h2>
+
+              <div className="flex justify-center items-end space-x-4">
+                {/* 2ème place */}
+                <div className="text-center">
+                  <div className="bg-gray-400 text-white rounded-lg p-4 mb-2 h-20 flex items-center justify-center">
+                    <div>
+                      <div className="text-2xl">🥈</div>
+                    </div>
                   </div>
-                );
-              })}
+                  <p className="font-semibold text-gray-800">{productStats[1].name}</p>
+                  <p className="text-sm text-gray-600">{productStats[1].totalQuantity} unités</p>
+                </div>
+
+                {/* 1ère place */}
+                <div className="text-center">
+                  <div className="bg-yellow-500 text-white rounded-lg p-4 mb-2 h-24 flex items-center justify-center">
+                    <div>
+                      <div className="text-3xl">🥇</div>
+                    </div>
+                  </div>
+                  <p className="font-bold text-gray-800 text-lg">{productStats[0].name}</p>
+                  <p className="text-sm text-gray-600 font-semibold">{productStats[0].totalQuantity} unités</p>
+                </div>
+
+                {/* 3ème place */}
+                <div className="text-center">
+                  <div className="bg-orange-600 text-white rounded-lg p-4 mb-2 h-16 flex items-center justify-center">
+                    <div>
+                      <div className="text-xl">🥉</div>
+                    </div>
+                  </div>
+                  <p className="font-semibold text-gray-800">{productStats[2].name}</p>
+                  <p className="text-sm text-gray-600">{productStats[2].totalQuantity} unités</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Conseils pratiques */}
+          {productStats.length > 0 && (
+            <div className="bg-gradient-to-r from-blue-100 to-indigo-100 rounded-xl p-4">
+              <h3 className="font-semibold text-blue-800 mb-2">💡 Conseils Stock</h3>
+              <div className="text-sm text-blue-700 space-y-1">
+                <p>🏆 Produit star: <strong>{productStats[0]?.name}</strong> ({productStats[0]?.totalQuantity} vendus)</p>
+                <p>📊 Moyenne par produit: <strong>{Math.round(totalQuantitySold / totalProducts)}</strong> unités</p>
+                {(() => {
+                  const lowStock = productStats.filter(stat => {
+                    const product = products.find(p => p.name === stat.name);
+                    return product && product.stock <= product.alertThreshold;
+                  });
+                  return lowStock.length > 0 ? (
+                    <p>⚠️ Attention stock faible: <strong>{lowStock.map(s => s.name).join(', ')}</strong></p>
+                  ) : (
+                    <p>✅ Tous les best-sellers ont un stock correct</p>
+                  );
+                })()}
+              </div>
             </div>
           )}
         </div>
-
-        {/* Top 3 podium */}
-        {productStats.length >= 3 && (
-          <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl shadow-lg p-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-6 text-center">🏆 Podium des Ventes</h2>
-            
-            <div className="flex justify-center items-end space-x-4">
-              {/* 2ème place */}
-              <div className="text-center">
-                <div className="bg-gray-400 text-white rounded-lg p-4 mb-2 h-20 flex items-center justify-center">
-                  <div>
-                    <div className="text-2xl">🥈</div>
-                  </div>
-                </div>
-                <p className="font-semibold text-gray-800">{productStats[1].name}</p>
-                <p className="text-sm text-gray-600">{productStats[1].totalQuantity} unités</p>
-              </div>
-
-              {/* 1ère place */}
-              <div className="text-center">
-                <div className="bg-yellow-500 text-white rounded-lg p-4 mb-2 h-24 flex items-center justify-center">
-                  <div>
-                    <div className="text-3xl">🥇</div>
-                  </div>
-                </div>
-                <p className="font-bold text-gray-800 text-lg">{productStats[0].name}</p>
-                <p className="text-sm text-gray-600 font-semibold">{productStats[0].totalQuantity} unités</p>
-              </div>
-
-              {/* 3ème place */}
-              <div className="text-center">
-                <div className="bg-orange-600 text-white rounded-lg p-4 mb-2 h-16 flex items-center justify-center">
-                  <div>
-                    <div className="text-xl">🥉</div>
-                  </div>
-                </div>
-                <p className="font-semibold text-gray-800">{productStats[2].name}</p>
-                <p className="text-sm text-gray-600">{productStats[2].totalQuantity} unités</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Conseils pratiques */}
-        {productStats.length > 0 && (
-          <div className="bg-gradient-to-r from-blue-100 to-indigo-100 rounded-xl p-4">
-            <h3 className="font-semibold text-blue-800 mb-2">💡 Conseils Stock</h3>
-            <div className="text-sm text-blue-700 space-y-1">
-              <p>🏆 Produit star: <strong>{productStats[0]?.name}</strong> ({productStats[0]?.totalQuantity} vendus)</p>
-              <p>📊 Moyenne par produit: <strong>{Math.round(totalQuantitySold / totalProducts)}</strong> unités</p>
-              {(() => {
-                const lowStock = productStats.filter(stat => {
-                  const product = products.find(p => p.name === stat.name);
-                  return product && product.stock <= product.alertThreshold;
-                });
-                return lowStock.length > 0 ? (
-                  <p>⚠️ Attention stock faible: <strong>{lowStock.map(s => s.name).join(', ')}</strong></p>
-                ) : (
-                  <p>✅ Tous les best-sellers ont un stock correct</p>
-                );
-              })()}
-            </div>
-          </div>
-        )}
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   if (currentScreen === 'finance-scheduled-income') {
     // Calculer les revenus futurs des boulots programmés
@@ -4965,6 +5070,271 @@ if (currentScreen === 'finance-sales-stats') {
               </div>
             </div>
           )}
+        </div>
+      </div>
+    );
+  }
+  if (currentScreen === 'bro-details') {
+    if (!selectedBro) {
+      navigateTo('boulots-bros');
+      return null;
+    }
+
+    // Récupérer tous les boulots de ce Bro
+    const broJobs = jobs
+      .filter(job => job.broId === selectedBro.id)
+      .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+   // Calculer les statistiques
+const totalHours = broJobs.reduce((sum, job) => sum + (job.hours || 0), 0);
+const totalEarnings = broJobs.reduce((sum, job) => sum + (job.total || 0), 0);
+
+const stats = {
+  totalJobs: broJobs.length,
+  totalHours: totalHours,
+  totalEarnings: totalEarnings,
+  paidJobs: broJobs.filter(job => job.isPaid).length,
+  unpaidJobs: broJobs.filter(job => !job.isPaid).length,
+  unpaidAmount: broJobs.filter(job => !job.isPaid).reduce((sum, job) => sum + (job.total || 0), 0),
+  averageHourlyRate: broJobs.length > 0 ? broJobs.reduce((sum, job) => sum + (job.hourlyRate || 0), 0) / broJobs.length : 0,
+  averageHoursPerJob: broJobs.length > 0 ? totalHours / broJobs.length : 0
+};
+
+    // Grouper par mois pour le graphique
+    const monthlyStats = {};
+    broJobs.forEach(job => {
+      const monthKey = new Date(job.date).toISOString().substring(0, 7); // YYYY-MM
+      if (!monthlyStats[monthKey]) {
+        monthlyStats[monthKey] = { hours: 0, earnings: 0, jobs: 0 };
+      }
+      monthlyStats[monthKey].hours += job.hours || 0;
+      monthlyStats[monthKey].earnings += job.total || 0;
+      monthlyStats[monthKey].jobs += 1;
+    });
+
+    const monthlyData = Object.entries(monthlyStats)
+      .map(([month, data]) => ({ month, ...data }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header
+          title={`Profil - ${selectedBro.name}`}
+          onBack={() => {
+            setSelectedBro(null);
+            navigateTo('boulots-bros');
+          }}
+        />
+
+        <div className="p-4 space-y-6">
+          {/* Carte du profil */}
+          <div className="bg-gradient-to-r from-green-100 to-blue-100 rounded-xl shadow-lg p-6">
+            <div className="flex items-center space-x-4 mb-4">
+              <div className="bg-green-500 rounded-full w-16 h-16 flex items-center justify-center">
+                <span className="text-2xl text-white font-bold">
+                  {selectedBro.name.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold text-gray-800">{selectedBro.name}</h2>
+                <p className="text-gray-600">Membre de l'équipe Bro</p>
+              </div>
+            </div>
+
+            {/* Statistiques principales */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-white bg-opacity-70 p-3 rounded-lg text-center">
+                <p className="text-2xl font-bold text-green-600">{stats.totalHours}h</p>
+                <p className="text-sm text-gray-700">Heures totales</p>
+              </div>
+              <div className="bg-white bg-opacity-70 p-3 rounded-lg text-center">
+                <p className="text-2xl font-bold text-blue-600">{formatCurrency(stats.totalEarnings)}</p>
+                <p className="text-sm text-gray-700">Gains totaux</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Statistiques détaillées */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">📊 Statistiques Détaillées</h3>
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="text-lg font-bold text-gray-800">{stats.totalJobs}</p>
+                <p className="text-sm text-gray-600">Boulots effectués</p>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <p className="text-lg font-bold text-purple-600">{formatCurrency(stats.averageHourlyRate)}</p>
+                <p className="text-sm text-gray-600">Tarif moyen/h</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-green-50 p-3 rounded-lg">
+                <p className="text-lg font-bold text-green-600">{stats.paidJobs}</p>
+                <p className="text-sm text-green-700">Boulots payés</p>
+              </div>
+              <div className="bg-red-50 p-3 rounded-lg">
+                <p className="text-lg font-bold text-red-600">{stats.unpaidJobs}</p>
+                <p className="text-sm text-red-700">Boulots à payer</p>
+                {stats.unpaidAmount > 0 && (
+                  <p className="text-xs text-red-600 font-semibold">{formatCurrency(stats.unpaidAmount)}</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Évolution mensuelle */}
+          {monthlyData.length > 1 && (
+            <div className="bg-white rounded-xl shadow-lg p-6">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">📈 Évolution Mensuelle</h3>
+
+              <div className="space-y-3">
+                {monthlyData.slice(-6).map((data, index) => {
+                  const maxHours = Math.max(...monthlyData.map(d => d.hours));
+                  const percentage = maxHours > 0 ? (data.hours / maxHours) * 100 : 0;
+
+                  return (
+                    <div key={data.month} className="flex items-center space-x-3">
+                      <div className="w-16 text-sm font-medium text-gray-600">
+                        {new Date(data.month + '-01').toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' })}
+                      </div>
+                      <div className="flex-1">
+                        <div className="bg-gray-200 rounded-full h-6 relative">
+                          <div
+                            className="bg-gradient-to-r from-green-400 to-green-600 h-6 rounded-full transition-all duration-1000 ease-out flex items-center justify-end pr-2"
+                            style={{ width: `${Math.max(percentage, 5)}%` }}
+                          >
+                            <span className="text-white text-xs font-bold">
+                              {data.hours}h
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="w-20 text-right text-sm font-semibold text-green-600">
+                        {formatCurrency(data.earnings)}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Historique des boulots */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">
+              📋 Historique des Boulots ({broJobs.length})
+            </h3>
+
+            {broJobs.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Wrench size={48} className="mx-auto mb-2 opacity-50" />
+                <p>Aucun boulot enregistré</p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-96 overflow-y-auto">
+                {broJobs.map(job => (
+                  <div key={job.id} className={`p-4 rounded-lg border ${job.isPaid ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                    }`}>
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-2 mb-1">
+                          <h4 className="font-medium text-gray-800">{job.description}</h4>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${job.isPaid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                            }`}>
+                            {job.isPaid ? '✅ Payé' : '⏳ À payer'}
+                          </span>
+                          {job.isPartialCompletion && (
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                              ⚠️ Partiel
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-gray-600">{formatDate(job.date)}</p>
+                        <p className="text-xs text-gray-500">
+                          {job.hours}h × {formatCurrency(job.hourlyRate)}/h
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-lg font-bold ${job.isPaid ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(job.total)}
+                        </p>
+                        {job.isPaid && job.paymentMethod && (
+                          <p className="text-xs text-gray-500">
+                            {job.paymentMethod === 'cash' ? '💵 Cash' : '🏦 Compte'}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Actions rapides */}
+          <div className="bg-white rounded-xl shadow-lg p-6">
+            <h3 className="text-xl font-bold text-gray-800 mb-4">⚡ Actions Rapides</h3>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+  onClick={() => {
+    // Pré-remplir le formulaire avec ce Bro
+    setNewJob({
+      description: '',
+      date: new Date().toISOString().split('T')[0],
+      customRate: hourlyRate,
+      bros: [{ broId: selectedBro.id, hours: 0 }],
+      isPaid: false,
+      paymentMethod: ''
+    });
+    navigateTo('boulots-new');
+  }}
+  className="p-3 bg-green-500 text-white rounded-lg active:scale-95 transition-transform"
+>
+  <div className="text-center">
+    <Plus size={20} className="mx-auto mb-1" />
+    <span className="text-sm font-medium">Nouveau Boulot</span>
+  </div>
+</button>
+
+              {stats.unpaidJobs > 0 && (
+                <button
+                  onClick={() => navigateTo('boulots-history')}
+                  className="p-3 bg-red-500 text-white rounded-lg active:scale-95 transition-transform"
+                >
+                  <div className="text-center">
+                    <DollarSign size={20} className="mx-auto mb-1" />
+                    <span className="text-sm font-medium">Payer Boulots</span>
+                  </div>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Insights */}
+          <div className="bg-gradient-to-r from-blue-100 to-indigo-100 rounded-xl p-4">
+            <h3 className="font-semibold text-blue-800 mb-2">💡 Insights</h3>
+            <div className="text-sm text-blue-700 space-y-1">
+              {stats.totalJobs > 0 && (
+                <>
+                  <p>📊 Moyenne: <strong>{Math.round(stats.totalHours / stats.totalJobs * 10) / 10}h</strong> par boulot</p>
+                  <p>💰 Gain moyen: <strong>{formatCurrency(stats.totalEarnings / stats.totalJobs)}</strong> par boulot</p>
+                  {stats.unpaidJobs > 0 && (
+                    <p>⚠️ En attente: <strong>{formatCurrency(stats.unpaidAmount)}</strong> à percevoir</p>
+                  )}
+                  {monthlyData.length > 1 && (
+                    <p>📈 Tendance: <strong>
+                      {monthlyData[monthlyData.length - 1].hours > monthlyData[monthlyData.length - 2].hours
+                        ? '↗️ En hausse'
+                        : '↘️ En baisse'}
+                    </strong> ce mois</p>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -5838,6 +6208,10 @@ if (currentScreen === 'finance-sales-stats') {
   }
 
   if (currentScreen === 'settings') {
+    if (!settingsAuthenticated) {
+      navigateTo('settings-password');
+      return null;
+    }
     return (
       <div className="min-h-screen bg-gradient-to-br from-purple-50 to-purple-100">
         <Header title="Paramètres" onBack={() => navigateTo('home')} />
@@ -5954,7 +6328,21 @@ if (currentScreen === 'finance-sales-stats') {
             </div>
           </button>
 
-
+        </div>
+        <div className="mt-6">
+          <button
+            onClick={() => {
+              setSettingsAuthenticated(false);
+              alert('🔒 Session fermée ! Vous devrez ressaisir le mot de passe.');
+              navigateTo('home');
+            }}
+            className="w-full p-4 bg-red-500 text-white rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center justify-center space-x-2">
+              <span>🔒</span>
+              <span>Fermer la session</span>
+            </div>
+          </button>
         </div>
       </div>
     );
