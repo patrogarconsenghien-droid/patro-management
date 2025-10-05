@@ -2171,7 +2171,7 @@ ${job.registeredBros.map(reg => {
           title={`Commande - ${selectedMember?.name}`}
           onBack={() => { setSelectedMember(null); navigateTo('bar-order'); }}
         />
-       
+
 
 
         <div className="p-4">
@@ -2259,7 +2259,7 @@ ${job.registeredBros.map(reg => {
             <div className="mb-6">
               <h3 className="text-lg font-semibold mb-3 text-gray-800">⭐ Populaires</h3>
 
-             
+
 
               <div className="grid grid-cols-2 gap-3">
                 {(() => {
@@ -5505,6 +5505,46 @@ ${job.registeredBros.map(reg => {
   }
 
   if (currentScreen === 'finance-history') {
+    // Combiner toutes les transactions financières
+    const allFinancialTransactions = [
+      // Les transactions financières existantes
+      ...financialTransactions.map(t => ({ ...t, source: 'financial' })),
+
+      // Ajouter les rechargements de compte (mais pas les commandes)
+      ...orders
+        .filter(o => o.type === 'recharge' || o.type === 'repayment')
+        .map(o => ({
+          id: o.id,
+          type: o.type === 'recharge' ? 'recharge' : 'repayment',
+          amount: o.amount,
+          description: `${o.type === 'recharge' ? 'Rechargement' : 'Remboursement'} - ${o.memberName}`,
+          paymentMethod: o.paymentMethod,
+          timestamp: o.timestamp,
+          source: 'member'
+        })),
+
+      // Ajouter les boulots payés
+      ...jobs
+        .filter(j => j.isPaid)
+        .map(j => ({
+          id: j.id,
+          type: 'job',
+          amount: j.total,
+          description: `Boulot - ${j.broName} (${j.hours}h)`,
+          paymentMethod: j.paymentMethod,
+          timestamp: j.date || j.timestamp || j.createdAt,
+          source: 'job',
+          hours: j.hours,
+          broName: j.broName
+        }))
+    ];
+
+    // Compter les différents types
+    const incomeCount = financialTransactions.filter(t => t.type === 'income').length;
+    const expenseCount = financialTransactions.filter(t => t.type === 'expense').length;
+    const rechargeCount = orders.filter(o => o.type === 'recharge' || o.type === 'repayment').length;
+    const jobCount = jobs.filter(j => j.isPaid).length;
+
     return (
       <div className="min-h-screen bg-gray-50">
         <Header title="Historique Financier" onBack={() => navigateTo('finance')} />
@@ -5513,28 +5553,36 @@ ${job.registeredBros.map(reg => {
           {/* Résumé rapide */}
           <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
             <h3 className="font-semibold text-lg mb-3 text-center">📊 Résumé</h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 gap-3">
               <div className="text-center">
                 <div className="bg-green-100 p-3 rounded-lg">
-                  <p className="text-xl font-bold text-green-600">
-                    {financialTransactions.filter(t => t.type === 'income').length}
-                  </p>
+                  <p className="text-xl font-bold text-green-600">{incomeCount}</p>
                   <p className="text-sm text-green-700">Rentrées</p>
                 </div>
               </div>
               <div className="text-center">
                 <div className="bg-red-100 p-3 rounded-lg">
-                  <p className="text-xl font-bold text-red-600">
-                    {financialTransactions.filter(t => t.type === 'expense').length}
-                  </p>
+                  <p className="text-xl font-bold text-red-600">{expenseCount}</p>
                   <p className="text-sm text-red-700">Frais</p>
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="bg-blue-100 p-3 rounded-lg">
+                  <p className="text-xl font-bold text-blue-600">{rechargeCount}</p>
+                  <p className="text-sm text-blue-700">Rechargements</p>
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="bg-purple-100 p-3 rounded-lg">
+                  <p className="text-xl font-bold text-purple-600">{jobCount}</p>
+                  <p className="text-sm text-purple-700">Boulots</p>
                 </div>
               </div>
             </div>
           </div>
 
           {/* Liste des transactions */}
-          {financialTransactions.length === 0 ? (
+          {allFinancialTransactions.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <div className="text-4xl mb-2">💰</div>
               <p>Aucune transaction financière</p>
@@ -5542,87 +5590,73 @@ ${job.registeredBros.map(reg => {
             </div>
           ) : (
             <div className="space-y-3">
-              {financialTransactions
+              {allFinancialTransactions
                 .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
                 .map(transaction => (
-                  <div key={transaction.id} className="bg-white p-4 rounded-lg shadow-sm">
+                  <div key={`${transaction.source}-${transaction.id}`} className="bg-white p-4 rounded-lg shadow-sm">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-2">
                           {/* Badge type de transaction */}
-                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${transaction.type === 'income'
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-red-100 text-red-800'
+                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${transaction.type === 'income' ? 'bg-green-100 text-green-800' :
+                              transaction.type === 'expense' ? 'bg-red-100 text-red-800' :
+                                transaction.type === 'recharge' ? 'bg-blue-100 text-blue-800' :
+                                  transaction.type === 'repayment' ? 'bg-green-100 text-green-800' :
+                                    transaction.type === 'job' ? 'bg-purple-100 text-purple-800' :
+                                      'bg-gray-100 text-gray-800'
                             }`}>
-                            {transaction.type === 'income' ? '📈 Rentrée' : '📉 Frais'}
+                            {transaction.type === 'income' ? '💰 Rentrée' :
+                              transaction.type === 'expense' ? '💸 Frais' :
+                                transaction.type === 'recharge' ? '🔄 Rechargement' :
+                                  transaction.type === 'repayment' ? '💰 Remboursement' :
+                                    transaction.type === 'job' ? '🔨 Boulot' :
+                                      'Transaction'}
                           </span>
 
                           {/* Badge mode de paiement */}
-                          <span className={`text-xs px-2 py-1 rounded-full ${transaction.paymentMethod === 'cash'
-                            ? 'bg-green-50 text-green-700'
-                            : 'bg-blue-50 text-blue-700'
-                            }`}>
-                            {transaction.paymentMethod === 'cash' ? '💵 Cash' : '🏦 Compte'}
-                          </span>
-
-                          {/* Badge catégorie si elle existe */}
-                          {transaction.category && transaction.category !== 'other' && (
-                            <span className="text-xs px-2 py-1 rounded-full bg-purple-50 text-purple-700">
-                              {transaction.category === 'sales' ? 'Ventes' :
-                                transaction.category === 'events' ? 'Événements' :
-                                  transaction.category === 'donations' ? 'Dons' :
-                                    transaction.category === 'subsidies' ? 'Subsides' :
-                                      transaction.category === 'supplies' ? 'Fournitures' :
-                                        transaction.category === 'maintenance' ? 'Entretien' :
-                                          transaction.category === 'utilities' ? 'Utilities' :
-                                            'Autre'}
+                          {transaction.paymentMethod && (
+                            <span className={`text-xs px-2 py-1 rounded-full ${transaction.paymentMethod === 'cash'
+                              ? 'bg-green-50 text-green-700'
+                              : 'bg-blue-50 text-blue-700'
+                              }`}>
+                              {transaction.paymentMethod === 'cash' ? '💵 Cash' : '🏦 Compte'}
                             </span>
                           )}
                         </div>
 
-                        <h3 className="font-medium text-gray-800 mb-1">{transaction.description}</h3>
-                        <p className="text-sm text-gray-600">{formatDateTime(transaction.timestamp)}</p>
+                        {/* Description */}
+                        <p className="font-medium mb-1">{transaction.description}</p>
 
-                        {/* Informations spéciales pour les transactions de stock */}
-                        {transaction.type === 'stock_adjustment' && (
-                          <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
-                            <p><strong>Ajustement stock:</strong> {transaction.productName}</p>
-                            <p>Quantité: {transaction.quantity} ({transaction.adjustmentType === 'add' ? 'Ajout' : 'Retrait'})</p>
-                          </div>
+                        {/* Catégorie si présente (pour les transactions financières) */}
+                        {transaction.category && transaction.source === 'financial' && (
+                          <p className="text-sm text-gray-500 mb-1">
+                            {transaction.category === 'cotisation' && '📋 Cotisation'}
+                            {transaction.category === 'bar' && '🍺 Bar'}
+                            {transaction.category === 'boulot' && '🔨 Boulot'}
+                            {transaction.category === 'event' && '🎉 Événement'}
+                            {transaction.category === 'don' && '🎁 Don'}
+                            {transaction.category === 'bank_transfer' && '🏦 Transfert bancaire'}
+                            {transaction.category === 'autre' && '📌 Autre'}
+                          </p>
                         )}
 
-                        {transaction.type === 'product_creation' && (
-                          <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
-                            <p><strong>Création produit:</strong> {transaction.productName}</p>
-                            <p>Stock initial: {transaction.quantity} unités</p>
-                          </div>
-                        )}
+                        {/* Date */}
+                        <p className="text-sm text-gray-500">
+                          {formatDate(transaction.timestamp)}
+                        </p>
                       </div>
 
+                      {/* Montant */}
                       <div className="text-right ml-4">
-                        <div className="flex items-center space-x-2">
-                          <div>
-                            <p className={`text-xl font-bold ${transaction.type === 'income' ? 'text-green-600' : 'text-red-600'
-                              }`}>
-                              {transaction.type === 'income' ? '+' : '-'}{formatCurrency(transaction.amount)}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => {
-                              if (confirm(`Êtes-vous sûr de vouloir supprimer cette ${transaction.type === 'income' ? 'rentrée' : 'dépense'} ?\n\n"${transaction.description}"\n\nCela ajustera votre trésorerie.`)) {
-                                deleteFinancialTransaction(transaction.id);
-                              }
-                            }}
-                            className="p-2 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
-                            title="Supprimer cette transaction"
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
+                        <p className={`text-lg font-bold ${transaction.type === 'expense' ? 'text-red-600' : 'text-green-600'
+                          }`}>
+                          {transaction.type === 'expense' ? '-' : '+'}{formatCurrency(transaction.amount)}
+                        </p>
                       </div>
                     </div>
                   </div>
-                ))}
+                ))
+              }
             </div>
           )}
         </div>
