@@ -67,6 +67,8 @@ const PatroApp = () => {
   const [settingsAuthenticated, setSettingsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
   const [selectedBro, setSelectedBro] = useState(null);
+  const [newMemberIsExternal, setNewMemberIsExternal] = useState(false);
+  const [showExternalPrice, setShowExternalPrice] = useState(false);
 
 
 
@@ -481,12 +483,14 @@ ${job.registeredBros.map(reg => {
     if (newMemberName.trim()) {
       const newMember = {
         name: newMemberName.trim(),
-        balance: 0
+        balance: 0,
+        isExternal: newMemberIsExternal  // ⭐ Utilise la valeur de la checkbox
       };
 
       try {
         await saveToFirebase('members', newMember);
         setNewMemberName('');
+        setNewMemberIsExternal(false);
         setShowModal(false);
       } catch (error) {
         alert('Erreur lors de l\'ajout du membre');
@@ -567,20 +571,23 @@ ${job.registeredBros.map(reg => {
     const product = products.find(p => p.id === productId);
     if (!product) return;
 
+    // ⭐ NOUVEAU : Déterminer le prix selon le type de membre
+    const basePrice = selectedMember?.isExternal ? (product.externalPrice || product.price) : product.price;
+
     let pricePerUnit;
     let quantityToAdd;
 
     switch (saleType) {
       case 'pack':
-        pricePerUnit = product.pricePerPack / product.packSize;
+        pricePerUnit = (product.pricePerPack || basePrice * product.packSize) / product.packSize;
         quantityToAdd = product.packSize;
         break;
       case 'eleven':
-        pricePerUnit = product.pricePer11 / 11;
+        pricePerUnit = (product.pricePer11 || basePrice * 11) / 11;
         quantityToAdd = 11;
         break;
       default: // 'unit'
-        pricePerUnit = product.price;
+        pricePerUnit = basePrice;  // ⭐ Utilise le bon prix
         quantityToAdd = quantity;
     }
 
@@ -916,6 +923,7 @@ ${job.registeredBros.map(reg => {
       const product = {
         name: newProduct.name.trim(),
         price: price,
+        externalPrice: parseFloat(newProduct.externalPrice) || price,
         category: newProduct.category,
         stock: stock,
         stockType: newProduct.stockType,
@@ -976,6 +984,7 @@ ${job.registeredBros.map(reg => {
       const updatedProduct = {
         name: newProduct.name.trim(),
         price: price,
+         externalPrice: parseFloat(newProduct.externalPrice) || price,
         category: newProduct.category,
         stock: stock,
         stockType: newProduct.stockType,
@@ -1583,7 +1592,14 @@ ${job.registeredBros.map(reg => {
               <div key={member.id} className="bg-white p-4 rounded-lg shadow-sm">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <h3 className="font-medium">{member.name}</h3>
+                    <h3 className="font-medium">
+                      {member.name}
+                      {member.isExternal && (
+                        <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
+                          👤 Externe
+                        </span>
+                      )}
+                    </h3>
                     {(() => {
                       // Calculer le solde réel à partir des transactions
                       const memberOrders = orders.filter(order => order.memberId === member.id);
@@ -1646,6 +1662,18 @@ ${job.registeredBros.map(reg => {
                 onChange={(e) => setNewMemberName(e.target.value)}
                 className="w-full p-3 border rounded-lg"
               />
+              <div className="flex items-center space-x-2 p-3 bg-gray-50 rounded-lg">
+                <input
+                  type="checkbox"
+                  id="isExternal"
+                  checked={newMemberIsExternal}
+                  onChange={(e) => setNewMemberIsExternal(e.target.checked)}
+                  className="w-5 h-5"
+                />
+                <label htmlFor="isExternal" className="text-sm font-medium">
+                  👤 Membre externe (prix différents)
+                </label>
+              </div>
               <button
                 onClick={addMember}
                 disabled={!newMemberName.trim() || loading}
@@ -1904,9 +1932,31 @@ ${job.registeredBros.map(reg => {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header
+
           title={`Historique - ${selectedMember?.name}`}
           onBack={() => navigateTo('bar-members')}
         />
+        {/* Bouton pour basculer externe/normal */}
+        <div className="p-4">
+          <button
+            onClick={async () => {
+              const newStatus = !selectedMember.isExternal;
+              if (confirm(`${selectedMember.name} sera marqué comme ${newStatus ? 'EXTERNE' : 'MEMBRE NORMAL'}. Confirmer ?`)) {
+                await updateInFirebase('members', selectedMember.id, { isExternal: newStatus });
+                setSelectedMember({ ...selectedMember, isExternal: newStatus });
+              }
+            }}
+            className={`w-full p-3 rounded-lg active:scale-95 transition-transform ${selectedMember?.isExternal
+              ? 'bg-orange-500 text-white'
+              : 'bg-blue-500 text-white'
+              }`}
+          >
+            {selectedMember?.isExternal ? '👤 Membre Externe' : '👥 Membre Normal'}
+            <span className="block text-xs mt-1">
+              Appuyer pour changer
+            </span>
+          </button>
+        </div>
 
         <div className="p-4 space-y-4">
           {/* Statistiques du membre */}
@@ -2088,6 +2138,27 @@ ${job.registeredBros.map(reg => {
           title={`Commande - ${selectedMember?.name}`}
           onBack={() => { setSelectedMember(null); navigateTo('bar-order'); }}
         />
+    {/* 🔍 CODE DE DÉBOGAGE - À SUPPRIMER APRÈS */}
+<div className="p-4 bg-yellow-50 border border-yellow-300 rounded-lg m-4">
+  <p className="text-sm font-bold mb-2">🔍 Débogage Membre:</p>
+  <p className="text-xs">Membre: {selectedMember?.name}</p>
+  <p className="text-xs">isExternal: {selectedMember?.isExternal ? 'OUI ✅' : 'NON ❌'}</p>
+  <p className="text-xs">Valeur brute: {JSON.stringify(selectedMember?.isExternal)}</p>
+</div>
+
+{/* 🔍 NOUVEAU : Débogage des produits */}
+<div className="p-4 bg-blue-50 border border-blue-300 rounded-lg m-4">
+  <p className="text-sm font-bold mb-2">🔍 Débogage Produits (3 premiers):</p>
+  {products.slice(0, 3).map(product => (
+    <div key={product.id} className="text-xs mb-2 p-2 bg-white rounded">
+      <p><strong>{product.name}</strong></p>
+      <p>Prix normal: {product.price}€</p>
+      <p>Prix externe: {product.externalPrice || 'MANQUANT ❌'}€</p>
+      <p>Prix calculé: {selectedMember?.isExternal ? (product.externalPrice || product.price) : product.price}€</p>
+    </div>
+  ))}
+</div>
+   
 
         <div className="p-4">
           {/* Barre de recherche */}
@@ -2210,7 +2281,12 @@ ${job.registeredBros.map(reg => {
                       <div key={product.id} className={`bg-white p-3 rounded-lg shadow-sm border-2 border-yellow-200 ${isOutOfStock ? 'opacity-50' : ''}`}>
                         <div className="text-center">
                           <h4 className="font-medium text-sm mb-1">{product.name}</h4>
-                          <p className="text-blue-600 font-semibold text-sm">{formatCurrency(product.price)}</p>
+                          <p className="text-blue-600 font-semibold text-sm">
+                            {formatCurrency(selectedMember?.isExternal ? (product.externalPrice || product.price) : product.price)}
+                            {selectedMember?.isExternal && product.externalPrice && product.externalPrice !== product.price && (
+                              <span className="ml-1 text-xs text-orange-600">(externe)</span>
+                            )}
+                          </p>
                           <div className={`text-xs px-2 py-1 rounded-full inline-block mt-1 ${stockStatus.bg} ${stockStatus.color}`}>
                             {product.stock}
                           </div>
@@ -2279,7 +2355,12 @@ ${job.registeredBros.map(reg => {
                       <div className="mb-3">
                         <h4 className="font-medium text-sm mb-1 leading-tight">{product.name}</h4>
                         <div className="flex items-center justify-between mb-1">
-                          <p className="text-blue-600 font-semibold text-sm">{formatCurrency(product.price)}</p>
+                          <p className="text-blue-600 font-semibold text-sm">
+                            {formatCurrency(selectedMember?.isExternal ? (product.externalPrice || product.price) : product.price)}
+                            {selectedMember?.isExternal && product.externalPrice && product.externalPrice !== product.price && (
+                              <span className="ml-1 text-xs text-orange-600">(ext)</span>
+                            )}
+                          </p>
                           <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
                             {product.category}
                           </span>
@@ -5085,20 +5166,20 @@ ${job.registeredBros.map(reg => {
       .filter(job => job.broId === selectedBro.id)
       .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-   // Calculer les statistiques
-const totalHours = broJobs.reduce((sum, job) => sum + (job.hours || 0), 0);
-const totalEarnings = broJobs.reduce((sum, job) => sum + (job.total || 0), 0);
+    // Calculer les statistiques
+    const totalHours = broJobs.reduce((sum, job) => sum + (job.hours || 0), 0);
+    const totalEarnings = broJobs.reduce((sum, job) => sum + (job.total || 0), 0);
 
-const stats = {
-  totalJobs: broJobs.length,
-  totalHours: totalHours,
-  totalEarnings: totalEarnings,
-  paidJobs: broJobs.filter(job => job.isPaid).length,
-  unpaidJobs: broJobs.filter(job => !job.isPaid).length,
-  unpaidAmount: broJobs.filter(job => !job.isPaid).reduce((sum, job) => sum + (job.total || 0), 0),
-  averageHourlyRate: broJobs.length > 0 ? broJobs.reduce((sum, job) => sum + (job.hourlyRate || 0), 0) / broJobs.length : 0,
-  averageHoursPerJob: broJobs.length > 0 ? totalHours / broJobs.length : 0
-};
+    const stats = {
+      totalJobs: broJobs.length,
+      totalHours: totalHours,
+      totalEarnings: totalEarnings,
+      paidJobs: broJobs.filter(job => job.isPaid).length,
+      unpaidJobs: broJobs.filter(job => !job.isPaid).length,
+      unpaidAmount: broJobs.filter(job => !job.isPaid).reduce((sum, job) => sum + (job.total || 0), 0),
+      averageHourlyRate: broJobs.length > 0 ? broJobs.reduce((sum, job) => sum + (job.hourlyRate || 0), 0) / broJobs.length : 0,
+      averageHoursPerJob: broJobs.length > 0 ? totalHours / broJobs.length : 0
+    };
 
     // Grouper par mois pour le graphique
     const monthlyStats = {};
@@ -5279,25 +5360,25 @@ const stats = {
 
             <div className="grid grid-cols-2 gap-3">
               <button
-  onClick={() => {
-    // Pré-remplir le formulaire avec ce Bro
-    setNewJob({
-      description: '',
-      date: new Date().toISOString().split('T')[0],
-      customRate: hourlyRate,
-      bros: [{ broId: selectedBro.id, hours: 0 }],
-      isPaid: false,
-      paymentMethod: ''
-    });
-    navigateTo('boulots-new');
-  }}
-  className="p-3 bg-green-500 text-white rounded-lg active:scale-95 transition-transform"
->
-  <div className="text-center">
-    <Plus size={20} className="mx-auto mb-1" />
-    <span className="text-sm font-medium">Nouveau Boulot</span>
-  </div>
-</button>
+                onClick={() => {
+                  // Pré-remplir le formulaire avec ce Bro
+                  setNewJob({
+                    description: '',
+                    date: new Date().toISOString().split('T')[0],
+                    customRate: hourlyRate,
+                    bros: [{ broId: selectedBro.id, hours: 0 }],
+                    isPaid: false,
+                    paymentMethod: ''
+                  });
+                  navigateTo('boulots-new');
+                }}
+                className="p-3 bg-green-500 text-white rounded-lg active:scale-95 transition-transform"
+              >
+                <div className="text-center">
+                  <Plus size={20} className="mx-auto mb-1" />
+                  <span className="text-sm font-medium">Nouveau Boulot</span>
+                </div>
+              </button>
 
               {stats.unpaidJobs > 0 && (
                 <button
@@ -6590,6 +6671,40 @@ const stats = {
                 <span className="absolute right-3 top-3 text-gray-500">€</span>
               </div>
             </div>
+            {/* Case à cocher pour prix externe */}
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="hasExternalPrice"
+                checked={showExternalPrice}
+                onChange={(e) => setShowExternalPrice(e.target.checked)}
+                className="w-4 h-4"
+              />
+              <label htmlFor="hasExternalPrice" className="text-sm">
+                Prix différent pour membres externes
+              </label>
+            </div>
+
+            {/* Champ prix externe (conditionnel) */}
+            {showExternalPrice && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  💰 Prix pour membres externes
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="Prix pour externes"
+                    value={newProduct.externalPrice || ''}
+                    onChange={(e) => setNewProduct({ ...newProduct, externalPrice: e.target.value })}
+                    className="w-full p-3 border rounded-lg pr-8"
+                  />
+                  <span className="absolute right-3 top-3 text-gray-500">€</span>
+                </div>
+              </div>
+            )}
 
             {/* Catégorie */}
             <div>
