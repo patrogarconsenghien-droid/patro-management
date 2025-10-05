@@ -69,6 +69,8 @@ const PatroApp = () => {
   const [selectedBro, setSelectedBro] = useState(null);
   const [newMemberIsExternal, setNewMemberIsExternal] = useState(false);
   const [showExternalPrice, setShowExternalPrice] = useState(false);
+  const [directPayment, setDirectPayment] = useState(false);
+  const [directPaymentMethod, setDirectPaymentMethod] = useState('');
 
 
 
@@ -644,6 +646,10 @@ ${job.registeredBros.map(reg => {
     const { member, items, total } = orderConfirmation;
 
     if (!member || items.length === 0) return;
+    if (directPayment && !directPaymentMethod) {
+      alert('Veuillez choisir un mode de paiement');
+      return;
+    }
 
     // Calculer les unités totales nécessaires
     const totalUnitsNeeded = {};
@@ -654,31 +660,58 @@ ${job.registeredBros.map(reg => {
       totalUnitsNeeded[cartItem.productId] += cartItem.quantity;
     });
 
-    const order = {
-      memberId: member.id,
-      memberName: member.name,
-      type: 'order',
-      amount: total,
-      timestamp: new Date().toISOString(),
-      items: items
-    };
-
-    const newBalance = member.balance - total;
-
     try {
+      // ⭐ SI PAIEMENT DIRECT : Créer d'abord un rechargement
+      if (directPayment && directPaymentMethod) {
+        const rechargeTransaction = {
+          memberId: member.id,
+          memberName: member.name,
+          type: 'recharge',
+          amount: total,
+          paymentMethod: directPaymentMethod,
+          timestamp: new Date().toISOString(),
+          items: []
+        };
+
+        await saveToFirebase('orders', rechargeTransaction);
+
+        // Mettre à jour le solde avec le rechargement
+        const rechargedBalance = member.balance + total;
+        await updateInFirebase('members', member.id, { balance: rechargedBalance });
+      }
+
+      // Ensuite créer la commande (qui débite)
+      const order = {
+        memberId: member.id,
+        memberName: member.name,
+        type: 'order',
+        amount: total,
+        timestamp: new Date().toISOString(),
+        items: items
+      };
+
+      const finalBalance = member.balance + (directPayment ? total : 0) - total;
+
       // Mettre à jour le stock
       Object.entries(totalUnitsNeeded).forEach(([productId, totalNeeded]) => {
         updateStock(productId, -totalNeeded, `Vente à ${member.name}`);
       });
 
-      // Sauvegarder la commande et mettre à jour le solde
+      // Sauvegarder la commande et mettre à jour le solde final
       await Promise.all([
         saveToFirebase('orders', order),
-        updateInFirebase('members', member.id, { balance: newBalance })
+        updateInFirebase('members', member.id, { balance: finalBalance })
       ]);
+
+      // Message de confirmation
+      if (directPayment) {
+        alert(`✅ Paiement de ${formatCurrency(total)} reçu et commande validée !`);
+      }
 
       // Fermer le modal et vider le panier
       setOrderConfirmation({ show: false, member: null, items: [], total: 0 });
+      setDirectPayment(false);
+      setDirectPaymentMethod('');
       setCart({});
 
       // Retourner à la sélection de membre pour une nouvelle commande
@@ -984,7 +1017,7 @@ ${job.registeredBros.map(reg => {
       const updatedProduct = {
         name: newProduct.name.trim(),
         price: price,
-         externalPrice: parseFloat(newProduct.externalPrice) || price,
+        externalPrice: parseFloat(newProduct.externalPrice) || price,
         category: newProduct.category,
         stock: stock,
         stockType: newProduct.stockType,
@@ -2138,27 +2171,8 @@ ${job.registeredBros.map(reg => {
           title={`Commande - ${selectedMember?.name}`}
           onBack={() => { setSelectedMember(null); navigateTo('bar-order'); }}
         />
-    {/* 🔍 CODE DE DÉBOGAGE - À SUPPRIMER APRÈS */}
-<div className="p-4 bg-yellow-50 border border-yellow-300 rounded-lg m-4">
-  <p className="text-sm font-bold mb-2">🔍 Débogage Membre:</p>
-  <p className="text-xs">Membre: {selectedMember?.name}</p>
-  <p className="text-xs">isExternal: {selectedMember?.isExternal ? 'OUI ✅' : 'NON ❌'}</p>
-  <p className="text-xs">Valeur brute: {JSON.stringify(selectedMember?.isExternal)}</p>
-</div>
+       
 
-{/* 🔍 NOUVEAU : Débogage des produits */}
-<div className="p-4 bg-blue-50 border border-blue-300 rounded-lg m-4">
-  <p className="text-sm font-bold mb-2">🔍 Débogage Produits (3 premiers):</p>
-  {products.slice(0, 3).map(product => (
-    <div key={product.id} className="text-xs mb-2 p-2 bg-white rounded">
-      <p><strong>{product.name}</strong></p>
-      <p>Prix normal: {product.price}€</p>
-      <p>Prix externe: {product.externalPrice || 'MANQUANT ❌'}€</p>
-      <p>Prix calculé: {selectedMember?.isExternal ? (product.externalPrice || product.price) : product.price}€</p>
-    </div>
-  ))}
-</div>
-   
 
         <div className="p-4">
           {/* Barre de recherche */}
@@ -2245,13 +2259,7 @@ ${job.registeredBros.map(reg => {
             <div className="mb-6">
               <h3 className="text-lg font-semibold mb-3 text-gray-800">⭐ Populaires</h3>
 
-              {/* 🔍 DÉBOGAGE - Affiche les infos dans l'interface */}
-              <div className="mb-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs">
-                <p><strong>Debug:</strong></p>
-                <p>Produits populaires configurés: {JSON.stringify(popularProducts)}</p>
-                <p>Produits trouvés: {products.filter(p => popularProducts.includes(p.name)).map(p => p.name).join(', ')}</p>
-                <p>En stock: {products.filter(p => popularProducts.includes(p.name) && p.stock > 0).map(p => p.name).join(', ')}</p>
-              </div>
+             
 
               <div className="grid grid-cols-2 gap-3">
                 {(() => {
@@ -2505,7 +2513,11 @@ ${job.registeredBros.map(reg => {
         {/* Modal de confirmation */}
         <Modal
           isOpen={orderConfirmation.show}
-          onClose={() => setOrderConfirmation({ show: false, member: null, items: [], total: 0 })}
+          onClose={() => {
+            setOrderConfirmation({ show: false, member: null, items: [], total: 0 });
+            setDirectPayment(false);
+            setDirectPaymentMethod('');
+          }}
           title="Confirmer la commande"
         >
           <div className="space-y-4">
@@ -2517,9 +2529,6 @@ ${job.registeredBros.map(reg => {
                   </h3>
                   <p className="text-sm text-blue-600">
                     Solde actuel: {formatCurrency(orderConfirmation.member.balance)}
-                  </p>
-                  <p className="text-sm text-blue-600">
-                    Nouveau solde: {formatCurrency(orderConfirmation.member.balance - orderConfirmation.total)}
                   </p>
                 </div>
 
@@ -2539,25 +2548,99 @@ ${job.registeredBros.map(reg => {
 
                 <div className="bg-green-50 p-3 rounded-lg">
                   <div className="flex justify-between items-center">
-                    <span className="font-semibold text-green-800">Total :</span>
+                    <span className="font-semibold text-green-800">Total à payer :</span>
                     <span className="text-xl font-bold text-green-600">
                       {formatCurrency(orderConfirmation.total)}
                     </span>
                   </div>
                 </div>
 
+                {/* ⭐ NOUVEAU : Option de paiement direct */}
+                <div className="border-t pt-4">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <input
+                      type="checkbox"
+                      id="directPayment"
+                      checked={directPayment}
+                      onChange={(e) => {
+                        setDirectPayment(e.target.checked);
+                        if (!e.target.checked) setDirectPaymentMethod('');
+                      }}
+                      className="w-5 h-5"
+                    />
+                    <label htmlFor="directPayment" className="font-medium text-gray-700">
+                      💳 Le membre paie maintenant
+                    </label>
+                  </div>
+
+                  {directPayment && (
+                    <div className="space-y-3 ml-7">
+                      <p className="text-sm text-gray-600">
+                        Choisissez le mode de paiement :
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setDirectPaymentMethod('cash')}
+                          className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${directPaymentMethod === 'cash'
+                            ? 'bg-green-100 border-green-500 text-green-700'
+                            : 'bg-gray-50 border-gray-300 text-gray-600'
+                            }`}
+                        >
+                          💵 Cash
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setDirectPaymentMethod('account')}
+                          className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${directPaymentMethod === 'account'
+                            ? 'bg-blue-100 border-blue-500 text-blue-700'
+                            : 'bg-gray-50 border-gray-300 text-gray-600'
+                            }`}
+                        >
+                          🏦 Compte
+                        </button>
+                      </div>
+
+                      <div className="bg-blue-50 p-3 rounded-lg">
+                        <p className="text-sm text-blue-700">
+                          ✅ Le compte sera rechargé de <strong>{formatCurrency(orderConfirmation.total)}</strong> puis débité du même montant
+                        </p>
+                        <p className="text-xs text-blue-600 mt-1">
+                          Solde final: {formatCurrency(orderConfirmation.member.balance)}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {!directPayment && (
+                    <div className="bg-orange-50 p-3 rounded-lg ml-7">
+                      <p className="text-sm text-orange-700">
+                        Le montant sera débité du solde
+                      </p>
+                      <p className="text-sm font-semibold text-orange-800 mt-1">
+                        Nouveau solde: {formatCurrency(orderConfirmation.member.balance - orderConfirmation.total)}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
                 <div className="flex space-x-3 pt-4">
                   <button
-                    onClick={() => setOrderConfirmation({ show: false, member: null, items: [], total: 0 })}
+                    onClick={() => {
+                      setOrderConfirmation({ show: false, member: null, items: [], total: 0 });
+                      setDirectPayment(false);
+                      setDirectPaymentMethod('');
+                    }}
                     className="flex-1 p-3 bg-gray-500 text-white rounded-lg active:scale-95 transition-transform"
                   >
-                    Retour à la commande
+                    Annuler
                   </button>
                   <button
                     onClick={confirmOrder}
-                    className="flex-1 p-3 bg-green-500 text-white rounded-lg active:scale-95 transition-transform"
+                    disabled={directPayment && !directPaymentMethod}
+                    className="flex-1 p-3 bg-green-500 text-white rounded-lg active:scale-95 transition-transform disabled:bg-gray-300"
                   >
-                    Valider la commande
+                    {directPayment ? '💳 Payer et Valider' : '✅ Valider'}
                   </button>
                 </div>
               </>
