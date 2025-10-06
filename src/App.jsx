@@ -1879,7 +1879,7 @@ ${job.registeredBros.map(reg => {
         <div className="min-h-screen bg-gray-50">
           <Header title="Sélectionner un membre" onBack={() => {
             navigateTo('bar');
-            setMemberSearch(''); // Reset de la recherche
+            setMemberSearch('');
           }} />
 
           <div className="p-4">
@@ -1902,44 +1902,136 @@ ${job.registeredBros.map(reg => {
                   <p>{memberSearch ? 'Aucun membre trouvé' : 'Aucun membre disponible'}</p>
                 </div>
               ) : (
-                filteredMembers.map(member => (
-                  <button
-                    key={member.id}
-                    onClick={() => {
-                      setSelectedMember(member);
-                      navigateTo('bar-products', member);
-                      setMemberSearch('');
-                    }}
-                    className="w-full p-4 bg-white rounded-lg shadow-sm text-left active:scale-95 transition-transform"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="font-medium">{member.name}</h3>
-                        {(() => {
-                          // Calculer le solde réel
-                          const memberOrders = orders.filter(order => order.memberId === member.id);
-                          const totalSpent = memberOrders
-                            .filter(order => order.type === 'order')
-                            .reduce((sum, order) => sum + (order.amount || 0), 0);
-                          const totalRecharged = memberOrders
-                            .filter(order => order.type === 'repayment' || order.type === 'recharge')
-                            .reduce((sum, order) => sum + (order.amount || 0), 0);
-                          const realBalance = totalRecharged - totalSpent;
+                filteredMembers.map(member => {
+                  // Calculer le solde réel
+                  const memberOrders = orders.filter(order => order.memberId === member.id);
+                  const totalSpent = memberOrders
+                    .filter(order => order.type === 'order')
+                    .reduce((sum, order) => sum + (order.amount || 0), 0);
+                  const totalRecharged = memberOrders
+                    .filter(order => order.type === 'repayment' || order.type === 'recharge')
+                    .reduce((sum, order) => sum + (order.amount || 0), 0);
+                  const realBalance = totalRecharged - totalSpent;
 
-                          return (
+                  return (
+                    <div key={member.id} className="bg-white rounded-lg shadow-sm">
+                      <button
+                        onClick={() => {
+                          setSelectedMember(member);
+                          navigateTo('bar-products', member);
+                          setMemberSearch('');
+                        }}
+                        className="w-full p-4 text-left active:scale-95 transition-transform"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <h3 className="font-medium">{member.name}</h3>
                             <p className={`text-sm ${realBalance < 0 ? 'text-red-500' : 'text-green-500'}`}>
                               Solde: {formatCurrency(realBalance)}
                             </p>
-                          );
-                        })()}
+                          </div>
+                          <div className="text-gray-400">→</div>
+                        </div>
+                      </button>
+
+                      {/* Bouton de rechargement rapide */}
+                      <div className="px-4 pb-3 flex justify-end border-t pt-2">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedMember(member);
+                            setModalType('repay');
+                            setShowModal(true);
+                          }}
+                          className={`px-3 py-1 text-white rounded text-sm active:scale-95 transition-transform ${realBalance < 0 ? 'bg-green-500' : 'bg-blue-500'
+                            }`}
+                        >
+                          💰 {realBalance < 0 ? 'Rembourser' : 'Recharger'}
+                        </button>
                       </div>
-                      <div className="text-gray-400">→</div>
                     </div>
-                  </button>
-                ))
+                  );
+                })
               )}
             </div>
           </div>
+
+          {/* Modal de rechargement (réutilisé depuis bar-members) */}
+          <Modal
+            isOpen={showModal && modalType === 'repay'}
+            onClose={() => { setShowModal(false); setRepaymentAmount(''); setPaymentMethod(''); setSelectedMember(null); }}
+            title={selectedMember?.balance < 0 ? 'Remboursement' : 'Recharger le compte'}
+          >
+            {selectedMember && (
+              <div className="space-y-4">
+                <p>Membre: <strong>{selectedMember.name}</strong></p>
+                {(() => {
+                  const memberOrders = orders.filter(order => order.memberId === selectedMember?.id);
+                  const totalSpent = memberOrders
+                    .filter(order => order.type === 'order')
+                    .reduce((sum, order) => sum + (order.amount || 0), 0);
+                  const totalRecharged = memberOrders
+                    .filter(order => order.type === 'repayment' || order.type === 'recharge')
+                    .reduce((sum, order) => sum + (order.amount || 0), 0);
+                  const realBalance = totalRecharged - totalSpent;
+
+                  return (
+                    <p>Solde actuel: <strong className={realBalance < 0 ? 'text-red-500' : 'text-green-500'}>
+                      {formatCurrency(realBalance)}
+                    </strong></p>
+                  );
+                })()}
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Montant</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={repaymentAmount}
+                    onChange={(e) => setRepaymentAmount(e.target.value)}
+                    className="w-full p-3 border rounded-lg"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-2">Mode de paiement</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setPaymentMethod('cash')}
+                      className={`p-3 rounded-lg border-2 transition-all ${paymentMethod === 'cash'
+                          ? 'border-green-500 bg-green-50'
+                          : 'border-gray-200 bg-white'
+                        }`}
+                    >
+                      💵 Cash
+                    </button>
+                    <button
+                      onClick={() => setPaymentMethod('account')}
+                      className={`p-3 rounded-lg border-2 transition-all ${paymentMethod === 'account'
+                          ? 'border-blue-500 bg-blue-50'
+                          : 'border-gray-200 bg-white'
+                        }`}
+                    >
+                      🏦 Compte
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    repayMember();
+                    setShowModal(false);
+                  }}
+                  disabled={!repaymentAmount || parseFloat(repaymentAmount) <= 0 || !paymentMethod || loading}
+                  className={`w-full p-3 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform ${selectedMember?.balance < 0 ? 'bg-green-500' : 'bg-blue-500'
+                    }`}
+                >
+                  {loading ? 'Traitement...' : (selectedMember?.balance < 0 ? 'Confirmer le remboursement' : 'Confirmer le rechargement')}
+                </button>
+              </div>
+            )}
+          </Modal>
         </div>
       );
     }
@@ -5599,11 +5691,11 @@ ${job.registeredBros.map(reg => {
                         <div className="flex items-center space-x-2 mb-2">
                           {/* Badge type de transaction */}
                           <span className={`text-xs px-2 py-1 rounded-full font-medium ${transaction.type === 'income' ? 'bg-green-100 text-green-800' :
-                              transaction.type === 'expense' ? 'bg-red-100 text-red-800' :
-                                transaction.type === 'recharge' ? 'bg-blue-100 text-blue-800' :
-                                  transaction.type === 'repayment' ? 'bg-green-100 text-green-800' :
-                                    transaction.type === 'job' ? 'bg-purple-100 text-purple-800' :
-                                      'bg-gray-100 text-gray-800'
+                            transaction.type === 'expense' ? 'bg-red-100 text-red-800' :
+                              transaction.type === 'recharge' ? 'bg-blue-100 text-blue-800' :
+                                transaction.type === 'repayment' ? 'bg-green-100 text-green-800' :
+                                  transaction.type === 'job' ? 'bg-purple-100 text-purple-800' :
+                                    'bg-gray-100 text-gray-800'
                             }`}>
                             {transaction.type === 'income' ? '💰 Rentrée' :
                               transaction.type === 'expense' ? '💸 Frais' :
