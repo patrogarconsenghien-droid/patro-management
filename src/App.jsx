@@ -71,6 +71,11 @@ const PatroApp = () => {
   const [showExternalPrice, setShowExternalPrice] = useState(false);
   const [directPayment, setDirectPayment] = useState(false);
   const [directPaymentMethod, setDirectPaymentMethod] = useState('');
+  const [showRoulette, setShowRoulette] = useState(false);
+  const [rouletteSurprises, setRouletteSurprises] = useState([]);
+  const [rouletteResult, setRouletteResult] = useState(null);
+  const [rouletteOptions, setRouletteOptions] = useState([]);
+
 
 
 
@@ -85,6 +90,14 @@ const PatroApp = () => {
     paymentMethod: 'cash',
     category: 'other'
   });
+
+  // --- VERRE SURPRISE ---
+  const [surpriseSettings, setSurpriseSettings] = useState({
+    price: 200,
+    eligibleProducts: [], // liste d’IDs
+    weights: {} // ex : { "productId1": 3, "productId2": 1 }
+  });
+
 
 
   const [newProduct, setNewProduct] = useState({
@@ -258,6 +271,9 @@ ${job.registeredBros.map(reg => {
     let unsubscribeFinancialGoals = null;
     let unsubscribePopularProducts = null;
     let unsubscribeBarSettings = null;
+    let unsubscribeSurpriseSettings = null;
+
+
 
     const setupListeners = async () => {
       unsubscribeMembers = await loadFromFirebase('members', setMembers);
@@ -271,6 +287,20 @@ ${job.registeredBros.map(reg => {
       unsubscribeFinancialGoals = await loadFromFirebase('financialGoals', (goals) => {
         if (goals && goals.length > 0) {
           setFinancialGoal(goals[0]);
+        }
+      });
+
+      unsubscribeSurpriseSettings = await loadFromFirebase('surpriseSettings', (settings) => {
+        if (settings && settings.length > 0) {
+          const latest = settings.sort((a, b) =>
+            new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)
+          )[0];
+          setSurpriseSettings({
+            enabled: latest.enabled || false,
+            price: latest.price || 2.5,
+            pricePer11: latest.pricePer11 || 25.0,
+            eligibleProducts: latest.eligibleProducts || []
+          });
         }
       });
       unsubscribePopularProducts = await loadFromFirebase('popularProducts', (popular) => {
@@ -312,6 +342,7 @@ ${job.registeredBros.map(reg => {
       if (unsubscribeFinancialGoals) unsubscribeFinancialGoals();
       if (unsubscribePopularProducts) unsubscribePopularProducts();
       if (unsubscribeBarSettings) unsubscribeBarSettings();
+      if (unsubscribeSurpriseSettings) unsubscribeSurpriseSettings();
     };
   }, []);
   const activerNotifications = async () => {
@@ -355,6 +386,26 @@ ${job.registeredBros.map(reg => {
     // Formater en HH:MM
     return `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
   };
+
+  const saveSurpriseSettings = async () => {
+    try {
+      // On s’assure que les pondérations existent bien
+      const weightsToSave = surpriseSettings.weights || {};
+
+      await saveToFirebase('surpriseSettings', {
+        ...surpriseSettings,
+        weights: weightsToSave, // 🔥 sauvegarde des pondérations
+        updatedAt: new Date().toISOString()
+      });
+
+      alert('✅ Paramètres du verre surprise enregistrés avec succès !');
+    } catch (error) {
+      console.error('Erreur sauvegarde paramètres verre surprise:', error);
+      alert('❌ Erreur lors de la sauvegarde des paramètres du verre surprise.');
+    }
+  };
+
+
 
   const saveToFirebase = async (collectionName, data) => {
     setLoading(true);
@@ -503,24 +554,24 @@ ${job.registeredBros.map(reg => {
   const getFilteredProducts = () => {
     let filtered = products;
 
-    // Filtrer par recherche
+    // 🔍 Filtrer par recherche
     if (productSearch.trim()) {
       filtered = filtered.filter(product =>
         product.name.toLowerCase().includes(productSearch.toLowerCase())
       );
     }
 
-    // Filtrer par catégorie
+    // 🏷️ Filtrer par catégorie
     if (activeCategory !== 'all') {
       filtered = filtered.filter(product => product.category === activeCategory);
     }
 
-    // Filtrer par stock
+    // 📦 Filtrer par stock uniquement
     if (showOnlyInStock) {
       filtered = filtered.filter(product => product.stock > 0);
     }
 
-    // Trier
+    // 🧮 Trier les produits
     filtered.sort((a, b) => {
       switch (sortBy) {
         case 'price':
@@ -533,8 +584,42 @@ ${job.registeredBros.map(reg => {
       }
     });
 
+    // 🎲 Ajouter le Verre Surprise si activé
+    if (surpriseSettings.enabled) {
+      // ✅ Vérifie si le produit "verre_surprise" n'est pas déjà présent
+      const hasSurprise = filtered.some(p => p.id === 'verre_surprise');
+
+      if (surpriseSettings.enabled) {
+  const hasSurprise = filtered.some(p => p.id === 'verre_surprise');
+
+  if (!hasSurprise) {
+    // 🔍 Calcule le stock total disponible des produits éligibles
+    const eligibleProducts = products.filter(p =>
+      surpriseSettings.eligibleProducts.includes(p.id)
+    );
+    const totalStock = eligibleProducts.reduce((sum, p) => sum + (p.stock || 0), 0);
+
+    // ✅ N’ajoute le verre surprise que s’il y a du stock global
+    if (totalStock > 0 && (activeCategory === 'Boissons' || activeCategory === 'all')) {
+      filtered.unshift({
+        id: 'verre_surprise',
+        name: '🎲 Verre Surprise',
+        price: surpriseSettings.price || 2.5,
+        pricePer11: surpriseSettings.pricePer11 || (surpriseSettings.price * 10), // optionnel: prix réduit
+        category: 'Boissons',
+        stock: totalStock,          // 🟢 somme du stock des bières éligibles
+        stockType: 'mixed',         // permet de vendre à l’unité ou par 11
+        isSurprise: true
+      });
+    }
+  }
+}
+
+    }
+
     return filtered;
   };
+
 
 
   const deleteMember = async (memberId) => {
@@ -661,6 +746,20 @@ ${job.registeredBros.map(reg => {
     });
 
     try {
+      // 🎲 Si commande surprise : décrémenter les stocks des produits tirés
+      if (orderConfirmation.isSurprise && orderConfirmation.surprises) {
+        for (const surprise of orderConfirmation.surprises) {
+          await updateStock(surprise.id, -1, 'Verre Surprise');
+        }
+
+        // 💾 Met à jour le nom et l’ID des items avant l’enregistrement
+        orderConfirmation.items = orderConfirmation.items.map(item => ({
+          ...item,
+          productName: item.productName, // garde "Verre Surprise : ..."
+          productId: 'verre_surprise' // garde l'identité du verre surprise
+        }));
+      }
+
       // ⭐ SI PAIEMENT DIRECT : Créer d'abord un rechargement
       if (directPayment && directPaymentMethod) {
         const rechargeTransaction = {
@@ -687,14 +786,16 @@ ${job.registeredBros.map(reg => {
         type: 'order',
         amount: total,
         timestamp: new Date().toISOString(),
-        items: items
+        items: orderConfirmation.items // <-- items déjà modifiés si surprise
       };
 
       const finalBalance = member.balance + (directPayment ? total : 0) - total;
 
-      // Mettre à jour le stock
+      // Mettre à jour le stock pour les produits normaux
       Object.entries(totalUnitsNeeded).forEach(([productId, totalNeeded]) => {
-        updateStock(productId, -totalNeeded, `Vente à ${member.name}`);
+        if (productId !== 'verre_surprise') { // ⛔ évite de redécrémenter les surprises
+          updateStock(productId, -totalNeeded, `Vente à ${member.name}`);
+        }
       });
 
       // Sauvegarder la commande et mettre à jour le solde final
@@ -713,8 +814,6 @@ ${job.registeredBros.map(reg => {
       setDirectPayment(false);
       setDirectPaymentMethod('');
       setCart({});
-
-      // Retourner à la sélection de membre pour une nouvelle commande
       setSelectedMember(null);
       navigateTo('bar-order');
 
@@ -724,7 +823,8 @@ ${job.registeredBros.map(reg => {
     }
   };
 
-  const validateOrder = () => {
+
+  const validateOrder = async () => {
     if (Object.keys(cart).length === 0 || !selectedMember) return;
 
     const stockIssues = [];
@@ -738,8 +838,9 @@ ${job.registeredBros.map(reg => {
       totalUnitsNeeded[cartItem.productId] += cartItem.quantity;
     });
 
-    // Vérifier le stock
+    // Vérifier le stock (sauf verre surprise)
     Object.entries(totalUnitsNeeded).forEach(([productId, totalNeeded]) => {
+      if (productId === 'verre_surprise') return;
       const product = products.find(p => p.id === productId);
       if (product && product.stock < totalNeeded) {
         stockIssues.push(`${product.name}: stock insuffisant`);
@@ -747,39 +848,164 @@ ${job.registeredBros.map(reg => {
     });
 
     if (stockIssues.length > 0) {
-      alert('Stock insuffisant pour certains produits');
+      alert('⚠️ Stock insuffisant pour certains produits :\n' + stockIssues.join('\n'));
       return;
     }
 
-    // Préparer les données pour le modal de confirmation
+    // 🟣 Vérifier s’il y a un verre surprise dans la commande
+    const hasSurprise = Object.values(cart).some(item => item.productId === 'verre_surprise');
+
+   // 🎲 --- VERRE SURPRISE ---
+if (hasSurprise) {
+  const eligible = products.filter(
+    p => surpriseSettings.eligibleProducts.includes(p.id) && p.stock > 0
+  );
+
+  if (eligible.length === 0) {
+    alert("Aucun produit disponible pour le verre surprise !");
+    return;
+  }
+
+  // 🎲 Tirage aléatoire des bières surprise sans dépasser le stock réel
+  const surprises = [];
+  const stockCopy = {};
+  eligible.forEach(p => (stockCopy[p.id] = p.stock));
+
+  Object.values(cart).forEach(item => {
+    if (item.productId === 'verre_surprise') {
+      for (let i = 0; i < item.quantity; i++) {
+        // 🔥 Correction : on ne garde que les produits encore disponibles
+        const available = eligible.filter(p => stockCopy[p.id] > 0);
+        if (available.length === 0) break;
+
+        const weightedList = available.flatMap(p => {
+          const weight = (surpriseSettings.weights?.[p.id]) || 1;
+          return Array(weight).fill(p);
+        });
+
+        const random = weightedList[Math.floor(Math.random() * weightedList.length)];
+        surprises.push(random);
+        stockCopy[random.id] -= 1;
+      }
+    }
+  });
+
+  if (surprises.length === 0) {
+    alert("Tous les produits éligibles sont en rupture de stock !");
+    return;
+  }
+
+  // 🎰 Étape 1 — Préparer et afficher la roulette
+  setRouletteOptions(eligible);        // <--- nécessaire pour afficher les noms
+  setRouletteSurprises(surprises);
+  setShowRoulette(true);               // affiche la fenêtre
+  setRouletteResult(null);             // réinitialise le résultat
+
+  // 🕒 Étape 2 — Laisser tourner l'animation pendant 4 secondes
+  setTimeout(() => {
+    setShowRoulette(false);            // ferme la fenêtre après animation
+
+    // 🧾 Étape 3 — Créer les items de commande
+    const orderItems = [];
+
+    surprises.forEach(p => {
+      orderItems.push({
+        productId: p.id,
+        productName: `🎲 Verre Surprise : ${p.name}`,
+        quantity: 1,
+        pricePerUnit: surpriseSettings.price,
+        total: surpriseSettings.price,
+        saleType: 'unit'
+      });
+    });
+
+    Object.values(cart).forEach(cartItem => {
+      if (cartItem.productId === 'verre_surprise') return;
+      const product = products.find(p => p.id === cartItem.productId);
+      if (!product) return;
+
+      let price = 0;
+      if (cartItem.saleType === 'pack') price = product.pricePerPack;
+      else if (cartItem.saleType === 'eleven') price = product.pricePer11;
+      else price = product.price;
+
+      let displayName = product.name;
+      if (cartItem.saleType === 'pack') displayName += ` (Bac de ${product.packSize})`;
+      else if (cartItem.saleType === 'eleven') displayName += ` (Lot de 11)`;
+
+      orderItems.push({
+        productId: product.id,
+        productName: displayName,
+        quantity: cartItem.quantity,
+        pricePerUnit: price,
+        total: price * cartItem.quantity,
+        saleType: cartItem.saleType
+      });
+    });
+
+    const total = orderItems.reduce((sum, i) => sum + i.total, 0);
+
+    // 🎯 Étape 4 — Afficher la modale de confirmation
+    setOrderConfirmation({
+      show: true,
+      member: selectedMember,
+      surprises,
+      items: orderItems,
+      total,
+      isSurprise: true
+    });
+  }, 4000); // durée totale de l’animation (en ms)
+
+  return; // 🔚 Stop ici pour ne pas exécuter le reste de validateOrder()
+}
+
+
+    // 🟢 Cas normal : commande sans verre surprise
     const orderItems = Object.values(cart).map(cartItem => {
       const product = products.find(p => p.id === cartItem.productId);
-      let displayName = product.name;
+      if (!product) return null;
 
-      if (cartItem.saleType === 'pack') {
-        displayName += ` (Bac de ${product.packSize})`;
-      } else if (cartItem.saleType === 'eleven') {
-        displayName += ` (Lot de 11)`;
-      }
+      let price = 0;
+      if (cartItem.saleType === 'pack') price = product.pricePerPack;
+      else if (cartItem.saleType === 'eleven') price = product.pricePer11;
+      else price = product.price;
+
+      let displayName = product.name;
+      if (cartItem.saleType === 'pack') displayName += ` (Bac de ${product.packSize})`;
+      else if (cartItem.saleType === 'eleven') displayName += ` (Lot de 11)`;
 
       return {
         productId: cartItem.productId,
         productName: displayName,
         quantity: cartItem.quantity,
-        pricePerUnit: cartItem.pricePerUnit,
+        pricePerUnit: price,
         saleType: cartItem.saleType,
-        total: cartItem.pricePerUnit * cartItem.quantity
+        total: price * cartItem.quantity
       };
-    });
+    }).filter(Boolean);
 
-    // Afficher le modal de confirmation au lieu de valider directement
+    const total = orderItems.reduce((sum, i) => sum + i.total, 0);
+
     setOrderConfirmation({
       show: true,
       member: selectedMember,
       items: orderItems,
-      total: cartTotal
+      total,
+      isSurprise: false
+    });
+
+
+
+    // Afficher le modal de confirmation standard
+    setOrderConfirmation({
+      show: true,
+      member: selectedMember,
+      items: orderItems,
+      total: cartTotal,
+      isSurprise: false
     });
   };
+
 
   const addBro = async () => {
     if (newBroName.trim()) {
@@ -2000,8 +2226,8 @@ ${job.registeredBros.map(reg => {
                     <button
                       onClick={() => setPaymentMethod('cash')}
                       className={`p-3 rounded-lg border-2 transition-all ${paymentMethod === 'cash'
-                          ? 'border-green-500 bg-green-50'
-                          : 'border-gray-200 bg-white'
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-gray-200 bg-white'
                         }`}
                     >
                       💵 Cash
@@ -2009,8 +2235,8 @@ ${job.registeredBros.map(reg => {
                     <button
                       onClick={() => setPaymentMethod('account')}
                       className={`p-3 rounded-lg border-2 transition-all ${paymentMethod === 'account'
-                          ? 'border-blue-500 bg-blue-50'
-                          : 'border-gray-200 bg-white'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-200 bg-white'
                         }`}
                     >
                       🏦 Compte
@@ -2513,12 +2739,15 @@ ${job.registeredBros.map(reg => {
                       {product.stockType === 'mixed' && !isOutOfStock && (
                         <div className="space-y-2 border-t pt-2">
                           {/* Vente par 11 (mètre) */}
-                          {product.stock >= 11 && (
+                          {/* Vente par 11 (mètre) — y compris pour le verre surprise */}
+                          {(product.stock >= 11 || product.isSurprise) && product.pricePer11 && (
                             <div className="bg-green-50 p-2 rounded">
                               <div className="flex items-center justify-between">
                                 <div className="text-xs">
                                   <div className="font-medium">Mètre (11)</div>
-                                  <div className="text-green-600 font-semibold">{formatCurrency(product.pricePer11)}</div>
+                                  <div className="text-green-600 font-semibold">
+                                    {formatCurrency(product.pricePer11)}
+                                  </div>
                                 </div>
                                 <div className="flex items-center space-x-1">
                                   {Math.floor(elevenQuantity / 11) > 0 && (
@@ -2544,6 +2773,7 @@ ${job.registeredBros.map(reg => {
                               </div>
                             </div>
                           )}
+
 
                           {/* Vente par bac */}
                           {product.stock >= product.packSize && (
@@ -2602,10 +2832,82 @@ ${job.registeredBros.map(reg => {
           </div>
         )}
 
+        {showRoulette && (
+          <Modal
+            isOpen={showRoulette}
+            onClose={() => setShowRoulette(false)}
+            title="🎰 Verre Surprise"
+          >
+            <div className="flex flex-col items-center justify-center p-6 space-y-8 overflow-hidden">
+              <h3 className="text-xl font-bold text-center text-yellow-600">
+                Le hasard choisit ta boisson...
+              </h3>
+
+              {/* Zone de roulette */}
+              <div className="relative w-full h-16 overflow-hidden border-4 border-yellow-400 rounded-lg bg-white shadow-inner">
+                <div
+                  className="absolute flex whitespace-nowrap animate-spin-roulette"
+                  style={{
+                    animationDuration: '4s',
+                  }}
+                >
+                  {Array(10)
+                    .fill(0)
+                    .map((_, i) => (
+                      <div key={i} className="flex space-x-6 mx-6">
+                        {rouletteOptions.map((beer, idx) => (
+                          <span
+                            key={`${beer.id}-${i}-${idx}`}
+                            className="text-lg font-semibold text-blue-700"
+                          >
+                            {beer.name}
+                          </span>
+                        ))}
+                      </div>
+                    ))}
+                </div>
+
+                {/* Curseur central */}
+                <div className="absolute top-0 bottom-0 left-1/2 w-1 bg-red-500 transform -translate-x-1/2"></div>
+              </div>
+
+              {/* Résultat final après la rotation */}
+              {rouletteResult && (
+                <div className="text-center mt-6 animate-fade-in">
+                  <h4 className="text-2xl font-bold text-green-700">
+                    🎉 Verre Surprise : {rouletteResult.name}
+                  </h4>
+                </div>
+              )}
+            </div>
+
+            <style>{`
+      @keyframes spin-roulette {
+        0% { transform: translateX(0); }
+        80% { transform: translateX(-80%); }
+        100% { transform: translateX(-100%); }
+      }
+      .animate-spin-roulette {
+        animation: spin-roulette 4s cubic-bezier(0.25, 1, 0.5, 1);
+      }
+      @keyframes fade-in {
+        from { opacity: 0; transform: translateY(10px); }
+        to { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in {
+        animation: fade-in 1s ease-out forwards;
+      }
+    `}</style>
+          </Modal>
+        )}
+
+
+
         {/* Modal de confirmation */}
         <Modal
           isOpen={orderConfirmation.show}
           onClose={() => {
+
             setOrderConfirmation({ show: false, member: null, items: [], total: 0 });
             setDirectPayment(false);
             setDirectPaymentMethod('');
@@ -6580,6 +6882,22 @@ ${job.registeredBros.map(reg => {
               </div>
             </div>
           </button>
+          {/* --- NOUVEAU BOUTON VERRE SURPRISE --- */}
+          <button
+            onClick={() => navigateTo('settings-surprise')}
+            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform flex items-center space-x-3"
+          >
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center space-x-3">
+                <Beer className="text-purple-500" size={24} />
+                <div>
+                  <h3 className="font-semibold">🎲 Verre Surprise</h3>
+                  <p className="text-gray-600 text-sm">Configurer le tirage aléatoire</p>
+                </div>
+              </div>
+              <span className="text-gray-400">→</span>
+            </div>
+          </button>
           {/* NOTIFICATIONS */}
           <div className="bg-white rounded-lg shadow-md p-4 mb-4">
             <h3 className="text-lg font-semibold mb-3 flex items-center">
@@ -6634,9 +6952,171 @@ ${job.registeredBros.map(reg => {
             </div>
           </button>
         </div>
+
+
       </div>
     );
   }
+
+
+  if (currentScreen === 'settings-surprise') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header
+          title="Paramètres du Verre Surprise"
+          onBack={() => navigateTo('settings')}
+        />
+
+        <div className="p-4 space-y-6">
+          {/* ✅ Activation */}
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                checked={surpriseSettings.enabled}
+                onChange={(e) => setSurpriseSettings({
+                  ...surpriseSettings,
+                  enabled: e.target.checked
+                })}
+                className="w-5 h-5 mr-3"
+              />
+              <label className="text-sm font-medium">
+                Activer le verre surprise dans la carte
+              </label>
+            </div>
+          </div>
+
+          {/* 💰 Prix */}
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <h3 className="font-semibold mb-3">💰 Prix du verre surprise</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">
+                  Prix unitaire (€)
+                </label>
+                <input
+                  type="number"
+                  value={surpriseSettings.price}
+                  onChange={(e) =>
+                    setSurpriseSettings({
+                      ...surpriseSettings,
+                      price: parseFloat(e.target.value)
+                    })
+                  }
+                  className="w-full p-2 border rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-600 mb-1">
+                  Prix par mètre (11)
+                </label>
+                <input
+                  type="number"
+                  value={surpriseSettings.pricePer11}
+                  onChange={(e) =>
+                    setSurpriseSettings({
+                      ...surpriseSettings,
+                      pricePer11: parseFloat(e.target.value)
+                    })
+                  }
+                  className="w-full p-2 border rounded-lg"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 🍺 Produits éligibles */}
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <h3 className="font-semibold mb-3">🍺 Produits pouvant tomber</h3>
+            <div className="max-h-64 overflow-y-auto border rounded-lg p-3">
+              {products.length === 0 && (
+                <p className="text-gray-500 text-sm">Aucun produit disponible.</p>
+              )}
+              {products.map((p) => (
+                <label key={p.id} className="flex items-center mb-1">
+                  <input
+                    type="checkbox"
+                    checked={surpriseSettings.eligibleProducts.includes(p.id)}
+                    onChange={(e) => {
+                      const newList = e.target.checked
+                        ? [...surpriseSettings.eligibleProducts, p.id]
+                        : surpriseSettings.eligibleProducts.filter(
+                          (id) => id !== p.id
+                        );
+                      setSurpriseSettings({
+                        ...surpriseSettings,
+                        eligibleProducts: newList
+                      });
+                    }}
+                    className="w-4 h-4 mr-2"
+                  />
+                  {p.name}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="space-y-4 mt-6">
+            <h3 className="font-semibold text-gray-800">🎯 Pondération des bières</h3>
+            <p className="text-sm text-gray-600">
+              Ajuste les chances d’apparition de chaque bière lors d’un tirage surprise.
+            </p>
+
+            {surpriseSettings.eligibleProducts.map(pid => {
+              const product = products.find(p => p.id === pid);
+              const weight = surpriseSettings.weights?.[p.id] || 1;
+
+              return (
+                <div
+                  key={pid}
+                  className="flex items-center justify-between bg-white p-3 border rounded-lg shadow-sm"
+                >
+                  <div>
+                    <h4 className="font-medium">{product?.name}</h4>
+                    <p className="text-xs text-gray-500">
+                      Pondération actuelle :{' '}
+                      {weight === 3
+                        ? '🟢 Élevée'
+                        : weight === 2
+                          ? '🟡 Moyenne'
+                          : '🔴 Faible'}
+                    </p>
+                  </div>
+
+                  <select
+                    value={weight}
+                    onChange={e =>
+                      setSurpriseSettings(prev => ({
+                        ...prev,
+                        weights: {
+                          ...prev.weights,
+                          [pid]: parseInt(e.target.value)
+                        }
+                      }))
+                    }
+                    className="border rounded-lg p-2 text-sm"
+                  >
+                    <option value={3}>🟢 Élevée</option>
+                    <option value={2}>🟡 Moyenne</option>
+                    <option value={1}>🔴 Faible</option>
+                  </select>
+                </div>
+              );
+            })}
+          </div>
+
+
+          {/* 💾 Bouton sauvegarde */}
+          <button
+            onClick={saveSurpriseSettings}
+            className="w-full p-3 bg-blue-500 text-white rounded-lg active:scale-95 transition-transform"
+          >
+            💾 Enregistrer les paramètres
+          </button>
+        </div>
+      </div>
+    );
+  }
+
 
   if (currentScreen === 'settings-bar-threshold') {
 
@@ -6741,6 +7221,7 @@ ${job.registeredBros.map(reg => {
       </div>
     );
   }
+
 
   if (currentScreen === 'settings-products') {
     return (
