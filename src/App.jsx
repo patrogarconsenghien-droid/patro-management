@@ -97,6 +97,12 @@ const PatroApp = () => {
     eligibleProducts: [], // liste d’IDs
     weights: {} // ex : { "productId1": 3, "productId2": 1 }
   });
+  const rarityWeights = {
+    commun: 50,
+    normal: 30,
+    rare: 10,
+    legendaire: 1
+  };
 
 
 
@@ -295,14 +301,17 @@ ${job.registeredBros.map(reg => {
           const latest = settings.sort((a, b) =>
             new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt)
           )[0];
+
           setSurpriseSettings({
             enabled: latest.enabled || false,
             price: latest.price || 2.5,
             pricePer11: latest.pricePer11 || 25.0,
-            eligibleProducts: latest.eligibleProducts || []
+            eligibleProducts: latest.eligibleProducts || [],
+            weights: latest.weights || {} // ✅ on recharge correctement les pondérations !
           });
         }
       });
+
       unsubscribePopularProducts = await loadFromFirebase('popularProducts', (popular) => {
         if (popular && popular.length > 0) {
           const sortedPopular = popular.sort((a, b) => {
@@ -354,7 +363,12 @@ ${job.registeredBros.map(reg => {
     }
   };
 
-  const formatCurrency = (amount) => `€${amount.toFixed(2)}`;
+  const formatCurrency = (amount) => {
+  const value = Number(amount);
+  if (isNaN(value)) return "0.00 €"; // sécurité si undefined, null, ou NaN
+  return `${value.toFixed(2)} €`;
+};
+
   const formatDate = (date) => new Date(date).toLocaleDateString('fr-FR');
 
   const formatDateTime = (date) => {
@@ -385,6 +399,15 @@ ${job.registeredBros.map(reg => {
 
     // Formater en HH:MM
     return `${endHour.toString().padStart(2, '0')}:${endMinute.toString().padStart(2, '0')}`;
+  };
+
+  // 🎯 Met à jour la pondération (rareté) d’un produit surprise
+  const updateProductWeight = (productId, rarityValue) => {
+    const newWeights = {
+      ...surpriseSettings.weights,
+      [productId]: rarityValue
+    };
+    setSurpriseSettings(prev => ({ ...prev, weights: newWeights }));
   };
 
   const saveSurpriseSettings = async () => {
@@ -590,30 +613,30 @@ ${job.registeredBros.map(reg => {
       const hasSurprise = filtered.some(p => p.id === 'verre_surprise');
 
       if (surpriseSettings.enabled) {
-  const hasSurprise = filtered.some(p => p.id === 'verre_surprise');
+        const hasSurprise = filtered.some(p => p.id === 'verre_surprise');
 
-  if (!hasSurprise) {
-    // 🔍 Calcule le stock total disponible des produits éligibles
-    const eligibleProducts = products.filter(p =>
-      surpriseSettings.eligibleProducts.includes(p.id)
-    );
-    const totalStock = eligibleProducts.reduce((sum, p) => sum + (p.stock || 0), 0);
+        if (!hasSurprise) {
+          // 🔍 Calcule le stock total disponible des produits éligibles
+          const eligibleProducts = products.filter(p =>
+            surpriseSettings.eligibleProducts.includes(p.id)
+          );
+          const totalStock = eligibleProducts.reduce((sum, p) => sum + (p.stock || 0), 0);
 
-    // ✅ N’ajoute le verre surprise que s’il y a du stock global
-    if (totalStock > 0 && (activeCategory === 'Boissons' || activeCategory === 'all')) {
-      filtered.unshift({
-        id: 'verre_surprise',
-        name: '🎲 Verre Surprise',
-        price: surpriseSettings.price || 2.5,
-        pricePer11: surpriseSettings.pricePer11 || (surpriseSettings.price * 10), // optionnel: prix réduit
-        category: 'Boissons',
-        stock: totalStock,          // 🟢 somme du stock des bières éligibles
-        stockType: 'mixed',         // permet de vendre à l’unité ou par 11
-        isSurprise: true
-      });
-    }
-  }
-}
+          // ✅ N’ajoute le verre surprise que s’il y a du stock global
+          if (totalStock > 0 && (activeCategory === 'Boissons' || activeCategory === 'all')) {
+            filtered.unshift({
+              id: 'verre_surprise',
+              name: '🎲 Verre Surprise',
+              price: surpriseSettings.price || 2.5,
+              pricePer11: surpriseSettings.pricePer11 || (surpriseSettings.price * 10), // optionnel: prix réduit
+              category: 'Boissons',
+              stock: totalStock,          // 🟢 somme du stock des bières éligibles
+              stockType: 'mixed',         // permet de vendre à l’unité ou par 11
+              isSurprise: true
+            });
+          }
+        }
+      }
 
     }
 
@@ -855,109 +878,115 @@ ${job.registeredBros.map(reg => {
     // 🟣 Vérifier s’il y a un verre surprise dans la commande
     const hasSurprise = Object.values(cart).some(item => item.productId === 'verre_surprise');
 
-   // 🎲 --- VERRE SURPRISE ---
-if (hasSurprise) {
-  const eligible = products.filter(
-    p => surpriseSettings.eligibleProducts.includes(p.id) && p.stock > 0
-  );
+    // 🎲 --- VERRE SURPRISE ---
+    if (hasSurprise) {
+      const eligible = products.filter(
+        p => surpriseSettings.eligibleProducts.includes(p.id) && p.stock > 0
+      );
 
-  if (eligible.length === 0) {
-    alert("Aucun produit disponible pour le verre surprise !");
-    return;
-  }
+      if (eligible.length === 0) {
+        alert("Aucun produit disponible pour le verre surprise !");
+        return;
+      }
 
-  // 🎲 Tirage aléatoire des bières surprise sans dépasser le stock réel
-  const surprises = [];
-  const stockCopy = {};
-  eligible.forEach(p => (stockCopy[p.id] = p.stock));
+      // 🎲 Tirage aléatoire des bières surprise sans dépasser le stock réel
+      const surprises = [];
+      const stockCopy = {};
+      eligible.forEach(p => (stockCopy[p.id] = p.stock));
 
-  Object.values(cart).forEach(item => {
-    if (item.productId === 'verre_surprise') {
-      for (let i = 0; i < item.quantity; i++) {
-        // 🔥 Correction : on ne garde que les produits encore disponibles
-        const available = eligible.filter(p => stockCopy[p.id] > 0);
-        if (available.length === 0) break;
+      Object.values(cart).forEach(item => {
+        if (item.productId === 'verre_surprise') {
+          for (let i = 0; i < item.quantity; i++) {
+            // 🔥 Correction : on ne garde que les produits encore disponibles
+            const available = eligible.filter(p => stockCopy[p.id] > 0);
+            if (available.length === 0) break;
 
-        const weightedList = available.flatMap(p => {
-          const weight = (surpriseSettings.weights?.[p.id]) || 1;
-          return Array(weight).fill(p);
+            const weightedList = available.flatMap(p => {
+              const rawWeight = (surpriseSettings.weights?.[p.id]) || 1;
+
+              // 🧮 Sécurisation de la pondération (évite les 0.1, NaN, etc.)
+              const effectiveWeight = Number.isFinite(rawWeight) && rawWeight > 0
+                ? Math.max(1, Math.round(rawWeight))
+                : 1;
+
+              return Array.from({ length: effectiveWeight }, () => p);
+            });
+
+            const random = weightedList[Math.floor(Math.random() * weightedList.length)];
+            surprises.push(random);
+            stockCopy[random.id] -= 1;
+          }
+        }
+      });
+
+      if (surprises.length === 0) {
+        alert("Tous les produits éligibles sont en rupture de stock !");
+        return;
+      }
+
+      // 🎰 Étape 1 — Préparer et afficher la roulette
+      setRouletteOptions(eligible);        // <--- nécessaire pour afficher les noms
+      setRouletteSurprises(surprises);
+      setShowRoulette(true);               // affiche la fenêtre
+      setRouletteResult(null);             // réinitialise le résultat
+
+      // 🕒 Étape 2 — Laisser tourner l'animation pendant 4 secondes
+      setTimeout(() => {
+        setShowRoulette(false);            // ferme la fenêtre après animation
+
+        // 🧾 Étape 3 — Créer les items de commande
+        const orderItems = [];
+
+        surprises.forEach(p => {
+          orderItems.push({
+            productId: p.id,
+            productName: `🎲 Verre Surprise : ${p.name}`,
+            quantity: 1,
+            pricePerUnit: surpriseSettings.price,
+            total: surpriseSettings.price,
+            saleType: 'unit'
+          });
         });
 
-        const random = weightedList[Math.floor(Math.random() * weightedList.length)];
-        surprises.push(random);
-        stockCopy[random.id] -= 1;
-      }
+        Object.values(cart).forEach(cartItem => {
+          if (cartItem.productId === 'verre_surprise') return;
+          const product = products.find(p => p.id === cartItem.productId);
+          if (!product) return;
+
+          let price = 0;
+          if (cartItem.saleType === 'pack') price = product.pricePerPack;
+          else if (cartItem.saleType === 'eleven') price = product.pricePer11;
+          else price = product.price;
+
+          let displayName = product.name;
+          if (cartItem.saleType === 'pack') displayName += ` (Bac de ${product.packSize})`;
+          else if (cartItem.saleType === 'eleven') displayName += ` (Lot de 11)`;
+
+          orderItems.push({
+            productId: product.id,
+            productName: displayName,
+            quantity: cartItem.quantity,
+            pricePerUnit: price,
+            total: price * cartItem.quantity,
+            saleType: cartItem.saleType
+          });
+        });
+
+        const total = orderItems.reduce((sum, i) => sum + i.total, 0);
+
+        // 🎯 Étape 4 — Afficher la modale de confirmation
+        setOrderConfirmation({
+          show: true,
+          member: selectedMember,
+          surprises,
+          items: orderItems,
+          total,
+          isSurprise: true
+        });
+      }, 4000); // durée totale de l’animation (en ms)
+
+      return; // 🔚 Stop ici pour ne pas exécuter le reste de validateOrder()
     }
-  });
-
-  if (surprises.length === 0) {
-    alert("Tous les produits éligibles sont en rupture de stock !");
-    return;
-  }
-
-  // 🎰 Étape 1 — Préparer et afficher la roulette
-  setRouletteOptions(eligible);        // <--- nécessaire pour afficher les noms
-  setRouletteSurprises(surprises);
-  setShowRoulette(true);               // affiche la fenêtre
-  setRouletteResult(null);             // réinitialise le résultat
-
-  // 🕒 Étape 2 — Laisser tourner l'animation pendant 4 secondes
-  setTimeout(() => {
-    setShowRoulette(false);            // ferme la fenêtre après animation
-
-    // 🧾 Étape 3 — Créer les items de commande
-    const orderItems = [];
-
-    surprises.forEach(p => {
-      orderItems.push({
-        productId: p.id,
-        productName: `🎲 Verre Surprise : ${p.name}`,
-        quantity: 1,
-        pricePerUnit: surpriseSettings.price,
-        total: surpriseSettings.price,
-        saleType: 'unit'
-      });
-    });
-
-    Object.values(cart).forEach(cartItem => {
-      if (cartItem.productId === 'verre_surprise') return;
-      const product = products.find(p => p.id === cartItem.productId);
-      if (!product) return;
-
-      let price = 0;
-      if (cartItem.saleType === 'pack') price = product.pricePerPack;
-      else if (cartItem.saleType === 'eleven') price = product.pricePer11;
-      else price = product.price;
-
-      let displayName = product.name;
-      if (cartItem.saleType === 'pack') displayName += ` (Bac de ${product.packSize})`;
-      else if (cartItem.saleType === 'eleven') displayName += ` (Lot de 11)`;
-
-      orderItems.push({
-        productId: product.id,
-        productName: displayName,
-        quantity: cartItem.quantity,
-        pricePerUnit: price,
-        total: price * cartItem.quantity,
-        saleType: cartItem.saleType
-      });
-    });
-
-    const total = orderItems.reduce((sum, i) => sum + i.total, 0);
-
-    // 🎯 Étape 4 — Afficher la modale de confirmation
-    setOrderConfirmation({
-      show: true,
-      member: selectedMember,
-      surprises,
-      items: orderItems,
-      total,
-      isSurprise: true
-    });
-  }, 4000); // durée totale de l’animation (en ms)
-
-  return; // 🔚 Stop ici pour ne pas exécuter le reste de validateOrder()
-}
 
 
     // 🟢 Cas normal : commande sans verre surprise
@@ -6960,6 +6989,14 @@ if (hasSurprise) {
 
 
   if (currentScreen === 'settings-surprise') {
+    // ⚖️ Nouvelle table de pondération
+    const rarityLabels = {
+      70: "🟩 Commun",
+      40: "🟦 Normal",
+      15: "🟪 Rare",
+      1: "🟨 Légendaire"
+    };
+
     return (
       <div className="min-h-screen bg-gray-50">
         <Header
@@ -6974,10 +7011,12 @@ if (hasSurprise) {
               <input
                 type="checkbox"
                 checked={surpriseSettings.enabled}
-                onChange={(e) => setSurpriseSettings({
-                  ...surpriseSettings,
-                  enabled: e.target.checked
-                })}
+                onChange={(e) =>
+                  setSurpriseSettings({
+                    ...surpriseSettings,
+                    enabled: e.target.checked
+                  })
+                }
                 className="w-5 h-5 mr-3"
               />
               <label className="text-sm font-medium">
@@ -7030,7 +7069,9 @@ if (hasSurprise) {
             <h3 className="font-semibold mb-3">🍺 Produits pouvant tomber</h3>
             <div className="max-h-64 overflow-y-auto border rounded-lg p-3">
               {products.length === 0 && (
-                <p className="text-gray-500 text-sm">Aucun produit disponible.</p>
+                <p className="text-gray-500 text-sm">
+                  Aucun produit disponible.
+                </p>
               )}
               {products.map((p) => (
                 <label key={p.id} className="flex items-center mb-1">
@@ -7055,15 +7096,20 @@ if (hasSurprise) {
               ))}
             </div>
           </div>
+
+          {/* 🎯 Pondération des bières */}
           <div className="space-y-4 mt-6">
-            <h3 className="font-semibold text-gray-800">🎯 Pondération des bières</h3>
+            <h3 className="font-semibold text-gray-800">
+              🎯 Pondération des bières
+            </h3>
             <p className="text-sm text-gray-600">
-              Ajuste les chances d’apparition de chaque bière lors d’un tirage surprise.
+              Définit la rareté et les chances d’apparition de chaque bière lors
+              d’un tirage surprise.
             </p>
 
-            {surpriseSettings.eligibleProducts.map(pid => {
-              const product = products.find(p => p.id === pid);
-              const weight = surpriseSettings.weights?.[p.id] || 1;
+            {surpriseSettings.eligibleProducts.map((pid) => {
+              const product = products.find((p) => p.id === pid);
+              const weight = surpriseSettings.weights?.[pid] ?? 3; // par défaut : normal
 
               return (
                 <div
@@ -7073,37 +7119,35 @@ if (hasSurprise) {
                   <div>
                     <h4 className="font-medium">{product?.name}</h4>
                     <p className="text-xs text-gray-500">
-                      Pondération actuelle :{' '}
-                      {weight === 3
-                        ? '🟢 Élevée'
-                        : weight === 2
-                          ? '🟡 Moyenne'
-                          : '🔴 Faible'}
+                      Rareté actuelle :{" "}
+                      <span className="font-semibold">
+                        {rarityLabels[weight] || "❓ Inconnue"}
+                      </span>
                     </p>
                   </div>
 
                   <select
                     value={weight}
-                    onChange={e =>
-                      setSurpriseSettings(prev => ({
+                    onChange={(e) =>
+                      setSurpriseSettings((prev) => ({
                         ...prev,
                         weights: {
                           ...prev.weights,
-                          [pid]: parseInt(e.target.value)
+                          [pid]: parseFloat(e.target.value)
                         }
                       }))
                     }
                     className="border rounded-lg p-2 text-sm"
                   >
-                    <option value={3}>🟢 Élevée</option>
-                    <option value={2}>🟡 Moyenne</option>
-                    <option value={1}>🔴 Faible</option>
+                    <option value={70}>🟩 Commun</option>
+                    <option value={40}>🟦 Normal</option>
+                    <option value={15}>🟪 Rare</option>
+                    <option value={1}>🟨 Légendaire</option>
                   </select>
                 </div>
               );
             })}
           </div>
-
 
           {/* 💾 Bouton sauvegarde */}
           <button
@@ -7116,6 +7160,7 @@ if (hasSurprise) {
       </div>
     );
   }
+
 
 
   if (currentScreen === 'settings-bar-threshold') {
