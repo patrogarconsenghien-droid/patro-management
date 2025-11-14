@@ -1,5 +1,5 @@
-// TonneauSurprise.jsx
-// Composant complet, autonome, propre, sans erreur.
+// TonneauSurprise.jsx – Version avec TAP obligatoire avant toute animation
+// et sans affichage "touchez pour continuer"
 
 import React, { useEffect, useRef, useState } from "react";
 
@@ -9,8 +9,43 @@ export default function TonneauSurprise({ open, surprises = [], onComplete }) {
   const [specialEffect, setSpecialEffect] = useState(null);
   const [showSmoke, setShowSmoke] = useState(false);
   const [lidKick, setLidKick] = useState(false);
+
+  const [awaitTap, setAwaitTap] = useState(false);
+  const tapResolver = useRef(null);
+
   const timeoutsRef = useRef([]);
 
+  // -----------------------------
+  // TOUCH / CLICK pour avancer
+  // -----------------------------
+  useEffect(() => {
+    const handleTap = () => {
+      if (awaitTap && tapResolver.current) {
+        tapResolver.current();
+        tapResolver.current = null;
+        setAwaitTap(false);
+      }
+    };
+
+    window.addEventListener("click", handleTap);
+    window.addEventListener("touchend", handleTap);
+
+    return () => {
+      window.removeEventListener("click", handleTap);
+      window.removeEventListener("touchend", handleTap);
+    };
+  }, [awaitTap]);
+
+  function waitForTap() {
+    return new Promise((resolve) => {
+      tapResolver.current = resolve;
+      setAwaitTap(true);
+    });
+  }
+
+  // -----------------------------
+  // MAIN OPENING SEQUENCE
+  // -----------------------------
   useEffect(() => {
     const clearAll = () => {
       timeoutsRef.current.forEach((t) => clearTimeout(t));
@@ -24,89 +59,100 @@ export default function TonneauSurprise({ open, surprises = [], onComplete }) {
       setSpecialEffect(null);
       setShowSmoke(false);
       setLidKick(false);
+      setAwaitTap(false);
+      tapResolver.current = null;
       return;
     }
 
-    // Start sequence
+    // Start
     setStage("opening");
     setRevealed([]);
-    setSpecialEffect(null);
-    setLidKick(false);
 
-    const openTimer = setTimeout(() => {
-      setStage("opening-lid");
+    // ⬇ Séquence asynchrone complète
+    (async () => {
+      // 🔥 PREMIER TAP OBLIGATOIRE (avant toute animation)
+      await waitForTap();
 
-      const shakeDuration = 500;
+      const openTimer = setTimeout(() => {
+        setStage("opening-lid");
 
-      const afterShake = setTimeout(() => {
-        setShowSmoke(true);
-        const tSm = setTimeout(() => setShowSmoke(false), 700);
-        timeoutsRef.current.push(tSm);
+        const shakeDuration = 600;
 
-        setStage("revealing");
+        const afterShake = setTimeout(() => {
+          setShowSmoke(true);
+          const tSm = setTimeout(() => setShowSmoke(false), 900);
+          timeoutsRef.current.push(tSm);
 
-        if (!surprises || surprises.length === 0) {
-          const tDone = setTimeout(() => {
-            setStage("done");
-            onComplete && onComplete([]);
-          }, 600);
-          timeoutsRef.current.push(tDone);
-          return;
-        }
+          setStage("revealing");
 
-        let i = 0;
-
-        const revealInterval = 900;
-
-        const revealNext = () => {
-          if (i >= surprises.length) {
-            const tFinal = setTimeout(() => {
+          if (!surprises || surprises.length === 0) {
+            const tDone = setTimeout(() => {
               setStage("done");
-              onComplete && onComplete(revealed.concat());
-            }, 700);
-            timeoutsRef.current.push(tFinal);
+              onComplete && onComplete([]);
+            }, 600);
+            timeoutsRef.current.push(tDone);
             return;
           }
 
-          const next = surprises[i];
+          let i = 0;
 
-          setRevealed((prev) => [...prev, next]);
+          // -------------------------
+          // RÉVÉLATION AVEC TAP
+          // -------------------------
+          const revealNext = async () => {
+            if (i >= surprises.length) {
+              const t = setTimeout(() => {
+                setStage("done");
+                onComplete && onComplete(revealed.concat());
+              }, 700);
 
-          // --- KICK DU COUVERCLE A CHAQUE CARTE ---
-          setLidKick(false);
-          const t1 = setTimeout(() => setLidKick(true), 20);
-          const t2 = setTimeout(() => setLidKick(false), 300);
-          timeoutsRef.current.push(t1, t2);
+              timeoutsRef.current.push(t);
+              return;
+            }
 
-          // --- effets rares ---
-          if (next.rarity === "rare") {
-            setSpecialEffect("rare");
-            const t = setTimeout(() => setSpecialEffect(null), 1200);
-            timeoutsRef.current.push(t);
-          } else if (next.rarity === "legendaire" || next.rarity === "legendary") {
-            setSpecialEffect("legendaire");
-            const t = setTimeout(() => setSpecialEffect(null), 2000);
-            timeoutsRef.current.push(t);
-          }
+            const next = surprises[i];
 
-          i += 1;
-          const tNext = setTimeout(revealNext, revealInterval);
-          timeoutsRef.current.push(tNext);
-        };
+            // Ajout carte
+            setRevealed((prev) => [...prev, next]);
 
-        const tStart = setTimeout(revealNext, 350);
-        timeoutsRef.current.push(tStart);
-      }, shakeDuration);
+            // Kick couvercle
+            setLidKick(false);
+            setTimeout(() => setLidKick(true), 30);
+            setTimeout(() => setLidKick(false), 300);
 
-      timeoutsRef.current.push(afterShake);
-    }, 200);
+            // Effets
+            if (next.rarity === "rare") {
+              setSpecialEffect("rare");
+              setTimeout(() => setSpecialEffect(null), 1400);
+            } else if (["legendaire", "legendary"].includes(next.rarity)) {
+              setSpecialEffect("legendaire");
+              setTimeout(() => setSpecialEffect(null), 2000);
+            }
 
-    timeoutsRef.current.push(openTimer);
+            i++;
+
+            // 🔥 TAP NÉCESSAIRE POUR LA CARTE SUIVANTE
+            await waitForTap();
+
+            revealNext();
+          };
+
+          const tStart = setTimeout(revealNext, 400);
+          timeoutsRef.current.push(tStart);
+        }, shakeDuration);
+
+        timeoutsRef.current.push(afterShake);
+      }, 300);
+
+      timeoutsRef.current.push(openTimer);
+    })();
 
     return () => clearAll();
   }, [open]);
 
-  // Rarity display
+  // -----------------------------
+  // Rarity stylisation
+  // -----------------------------
   const rarityClass = (p) => {
     const r = (p?.rarity || "normal").toLowerCase();
     switch (r) {
@@ -129,7 +175,9 @@ export default function TonneauSurprise({ open, surprises = [], onComplete }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-60 p-4">
       <div className="relative w-full max-w-lg h-[90vh] flex items-center justify-center">
 
-        {/* Effets rares / légendaires */}
+        {/* ❌ Texte supprimé — aucun affichage "tap to continue" */}
+
+        {/* Effets rares */}
         {specialEffect === "rare" && (
           <div className="special-rare">
             {Array.from({ length: 24 }).map((_, i) => (
@@ -138,6 +186,7 @@ export default function TonneauSurprise({ open, surprises = [], onComplete }) {
           </div>
         )}
 
+        {/* Effets légendaires */}
         {specialEffect === "legendaire" && (
           <div className="special-legendaire">
             <div className="halo-legendaire" />
@@ -147,7 +196,7 @@ export default function TonneauSurprise({ open, surprises = [], onComplete }) {
           </div>
         )}
 
-        {/* Fumée lors de l’ouverture */}
+        {/* Smoke */}
         {showSmoke && (
           <div className="smoke-wrapper">
             <div className="smoke-puff" />
@@ -155,7 +204,7 @@ export default function TonneauSurprise({ open, surprises = [], onComplete }) {
           </div>
         )}
 
-        {/* --- TONNEAU STYLE A --- */}
+        {/* SVG TONNEAU */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-10">
           <svg viewBox="0 0 300 350" className="w-72 h-72">
             <defs>
@@ -175,25 +224,20 @@ export default function TonneauSurprise({ open, surprises = [], onComplete }) {
               </filter>
             </defs>
 
-            {/* Ombre au sol */}
             <ellipse cx="150" cy="330" rx="110" ry="30" fill="#00000033" />
 
-            {/* Corps du tonneau */}
             <g filter="url(#shadow)">
               <rect x="40" y="70" width="220" height="210" rx="105" fill="url(#wood)" stroke="#3a2a1b" strokeWidth="6" />
             </g>
 
-            {/* Anneaux métal */}
             <rect x="40" y="110" width="220" height="18" rx="9" fill="url(#metal)" />
             <rect x="40" y="210" width="220" height="18" rx="9" fill="url(#metal)" />
 
-            {/* Lattes */}
             {[...Array(8)].map((_, i) => {
               const x = 62 + i * 23;
               return <rect key={i} x={x} y="70" width="12" height="210" rx="4" fill="#00000010" />;
             })}
 
-            {/* COUVERCLE ANIMÉ */}
             <g
               className={
                 "barrel-lid " +
@@ -208,13 +252,13 @@ export default function TonneauSurprise({ open, surprises = [], onComplete }) {
           </svg>
         </div>
 
-        {/* CARTES depuis le centre */}
+        {/* CARTES */}
         <div className="cards-stack absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none flex flex-col items-center">
           {revealed.map((p, idx) => (
             <div
               key={idx}
               className={`result-card card-fall ${rarityClass(p)}`}
-              style={{ animationDelay: `${idx * 120}ms` }}
+              style={{ animationDelay: `${idx * 150}ms` }}
             >
               <div className="flex items-center space-x-3">
                 <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">🍺</div>
@@ -228,7 +272,7 @@ export default function TonneauSurprise({ open, surprises = [], onComplete }) {
           ))}
         </div>
 
-        {/* Résumé final */}
+        {/* Résultat final */}
         {stage === "done" && (
           <div className="fixed inset-0 z-40 flex items-center justify-center p-6 overflow-y-auto">
             <div className="bg-white rounded-xl p-6 shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
@@ -258,104 +302,78 @@ export default function TonneauSurprise({ open, surprises = [], onComplete }) {
           </div>
         )}
 
-        {/* STYLES COMPLETS */}
+        {/* STYLE */}
         <style>{`
-
-        /* Échelle globale du composant (mets 1.3 pour +30%) */
-.tonneau-container {
-  transform: scale(1.3);
-  transform-origin: center;
-}
-/* Barrel lid animations */
+/* Barrel lid */
 .barrel-lid { transform-origin: 150px 60px; transition: transform 0.7s ease-out; }
-
-.barrel-lid.shake-open {
-  animation: lid-shake 0.5s ease-in-out;
-}
-
-.barrel-lid.opened {
-  transform: rotate(-55deg) translate(-26px, -18px);
-}
-
-/* Kick à chaque carte */
-.barrel-lid.kick {
-  animation: lid-kick 0.3s ease-out;
-}
+.barrel-lid.shake-open { animation: lid-shake 0.6s ease-in-out; }
+.barrel-lid.opened { transform: rotate(-55deg) translate(-26px, -18px); }
+.barrel-lid.kick { animation: lid-kick 0.3s ease-out; }
 
 @keyframes lid-kick {
   0% { transform: rotate(-55deg) translate(-26px, -18px); }
-  40% { transform: rotate(-65deg) translate(-32px, -22px); }
+  40% { transform: rotate(-68deg) translate(-34px, -22px); }
   100% { transform: rotate(-55deg) translate(-26px, -18px); }
 }
 
-/* Shake initial */
 @keyframes lid-shake {
   0% { transform: rotate(0deg); }
-  20% { transform: rotate(-5deg); }
-  40% { transform: rotate(4deg); }
-  60% { transform: rotate(-3deg); }
-  80% { transform: rotate(2deg); }
+  25% { transform: rotate(-5deg); }
+  50% { transform: rotate(4deg); }
+  75% { transform: rotate(-3deg); }
   100% { transform: rotate(0deg); }
 }
 
-/* SMOKE */
-.smoke-wrapper {
-  position: absolute;
-  top: calc(50% - 160px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 30;
-}
+/* Smoke */
+.smoke-wrapper { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); z-index: 40; }
 .smoke-puff {
   width: 100px; height: 60px;
-  background: radial-gradient(circle at 30% 30%, rgba(200,200,200,0.9), rgba(200,200,200,0.5) 30%, rgba(200,200,200,0) 60%);
+  background: radial-gradient(circle at 30% 30%, rgba(200,200,200,0.9), rgba(200,200,200,0.4) 30%, rgba(200,200,200,0) 70%);
   opacity: 0;
   border-radius: 50%;
-  animation: smoke-rise 0.7s ease-out forwards;
+  animation: smoke-rise 1s ease-out forwards;
 }
 .smoke-puff-2 {
-  width: 70px; height: 45px;
-  margin-left: 40px;
-  animation-delay: 120ms;
+  width: 70px; height: 45px; margin-left: 40px;
+  animation-delay: 150ms;
 }
 
 @keyframes smoke-rise {
   0% { opacity: 0; transform: translateY(0) scale(0.6); }
   40% { opacity: 1; transform: translateY(-20px) scale(0.9); }
-  100% { opacity: 0; transform: translateY(-60px) scale(1.2); }
+  100% { opacity: 0; transform: translateY(-70px) scale(1.3); }
 }
 
-/* CARDS */
+/* Cards */
 .result-card {
   width: 100%;
-  max-width: 720px;       /* tuiles plus larges */
-  padding: 22px 26px; 
-  border-radius: 12px;
+  max-width: 760px;
+  padding: 24px 28px;
+  border-radius: 14px;
   backdrop-filter: blur(6px);
   box-shadow: 0 8px 30px rgba(2,6,23,0.45);
   opacity: 0;
   transform-origin: center;
 }
 
-/* animation chute */
 .card-fall {
-  animation: fall-away 1.6s cubic-bezier(.22,.9,.3,1) forwards;
+  animation: fall-away 1.9s cubic-bezier(.22,.9,.3,1) forwards;
 }
 
 @keyframes fall-away {
   0%   { transform: translateY(0) scale(1.15); opacity: 1; }
-  30%  { transform: translateY(40px) scale(1); opacity: 0.95; }
-  60%  { transform: translateY(140px) scale(0.8); opacity: 0.6; }
+  40%  { transform: translateY(0) scale(1); opacity: 1; }
+  70%  { transform: translateY(130px) scale(0.8); opacity: 0.8; }
   100% { transform: translateY(260px) scale(0.55); opacity: 0; }
 }
 
-/* RARITY COLORS */
+/* Rarity */
 .rarity-commun { border: 1px solid #aaa5; background: rgba(130,130,130,0.25); }
 .rarity-normal { border: 1px solid #3b82f67a; background: rgba(59,130,246,0.18); }
 .rarity-rare { border: 1px solid #8b5cf67a; background: rgba(139,92,246,0.25); }
 .rarity-legendaire { border: 1px solid #f59e0b7a; background: rgba(245,158,11,0.27); box-shadow: 0 6px 20px rgba(245,158,11,0.35); }
 
-/* LEGENDARY HALO */
+/* Legendary halo */
 .halo-legendaire {
   position: absolute;
   top: 44%;
@@ -363,7 +381,7 @@ export default function TonneauSurprise({ open, surprises = [], onComplete }) {
   width: 300px;
   height: 300px;
   transform: translate(-50%, -50%);
-  background: radial-gradient(circle, rgba(255,215,0,0.5), transparent 60%);
+  background: radial-gradient(circle, rgba(255,215,0,0.55), transparent 60%);
   border-radius: 50%;
   animation: halo-pulse 1.4s ease-out forwards;
 }
@@ -374,24 +392,16 @@ export default function TonneauSurprise({ open, surprises = [], onComplete }) {
   100% { opacity: 0; transform: scale(1) translate(-50%, -50%); }
 }
 
-/* SPARKLES */
-.sparkle {
-  position: absolute;
-  width: 8px; height: 8px;
-  border-radius: 50%;
-  opacity: 0;
-  animation: sparkle-fall 1.2s linear forwards;
-}
-
+/* Sparkles */
+.sparkle { position: absolute; width: 8px; height: 8px; border-radius: 50%; opacity: 0; animation: sparkle-fall 1.2s linear forwards; }
 .sparkle-rare { background: #a000ff; }
 .sparkle-legendaire { background: #ffd200; }
 
 @keyframes sparkle-fall {
   from { opacity: 1; transform: translateY(0) scale(1); }
-  to { opacity: 0; transform: translateY(120px) scale(0.4); }
+  to   { opacity: 0; transform: translateY(120px) scale(0.4); }
 }
 
-/* sparkles positions */
 ${Array.from({ length: 64 })
   .map((_, i) => {
     const left = Math.random() * 100;
@@ -400,7 +410,6 @@ ${Array.from({ length: 64 })
     return `.s-${i} { left:${left}%; top:${top}%; animation-delay:${delay}ms; }`;
   })
   .join("\n")}
-
 `}</style>
       </div>
     </div>
