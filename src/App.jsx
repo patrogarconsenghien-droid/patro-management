@@ -883,79 +883,79 @@ ${job.registeredBros.map(reg => {
 
     // 🎲 --- VERRE SURPRISE ---
     if (hasSurprise) {// 🎯 Sélection des produits éligibles
-const eligible = products.filter(
-  p => surpriseSettings.eligibleProducts.includes(p.id) && p.stock > 0
-);
+      const eligible = products.filter(
+        p => surpriseSettings.eligibleProducts.includes(p.id) && p.stock > 0
+      );
 
-if (eligible.length === 0) {
-  alert("Aucun produit disponible pour le verre surprise !");
-  return;
-}
+      if (eligible.length === 0) {
+        alert("Aucun produit disponible pour le verre surprise !");
+        return;
+      }
 
-// 🎲 Nouveau tirage selon probabilités officielles (60 / 25 / 13.5 / 1.5)
-const surprises = [];
-const stockCopy = {};
-eligible.forEach(p => (stockCopy[p.id] = p.stock));
+      // 🎲 Nouveau tirage selon probabilités officielles (60 / 25 / 13.5 / 1.5)
+      const surprises = [];
+      const stockCopy = {};
+      eligible.forEach(p => (stockCopy[p.id] = p.stock));
 
-Object.values(cart).forEach(item => {
-  if (item.productId === 'verre_surprise') {
+      Object.values(cart).forEach(item => {
+        if (item.productId === 'verre_surprise') {
 
-    for (let i = 0; i < item.quantity; i++) {
-      const available = eligible.filter(p => stockCopy[p.id] > 0);
-      if (available.length === 0) break;
+          for (let i = 0; i < item.quantity; i++) {
+            const available = eligible.filter(p => stockCopy[p.id] > 0);
+            if (available.length === 0) break;
 
-      // 🟣 Regrouper par rareté selon surpriseSettings.weights
-      const communs      = available.filter(p => surpriseSettings.weights[p.id] === 70);
-      const normals      = available.filter(p => surpriseSettings.weights[p.id] === 40);
-      const rares        = available.filter(p => surpriseSettings.weights[p.id] === 15);
-      const legendaires  = available.filter(p => surpriseSettings.weights[p.id] === 1);
+            // 🟣 Regrouper par rareté selon surpriseSettings.weights
+            const communs = available.filter(p => surpriseSettings.weights[p.id] === 70);
+            const normals = available.filter(p => surpriseSettings.weights[p.id] === 40);
+            const rares = available.filter(p => surpriseSettings.weights[p.id] === 15);
+            const legendaires = available.filter(p => surpriseSettings.weights[p.id] === 1);
 
-      // 🟣 Tirage de rareté
-      const r = Math.random() * 100;
-      let rarity = "normal";
+            // 🟣 Tirage de rareté
+            const r = Math.random() * 100;
+            let rarity = "normal";
 
-      if (r < 60) rarity = "commun";
-      else if (r < 60 + 25) rarity = "normal";
-      else if (r < 60 + 25 + 13.5) rarity = "rare";
-      else rarity = "legendaire";
+            if (r < 60) rarity = "commun";
+            else if (r < 60 + 25) rarity = "normal";
+            else if (r < 60 + 25 + 13.5) rarity = "rare";
+            else rarity = "legendaire";
 
-      // 🟣 Sélection équitable dans la rareté tirée
-      let pool = [];
-      if (rarity === "commun") pool = communs;
-      else if (rarity === "normal") pool = normals;
-      else if (rarity === "rare") pool = rares;
-      else pool = legendaires;
+            // 🟣 Sélection équitable dans la rareté tirée
+            let pool = [];
+            if (rarity === "commun") pool = communs;
+            else if (rarity === "normal") pool = normals;
+            else if (rarity === "rare") pool = rares;
+            else pool = legendaires;
 
-      // Si aucune dans cette rareté → fallback sur tout ce qui reste
-      if (!pool || pool.length === 0) pool = available;
+            // Si aucune dans cette rareté → fallback sur tout ce qui reste
+            if (!pool || pool.length === 0) pool = available;
 
-      const chosen = pool[Math.floor(Math.random() * pool.length)];
+            const chosen = pool[Math.floor(Math.random() * pool.length)];
 
-      // 🟣 Décrémenter le stock
-      stockCopy[chosen.id]--;
-      if (stockCopy[chosen.id] <= 0) delete stockCopy[chosen.id];
+            // 🟣 Décrémenter le stock
+            stockCopy[chosen.id]--;
+            if (stockCopy[chosen.id] <= 0) delete stockCopy[chosen.id];
 
-      // 🟣 Ajouter à la liste des surprises
-      surprises.push({
-        ...chosen,
-        rarity
+            // 🟣 Ajouter à la liste des surprises
+            surprises.push({
+              ...chosen,
+              rarity
+            });
+          }
+        }
       });
+
+      if (surprises.length === 0) {
+        alert("Tous les produits éligibles sont en rupture de stock !");
+        return;
+      }
+
+      // 🎰 Préparer et afficher la "roulette"
+      setRouletteOptions(eligible);    // nécessaire pour afficher les noms
+      setRouletteSurprises(surprises); // données envoyées au TonneauSurprise
+      setShowRoulette(true);           // affiche la fenêtre
+      setRouletteResult(null);         // reset
+      return; // ne continue pas validateOrder()
     }
-  }
-});
-
-if (surprises.length === 0) {
-  alert("Tous les produits éligibles sont en rupture de stock !");
-  return;
-}
-
-// 🎰 Préparer et afficher la "roulette"
-setRouletteOptions(eligible);    // nécessaire pour afficher les noms
-setRouletteSurprises(surprises); // données envoyées au TonneauSurprise
-setShowRoulette(true);           // affiche la fenêtre
-setRouletteResult(null);         // reset
-return; // ne continue pas validateOrder()
-}
 
 
     // 🟢 Cas normal : commande sans verre surprise
@@ -964,22 +964,42 @@ return; // ne continue pas validateOrder()
       if (!product) return null;
 
       let price = 0;
-      if (cartItem.saleType === 'pack') price = product.pricePerPack;
-      else if (cartItem.saleType === 'eleven') price = product.pricePer11;
-      else price = product.price;
-
+      let displayQuantity = 0;
       let displayName = product.name;
-      if (cartItem.saleType === 'pack') displayName += ` (Bac de ${product.packSize})`;
-      else if (cartItem.saleType === 'eleven') displayName += ` (Lot de 11)`;
+
+      if (cartItem.saleType === 'pack') {
+        // Prix d’UN bac
+        price = product.pricePerPack;
+
+        // Nombre de bacs achetés
+        displayQuantity = cartItem.quantity / product.packSize;
+
+        displayName += ` (Bac de ${product.packSize})`;
+      }
+      else if (cartItem.saleType === 'eleven') {
+        // Prix d’UN mètre (lot de 11)
+        price = product.pricePer11;
+
+        // Nombre de mètres
+        displayQuantity = cartItem.quantity / 11;
+
+        displayName += ` (Lot de 11)`;
+      }
+      else {
+        // Vente à l’unité
+        price = product.price;
+        displayQuantity = cartItem.quantity;
+      }
 
       return {
         productId: cartItem.productId,
         productName: displayName,
-        quantity: cartItem.quantity,
-        pricePerUnit: price,
+        quantity: displayQuantity,  // ✔ correct affiché
+        pricePerUnit: price,        // ✔ prix réel par bac/mètre/unité
         saleType: cartItem.saleType,
-        total: price * cartItem.quantity
+        total: price * displayQuantity  // ✔ NE MULTIPLIE PLUS PAR 11 OU 24
       };
+
     }).filter(Boolean);
 
     const total = orderItems.reduce((sum, i) => sum + i.total, 0);
@@ -2488,8 +2508,6 @@ return; // ne continue pas validateOrder()
           onBack={() => { setSelectedMember(null); navigateTo('bar-order'); }}
         />
 
-
-
         <div className="p-4">
           {/* Barre de recherche */}
           <div className="mb-4">
@@ -2575,26 +2593,11 @@ return; // ne continue pas validateOrder()
             <div className="mb-6">
               <h3 className="text-lg font-semibold mb-3 text-gray-800">⭐ Populaires</h3>
 
-
-
               <div className="grid grid-cols-2 gap-3">
                 {(() => {
-                  // 🔍 DÉBOGAGE dans la console
-                  console.log('=== DÉBOGAGE PRODUITS POPULAIRES ===');
-                  console.log('popularProducts array:', popularProducts);
-                  console.log('products disponibles:', products.map(p => p.name));
-
                   const filteredProducts = products
-                    .filter(p => {
-                      const isPopular = popularProducts.includes(p.name);
-                      const hasStock = p.stock > 0;
-                      console.log(`${p.name}: populaire=${isPopular}, stock=${p.stock}, hasStock=${hasStock}`);
-                      return isPopular && hasStock;
-                    })
+                    .filter(p => popularProducts.includes(p.name) && p.stock > 0)
                     .slice(0, 4);
-
-                  console.log('produits filtrés finaux:', filteredProducts.map(p => p.name));
-                  console.log('=====================================');
 
                   return filteredProducts.map(product => {
                     const stockStatus = getStockStatus(product);
@@ -2737,7 +2740,6 @@ return; // ne continue pas validateOrder()
                       {product.stockType === 'mixed' && !isOutOfStock && (
                         <div className="space-y-2 border-t pt-2">
                           {/* Vente par 11 (mètre) */}
-                          {/* Vente par 11 (mètre) — y compris pour le verre surprise */}
                           {(product.stock >= 11 || product.isSurprise) && product.pricePer11 && (
                             <div className="bg-green-50 p-2 rounded">
                               <div className="flex items-center justify-between">
@@ -2771,7 +2773,6 @@ return; // ne continue pas validateOrder()
                               </div>
                             </div>
                           )}
-
 
                           {/* Vente par bac */}
                           {product.stock >= product.packSize && (
@@ -2842,7 +2843,6 @@ return; // ne continue pas validateOrder()
             console.log("=== 🎲 onComplete déclenché ===");
             console.log("revealed =", revealed);
 
-            // ⛔ Empêcher les appels multiples
             if (!revealed || revealed.length === 0) {
               console.log("❌ revealed vide, on ne fait rien");
               return;
@@ -2862,32 +2862,54 @@ return; // ne continue pas validateOrder()
                 }
 
                 let price = 0;
-                if (cartItem.saleType === 'pack') price = product.pricePerPack;
-                else if (cartItem.saleType === 'eleven') price = product.pricePer11;
-                else price = product.price;
+                let displayQuantity = 0;
+                let displayName = product.name;
+
+                if (cartItem.saleType === 'pack') {
+                  // ✅ Pour un bac : prix = prix du bac complet, quantité affichée = nombre de bacs
+                  price = product.pricePerPack;
+                  displayQuantity = cartItem.quantity / product.packSize;
+                  displayName += ` (Bac de ${product.packSize})`;
+                } else if (cartItem.saleType === 'eleven') {
+                  // ✅ Pour un mètre : prix = prix du mètre complet, quantité affichée = nombre de mètres
+                  price = product.pricePer11;
+                  displayQuantity = cartItem.quantity / 11;
+                  displayName += ` (Lot de 11)`;
+                } else {
+                  // Vente à l'unité normale
+                  price = product.price;
+                  displayQuantity = cartItem.quantity;
+                }
 
                 normalItems.push({
                   productId: cartItem.productId,
-                  productName: product.name,
-                  quantity: cartItem.quantity,
+                  productName: displayName,
+                  quantity: displayQuantity,
                   pricePerUnit: price,
                   saleType: cartItem.saleType,
-                  total: price * cartItem.quantity
+                  total: price * displayQuantity
                 });
               }
             });
 
             console.log("normalItems =", normalItems);
 
-            // Construire les items surprise avec les produits révélés
-            const surpriseItems = revealed.map(p => ({
-              productId: p.id, // ✅ ID du produit réel tiré
-              productName: `🎲 Verre Surprise : ${p.name}`,
-              quantity: 1,
-              pricePerUnit: surpriseSettings.price,
-              saleType: "unit",
-              total: surpriseSettings.price
-            }));
+            // 🎲 Construire les items surprise
+            const surpriseCartItem = Object.values(cart).find(item => item.productId === 'verre_surprise');
+            const isMeterSale = surpriseCartItem?.saleType === 'eleven';
+
+            const surpriseItems = revealed.map(p => {
+              const pricePerUnit = isMeterSale ? surpriseSettings.pricePer11 / 11 : surpriseSettings.price;
+
+              return {
+                productId: p.id,
+                productName: `🎲 Verre Surprise : ${p.name}`,
+                quantity: 1,
+                pricePerUnit: pricePerUnit,
+                saleType: "unit",
+                total: pricePerUnit
+              };
+            });
 
             console.log("surpriseItems =", surpriseItems);
 
@@ -2907,16 +2929,14 @@ return; // ne continue pas validateOrder()
               surprises: revealed
             });
 
-            setCart({}); // Vider le panier
+            setCart({});
           }}
-
         />
 
         {/* Modal de confirmation */}
         <Modal
           isOpen={orderConfirmation.show}
           onClose={() => {
-
             setOrderConfirmation({ show: false, member: null, items: [], total: 0 });
             setDirectPayment(false);
             setDirectPaymentMethod('');
@@ -2958,7 +2978,7 @@ return; // ne continue pas validateOrder()
                   </div>
                 </div>
 
-                {/* ⭐ NOUVEAU : Option de paiement direct */}
+                {/* Option de paiement direct */}
                 <div className="border-t pt-4">
                   <div className="flex items-center space-x-2 mb-3">
                     <input
