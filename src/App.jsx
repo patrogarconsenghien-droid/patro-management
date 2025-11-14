@@ -916,8 +916,21 @@ ${job.registeredBros.map(reg => {
             });
 
             const random = weightedList[Math.floor(Math.random() * weightedList.length)];
-            surprises.push(random);
-            stockCopy[random.id] -= 1;
+
+const weight = surpriseSettings.weights?.[random.id] || 40; // 40 = Normal par défaut
+
+let rarity = "normal";
+if (weight === 70) rarity = "commun";
+else if (weight === 40) rarity = "normal";
+else if (weight === 15) rarity = "rare";
+else if (weight === 1) rarity = "legendaire";
+
+// On injecte la rareté dans le produit
+surprises.push({
+  ...random,
+  rarity
+});
+
           }
         }
       });
