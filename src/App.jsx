@@ -8,6 +8,8 @@ import { db } from './firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { useNotifications } from './useNotifications';
 import { Bell, Check, X } from 'lucide-react';
+import TonneauSurprise from './components/TonneauSurprise';
+
 
 
 const Modal = ({ isOpen, onClose, title, children }) => {
@@ -225,6 +227,8 @@ ${job.registeredBros.map(reg => {
   }, []);
 
 
+
+
   useEffect(() => {
     if (isSupported && permission === 'default') {
       // Attendre 5 secondes avant de proposer les notifications
@@ -364,10 +368,10 @@ ${job.registeredBros.map(reg => {
   };
 
   const formatCurrency = (amount) => {
-  const value = Number(amount);
-  if (isNaN(value)) return "0.00 €"; // sécurité si undefined, null, ou NaN
-  return `${value.toFixed(2)} €`;
-};
+    const value = Number(amount);
+    if (isNaN(value)) return "0.00 €"; // sécurité si undefined, null, ou NaN
+    return `${value.toFixed(2)} €`;
+  };
 
   const formatDate = (date) => new Date(date).toLocaleDateString('fr-FR');
 
@@ -778,8 +782,7 @@ ${job.registeredBros.map(reg => {
         // 💾 Met à jour le nom et l’ID des items avant l’enregistrement
         orderConfirmation.items = orderConfirmation.items.map(item => ({
           ...item,
-          productName: item.productName, // garde "Verre Surprise : ..."
-          productId: 'verre_surprise' // garde l'identité du verre surprise
+          productId: 'verre_surprise'
         }));
       }
 
@@ -931,59 +934,9 @@ ${job.registeredBros.map(reg => {
       setRouletteResult(null);             // réinitialise le résultat
 
       // 🕒 Étape 2 — Laisser tourner l'animation pendant 4 secondes
-      setTimeout(() => {
-        setShowRoulette(false);            // ferme la fenêtre après animation
-
-        // 🧾 Étape 3 — Créer les items de commande
-        const orderItems = [];
-
-        surprises.forEach(p => {
-          orderItems.push({
-            productId: p.id,
-            productName: `🎲 Verre Surprise : ${p.name}`,
-            quantity: 1,
-            pricePerUnit: surpriseSettings.price,
-            total: surpriseSettings.price,
-            saleType: 'unit'
-          });
-        });
-
-        Object.values(cart).forEach(cartItem => {
-          if (cartItem.productId === 'verre_surprise') return;
-          const product = products.find(p => p.id === cartItem.productId);
-          if (!product) return;
-
-          let price = 0;
-          if (cartItem.saleType === 'pack') price = product.pricePerPack;
-          else if (cartItem.saleType === 'eleven') price = product.pricePer11;
-          else price = product.price;
-
-          let displayName = product.name;
-          if (cartItem.saleType === 'pack') displayName += ` (Bac de ${product.packSize})`;
-          else if (cartItem.saleType === 'eleven') displayName += ` (Lot de 11)`;
-
-          orderItems.push({
-            productId: product.id,
-            productName: displayName,
-            quantity: cartItem.quantity,
-            pricePerUnit: price,
-            total: price * cartItem.quantity,
-            saleType: cartItem.saleType
-          });
-        });
-
-        const total = orderItems.reduce((sum, i) => sum + i.total, 0);
-
-        // 🎯 Étape 4 — Afficher la modale de confirmation
-        setOrderConfirmation({
-          show: true,
-          member: selectedMember,
-          surprises,
-          items: orderItems,
-          total,
-          isSurprise: true
-        });
-      }, 4000); // durée totale de l’animation (en ms)
+      setShowRoulette(true);
+      setRouletteSurprises(surprises);
+      // durée totale de l’animation (en ms)
 
       return; // 🔚 Stop ici pour ne pas exécuter le reste de validateOrder()
     }
@@ -1030,7 +983,7 @@ ${job.registeredBros.map(reg => {
       show: true,
       member: selectedMember,
       items: orderItems,
-      total: cartTotal,
+      total,
       isSurprise: false
     });
   };
@@ -2861,76 +2814,87 @@ ${job.registeredBros.map(reg => {
           </div>
         )}
 
-        {showRoulette && (
-          <Modal
-            isOpen={showRoulette}
-            onClose={() => setShowRoulette(false)}
-            title="🎰 Verre Surprise"
-          >
-            <div className="flex flex-col items-center justify-center p-6 space-y-8 overflow-hidden">
-              <h3 className="text-xl font-bold text-center text-yellow-600">
-                Le hasard choisit ta boisson...
-              </h3>
+        <TonneauSurprise
+          open={showRoulette}
+          surprises={rouletteSurprises.map(p => ({
+            id: p.id,
+            name: p.name,
+            rarity: p.rarity || 'normal',
+            price: surpriseSettings.price
+          }))}
+          onComplete={(revealed) => {
+  console.log("=== 🎲 onComplete déclenché ===");
+  console.log("revealed =", revealed);
+  
+  // ⛔ Empêcher les appels multiples
+  if (!revealed || revealed.length === 0) {
+    console.log("❌ revealed vide, on ne fait rien");
+    return;
+  }
 
-              {/* Zone de roulette */}
-              <div className="relative w-full h-16 overflow-hidden border-4 border-yellow-400 rounded-lg bg-white shadow-inner">
-                <div
-                  className="absolute flex whitespace-nowrap animate-spin-roulette"
-                  style={{
-                    animationDuration: '4s',
-                  }}
-                >
-                  {Array(10)
-                    .fill(0)
-                    .map((_, i) => (
-                      <div key={i} className="flex space-x-6 mx-6">
-                        {rouletteOptions.map((beer, idx) => (
-                          <span
-                            key={`${beer.id}-${i}-${idx}`}
-                            className="text-lg font-semibold text-blue-700"
-                          >
-                            {beer.name}
-                          </span>
-                        ))}
-                      </div>
-                    ))}
-                </div>
+  setShowRoulette(false);
 
-                {/* Curseur central */}
-                <div className="absolute top-0 bottom-0 left-1/2 w-1 bg-red-500 transform -translate-x-1/2"></div>
-              </div>
+  // Vérif normalItems (produits hors verre surprise)
+  const normalItems = [];
+  Object.values(cart).forEach(cartItem => {
+    if (cartItem.productId !== 'verre_surprise') {
+      const product = products.find(p => p.id === cartItem.productId);
 
-              {/* Résultat final après la rotation */}
-              {rouletteResult && (
-                <div className="text-center mt-6 animate-fade-in">
-                  <h4 className="text-2xl font-bold text-green-700">
-                    🎉 Verre Surprise : {rouletteResult.name}
-                  </h4>
-                </div>
-              )}
-            </div>
-
-            <style>{`
-      @keyframes spin-roulette {
-        0% { transform: translateX(0); }
-        80% { transform: translateX(-80%); }
-        100% { transform: translateX(-100%); }
+      if (!product) {
+        console.log("PRODUIT NON TROUVÉ pour ", cartItem.productId);
+        return;
       }
-      .animate-spin-roulette {
-        animation: spin-roulette 4s cubic-bezier(0.25, 1, 0.5, 1);
-      }
-      @keyframes fade-in {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
-      }
-      .animate-fade-in {
-        animation: fade-in 1s ease-out forwards;
-      }
-    `}</style>
-          </Modal>
-        )}
 
+      let price = 0;
+      if (cartItem.saleType === 'pack') price = product.pricePerPack;
+      else if (cartItem.saleType === 'eleven') price = product.pricePer11;
+      else price = product.price;
 
+      normalItems.push({
+        productId: cartItem.productId,
+        productName: product.name,
+        quantity: cartItem.quantity,
+        pricePerUnit: price,
+        saleType: cartItem.saleType,
+        total: price * cartItem.quantity
+      });
+    }
+  });
+
+  console.log("normalItems =", normalItems);
+
+  // Construire les items surprise avec les produits révélés
+  const surpriseItems = revealed.map(p => ({
+    productId: p.id, // ✅ ID du produit réel tiré
+    productName: `🎲 Verre Surprise : ${p.name}`,
+    quantity: 1,
+    pricePerUnit: surpriseSettings.price,
+    saleType: "unit",
+    total: surpriseSettings.price
+  }));
+
+  console.log("surpriseItems =", surpriseItems);
+
+  const finalItems = [...normalItems, ...surpriseItems];
+  const finalTotal = finalItems.reduce((sum, i) => sum + i.total, 0);
+
+  console.log("finalItems =", finalItems);
+  console.log("finalTotal =", finalTotal);
+
+  // ✅ Afficher la confirmation de commande avec les vrais produits
+  setOrderConfirmation({
+    show: true,
+    member: selectedMember,
+    items: finalItems,
+    total: finalTotal,
+    isSurprise: true,
+    surprises: revealed
+  });
+
+  setCart({}); // Vider le panier
+}}
+
+        />
 
         {/* Modal de confirmation */}
         <Modal
@@ -6758,7 +6722,7 @@ ${job.registeredBros.map(reg => {
                   })()}
                 </div>
 
-                <style jsx>{`
+                <style>{`
                   @keyframes dash {
                     to {
                       stroke-dashoffset: 0;
