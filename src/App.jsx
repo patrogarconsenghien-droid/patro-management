@@ -3216,6 +3216,9 @@ ${job.registeredBros.map(reg => {
   if (currentScreen === 'boulots-scheduled') {
     return (
       <div className="min-h-screen bg-gray-50">
+
+
+
         <Header title="Boulots programmés" onBack={() => navigateTo('boulots')} />
 
         <div className="p-4">
@@ -3537,64 +3540,148 @@ ${job.registeredBros.map(reg => {
               />
             </div>
 
-            {/* Durée estimée */}
+            {/* Durée estimée AVEC BOUTONS +/- */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 ⏱️ Durée estimée *
               </label>
-              <div className="relative">
+              <div className="flex items-center space-x-2">
+                {/* Bouton - */}
+                <button
+                  type="button"
+                  onClick={() => setNewScheduledJob({
+                    ...newScheduledJob,
+                    estimatedHours: Math.max(0.5, (newScheduledJob.estimatedHours || 1) - 0.5)
+                  })}
+                  className="w-10 h-10 bg-red-500 text-white rounded-lg font-bold active:scale-95 transition-transform"
+                >
+                  -
+                </button>
+
+                {/* Champ */}
                 <input
                   type="number"
                   step="0.5"
                   min="0.5"
                   max="12"
                   value={newScheduledJob.estimatedHours}
-                  onChange={(e) => setNewScheduledJob({ ...newScheduledJob, estimatedHours: parseFloat(e.target.value) || 1 })}
-                  className="w-full p-3 border rounded-lg pr-12"
-                  placeholder="1.0"
+                  onChange={(e) => setNewScheduledJob({
+                    ...newScheduledJob,
+                    estimatedHours: parseFloat(e.target.value) || 1
+                  })}
+                  className="flex-1 p-3 border rounded-lg text-center font-medium"
                 />
-                <span className="absolute right-3 top-3 text-gray-500">heure(s)</span>
+
+                {/* Bouton + */}
+                <button
+                  type="button"
+                  onClick={() => setNewScheduledJob({
+                    ...newScheduledJob,
+                    estimatedHours: Math.min(12, (newScheduledJob.estimatedHours || 1) + 0.5)
+                  })}
+                  className="w-10 h-10 bg-green-500 text-white rounded-lg font-bold active:scale-95 transition-transform"
+                >
+                  +
+                </button>
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                Durée estimée du boulot par personne
+                Durée estimée du boulot par personne (par pas de 0.5h)
               </p>
             </div>
 
-            {/* Tarif horaire */}
+            {/* Tarif horaire AVEC BOUTONS +/- */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 💰 Tarif horaire *
               </label>
-              <div className="relative">
+              <div className="flex items-center space-x-2">
+                {/* Bouton - */}
+                <button
+                  type="button"
+                  onClick={() => setNewScheduledJob({
+                    ...newScheduledJob,
+                    customRate: Math.max(0, (newScheduledJob.customRate || hourlyRate) - 0.25)
+                  })}
+                  className="w-10 h-10 bg-red-500 text-white rounded-lg font-bold active:scale-95 transition-transform"
+                >
+                  -
+                </button>
+
+                {/* Champ */}
                 <input
                   type="number"
                   step="0.25"
                   min="0"
                   value={newScheduledJob.customRate}
-                  onChange={(e) => setNewScheduledJob({ ...newScheduledJob, customRate: parseFloat(e.target.value) || 0 })}
-                  className="w-full p-3 border rounded-lg pr-8"
-                  placeholder="10.00"
+                  onChange={(e) => setNewScheduledJob({
+                    ...newScheduledJob,
+                    customRate: parseFloat(e.target.value) || 0
+                  })}
+                  className="flex-1 p-3 border rounded-lg text-center font-medium"
                 />
-                <span className="absolute right-3 top-3 text-gray-500">€/h</span>
+
+                {/* Bouton + */}
+                <button
+                  type="button"
+                  onClick={() => setNewScheduledJob({
+                    ...newScheduledJob,
+                    customRate: (newScheduledJob.customRate || hourlyRate) + 0.25
+                  })}
+                  className="w-10 h-10 bg-green-500 text-white rounded-lg font-bold active:scale-95 transition-transform"
+                >
+                  +
+                </button>
               </div>
+              <p className="text-xs text-gray-500 mt-1">
+                €/heure (par pas de 0.25€)
+              </p>
             </div>
 
-            {/* Nombre de Bro nécessaires */}
+            {/* Nombre de Bro AVEC BOUTONS +/- */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 👥 Nombre de Bro nécessaires *
               </label>
-              <input
-                type="number"
-                min="1"
-                max={bros.length}
-                value={newScheduledJob.brosNeeded}
-                onChange={(e) => setNewScheduledJob({ ...newScheduledJob, brosNeeded: parseInt(e.target.value) || 1 })}
-                className="w-full p-3 border rounded-lg"
-                placeholder="1"
-              />
+              <div className="flex items-center space-x-2">
+                {/* Bouton - */}
+                <button
+                  type="button"
+                  onClick={() => setNewScheduledJob({
+                    ...newScheduledJob,
+                    brosNeeded: Math.max(1, (newScheduledJob.brosNeeded || 1) - 1)
+                  })}
+                  className="w-10 h-10 bg-red-500 text-white rounded-lg font-bold active:scale-95 transition-transform"
+                >
+                  -
+                </button>
+
+                {/* Champ */}
+                <input
+                  type="number"
+                  min="1"
+                  max={bros.length}
+                  value={newScheduledJob.brosNeeded}
+                  onChange={(e) => setNewScheduledJob({
+                    ...newScheduledJob,
+                    brosNeeded: parseInt(e.target.value) || 1
+                  })}
+                  className="flex-1 p-3 border rounded-lg text-center font-medium"
+                />
+
+                {/* Bouton + */}
+                <button
+                  type="button"
+                  onClick={() => setNewScheduledJob({
+                    ...newScheduledJob,
+                    brosNeeded: Math.min(bros.length, (newScheduledJob.brosNeeded || 1) + 1)
+                  })}
+                  className="w-10 h-10 bg-green-500 text-white rounded-lg font-bold active:scale-95 transition-transform"
+                >
+                  +
+                </button>
+              </div>
               <p className="text-xs text-gray-500 mt-1">
-                Nombre de personnes requises pour ce boulot (max: {bros.length} Bro disponibles)
+                Nombre de personnes requises (max: {bros.length} Bro disponibles)
               </p>
             </div>
 
