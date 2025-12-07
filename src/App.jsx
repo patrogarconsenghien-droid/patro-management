@@ -3436,35 +3436,22 @@ ${job.registeredBros.map(reg => {
                                   <p className="text-xs text-gray-500 mb-3">Aucun Bro inscrit</p>
                                 )}
 
-                                {/* Bouton pour s'inscrire + validation partielle */}
+                                {/* Bouton inscription */}
                                 {job.registeredBros.length < job.brosNeeded && (
-                                  <div className="flex items-center space-x-2">
-                                    <button
-                                      onClick={() => { setSelectedJob(job); setModalType('register-bro'); setShowModal(true); }}
-                                      className="flex-1 p-2 bg-blue-500 text-white rounded text-sm active:scale-95 transition-transform"
-                                    >
-                                      Inscrire un Bro
-                                    </button>
-                                    {/* Bouton inscription uniquement */}
-                                    {job.registeredBros.length < job.brosNeeded && (
-                                      <button
-                                        onClick={() => { setSelectedJob(job); setModalType('register-bro'); setShowModal(true); }}
-                                        className="w-full p-2 bg-blue-500 text-white rounded text-sm active:scale-95 transition-transform"
-                                      >
-                                        ✅ Inscrire un Bro
-                                      </button>
-                                    )}
+                                  <button
+                                    onClick={() => { setSelectedJob(job); setModalType('register-bro'); setShowModal(true); }}
+                                    className="w-full p-2 bg-blue-500 text-white rounded text-sm active:scale-95 transition-transform"
+                                  >
+                                    ✅ Inscrire un Bro
+                                  </button>
+                                )}
 
-                                    {/* Message si équipe complète */}
-                                    {hasEnoughBros && (
-                                      <div className="mt-2 p-2 bg-green-100 border border-green-300 rounded text-center">
-                                        <p className="text-sm text-green-800 font-medium">
-                                          ✅ Équipe complète ! Allez dans "Valider les boulots" pour finaliser
-                                        </p>
-                                      </div>
-                                    )}
-
-
+                                {/* Message si équipe complète */}
+                                {hasEnoughBros && (
+                                  <div className="p-2 bg-green-100 border border-green-300 rounded text-center">
+                                    <p className="text-sm text-green-800 font-medium">
+                                      ✅ Équipe complète ! Allez dans "Valider les boulots" pour finaliser
+                                    </p>
                                   </div>
                                 )}
                               </div>
@@ -3846,8 +3833,8 @@ ${job.registeredBros.map(reg => {
                     <div
                       key={job.id}
                       className={`bg-white border-2 rounded-lg shadow-sm p-4 ${hasEnoughBros
-                          ? 'border-green-300 bg-green-50'
-                          : 'border-orange-300 bg-orange-50'
+                        ? 'border-green-300 bg-green-50'
+                        : 'border-orange-300 bg-orange-50'
                         }`}
                     >
                       {/* En-tête du boulot */}
@@ -3864,8 +3851,8 @@ ${job.registeredBros.map(reg => {
 
                         {/* Badge de statut */}
                         <div className={`px-3 py-1 rounded-full text-xs font-medium ${hasEnoughBros
-                            ? 'bg-green-100 text-green-800'
-                            : 'bg-orange-100 text-orange-800'
+                          ? 'bg-green-100 text-green-800'
+                          : 'bg-orange-100 text-orange-800'
                           }`}>
                           {job.registeredBros.length}/{job.brosNeeded} Bro
                         </div>
@@ -3954,8 +3941,8 @@ ${job.registeredBros.map(reg => {
                             }
                           }}
                           className={`w-full p-3 rounded-lg font-semibold active:scale-95 transition-transform ${hasEnoughBros
-                              ? 'bg-orange-500 text-white'
-                              : 'bg-orange-600 text-white'
+                            ? 'bg-orange-500 text-white'
+                            : 'bg-orange-600 text-white'
                             }`}
                         >
                           {hasEnoughBros
