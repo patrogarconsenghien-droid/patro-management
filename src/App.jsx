@@ -3182,6 +3182,20 @@ ${job.registeredBros.map(reg => {
             </div>
           </button>
 
+          {/* NOUVEAU BOUTON - Valider les boulots */}
+          <button
+            onClick={() => navigateTo('boulots-validate')}
+            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center space-x-3">
+              <CheckCircle className="text-green-500" size={24} />
+              <div className="text-left">
+                <h3 className="font-semibold">Valider les boulots</h3>
+                <p className="text-gray-600 text-sm">Zone responsables - Finaliser les tâches</p>
+              </div>
+            </div>
+          </button>
+
           {/* RENOMMÉ : Historique → Boulots terminés */}
           <button
             onClick={() => navigateTo('boulots-history')}
@@ -3431,28 +3445,27 @@ ${job.registeredBros.map(reg => {
                                     >
                                       Inscrire un Bro
                                     </button>
-
-                                    {/* Petit bouton rond vert pour validation partielle */}
-                                    {job.registeredBros.length > 0 && (
+                                    {/* Bouton inscription uniquement */}
+                                    {job.registeredBros.length < job.brosNeeded && (
                                       <button
-                                        onClick={() => completeScheduledJob(job.id, true)}
-                                        className="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center active:scale-95 transition-transform"
-                                        title={`Valider avec ${job.registeredBros.length} Bro sur ${job.brosNeeded}`}
+                                        onClick={() => { setSelectedJob(job); setModalType('register-bro'); setShowModal(true); }}
+                                        className="w-full p-2 bg-blue-500 text-white rounded text-sm active:scale-95 transition-transform"
                                       >
-                                        <span className="text-sm font-bold">✓</span>
+                                        ✅ Inscrire un Bro
                                       </button>
                                     )}
-                                  </div>
-                                )}
 
-                                {/* Bouton normal si quota atteint */}
-                                {hasEnoughBros && (
-                                  <button
-                                    onClick={() => completeScheduledJob(job.id, false)}
-                                    className="w-full p-2 bg-green-500 text-white rounded text-sm active:scale-95 transition-transform"
-                                  >
-                                    ✅ Marquer comme terminé
-                                  </button>
+                                    {/* Message si équipe complète */}
+                                    {hasEnoughBros && (
+                                      <div className="mt-2 p-2 bg-green-100 border border-green-300 rounded text-center">
+                                        <p className="text-sm text-green-800 font-medium">
+                                          ✅ Équipe complète ! Allez dans "Valider les boulots" pour finaliser
+                                        </p>
+                                      </div>
+                                    )}
+
+
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -3792,6 +3805,218 @@ ${job.registeredBros.map(reg => {
               </div>
             </div>
           </div>
+        </Modal>
+      </div>
+    );
+  }
+
+  // 🆕 NOUVEL ÉCRAN : Validation des boulots (responsables uniquement)
+  if (currentScreen === 'boulots-validate') {
+    // Filtrer les boulots qui ont au moins 1 Bro inscrit
+    const jobsToValidate = scheduledJobs.filter(job => job.registeredBros.length > 0);
+
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header title="Valider les Boulots" onBack={() => navigateTo('boulots')} />
+
+        <div className="p-4">
+          {/* Avertissement responsables */}
+          <div className="mb-4 bg-orange-50 border border-orange-200 p-4 rounded-lg">
+            <h3 className="font-semibold text-orange-800 mb-1">🔐 Zone Responsables</h3>
+            <p className="text-sm text-orange-700">
+              Validez les boulots une fois l'équipe au complet ou en mode partiel si nécessaire.
+            </p>
+          </div>
+
+          {jobsToValidate.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <CheckCircle size={48} className="mx-auto mb-2 opacity-50" />
+              <p>Aucun boulot en attente de validation</p>
+              <p className="text-sm mt-1">Les boulots avec des inscriptions apparaîtront ici</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {jobsToValidate
+                .sort((a, b) => new Date(a.date) - new Date(b.date))
+                .map(job => {
+                  const hasEnoughBros = job.registeredBros.length >= job.brosNeeded;
+                  const completionRate = (job.registeredBros.length / job.brosNeeded) * 100;
+
+                  return (
+                    <div
+                      key={job.id}
+                      className={`bg-white border-2 rounded-lg shadow-sm p-4 ${hasEnoughBros
+                          ? 'border-green-300 bg-green-50'
+                          : 'border-orange-300 bg-orange-50'
+                        }`}
+                    >
+                      {/* En-tête du boulot */}
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-1">
+                          <h3 className="font-semibold text-lg">{job.description}</h3>
+                          <p className="text-sm text-gray-600">{formatDate(job.date)}</p>
+                          {job.timeStart && (
+                            <p className="text-xs text-gray-500">
+                              🕐 {job.timeStart} à {calculateEndTime(job.timeStart, job.estimatedHours || 1)}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Badge de statut */}
+                        <div className={`px-3 py-1 rounded-full text-xs font-medium ${hasEnoughBros
+                            ? 'bg-green-100 text-green-800'
+                            : 'bg-orange-100 text-orange-800'
+                          }`}>
+                          {job.registeredBros.length}/{job.brosNeeded} Bro
+                        </div>
+                      </div>
+
+                      {/* Barre de progression */}
+                      <div className="mb-3">
+                        <div className="flex justify-between text-xs text-gray-600 mb-1">
+                          <span>Équipe</span>
+                          <span>{completionRate.toFixed(0)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className={`h-2 rounded-full transition-all ${hasEnoughBros ? 'bg-green-500' : 'bg-orange-500'
+                              }`}
+                            style={{ width: `${Math.min(completionRate, 100)}%` }}
+                          ></div>
+                        </div>
+                      </div>
+
+                      {/* Liste des Bro inscrits */}
+                      <div className="mb-3">
+                        <p className="text-sm font-medium text-gray-700 mb-2">👥 Bro inscrits :</p>
+                        <div className="flex flex-wrap gap-2">
+                          {job.registeredBros.map((registration, index) => {
+                            const bro = bros.find(b => b.id === registration.broId);
+                            return (
+                              <span
+                                key={index}
+                                className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-medium"
+                              >
+                                {bro?.name || 'Inconnu'}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Détails financiers */}
+                      <div className="bg-white bg-opacity-70 p-3 rounded-lg mb-3">
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <p className="text-gray-600">Tarif/h :</p>
+                            <p className="font-semibold text-green-600">{formatCurrency(job.customRate)}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-600">Durée :</p>
+                            <p className="font-semibold">{job.estimatedHours}h</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-600">Coût si complet :</p>
+                            <p className="font-semibold text-blue-600">
+                              {formatCurrency(job.customRate * job.estimatedHours * job.brosNeeded)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-gray-600">Coût actuel :</p>
+                            <p className="font-semibold text-orange-600">
+                              {formatCurrency(job.customRate * job.estimatedHours * job.registeredBros.length)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Boutons de validation */}
+                      <div className="space-y-2">
+                        {/* Validation complète (si équipe complète) */}
+                        {hasEnoughBros && (
+                          <button
+                            onClick={() => {
+                              if (confirm(`✅ Valider ce boulot avec l'équipe complète ?\n\n"${job.description}"\n${job.registeredBros.length} Bro inscrits\n\nIls seront tous payés ${formatCurrency(job.customRate * job.estimatedHours)} chacun.`)) {
+                                completeScheduledJob(job.id, false);
+                              }
+                            }}
+                            className="w-full p-3 bg-green-500 text-white rounded-lg font-semibold active:scale-95 transition-transform"
+                          >
+                            ✅ Valider avec équipe complète
+                          </button>
+                        )}
+
+                        {/* Validation partielle (toujours disponible si au moins 1 Bro) */}
+                        <button
+                          onClick={() => {
+                            if (confirm(`⚠️ Validation PARTIELLE ?\n\n"${job.description}"\nSeulement ${job.registeredBros.length} Bro sur ${job.brosNeeded} requis\n\nCoût total : ${formatCurrency(job.customRate * job.estimatedHours * job.registeredBros.length)}\n\nSeuls les Bro inscrits seront payés.`)) {
+                              completeScheduledJob(job.id, true);
+                            }
+                          }}
+                          className={`w-full p-3 rounded-lg font-semibold active:scale-95 transition-transform ${hasEnoughBros
+                              ? 'bg-orange-500 text-white'
+                              : 'bg-orange-600 text-white'
+                            }`}
+                        >
+                          {hasEnoughBros
+                            ? '⚠️ Forcer validation partielle'
+                            : `⚠️ Valider partiellement (${job.registeredBros.length}/${job.brosNeeded})`
+                          }
+                        </button>
+
+                        {/* Bouton retirer des Bro (optionnel) */}
+                        <button
+                          onClick={() => {
+                            setSelectedJob(job);
+                            setModalType('manage-registrations');
+                            setShowModal(true);
+                          }}
+                          className="w-full p-2 bg-gray-500 text-white rounded text-sm active:scale-95 transition-transform"
+                        >
+                          🔧 Gérer les inscriptions
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          )}
+        </div>
+
+        {/* Modal pour gérer les inscriptions */}
+        <Modal
+          isOpen={showModal && modalType === 'manage-registrations'}
+          onClose={() => { setShowModal(false); setSelectedJob(null); }}
+          title="Gérer les inscriptions"
+        >
+          {selectedJob && (
+            <div className="space-y-4">
+              <p className="text-sm text-gray-600">
+                Boulot: <strong>{selectedJob.description}</strong>
+              </p>
+
+              <div className="space-y-2">
+                {selectedJob.registeredBros.map((registration, index) => {
+                  const bro = bros.find(b => b.id === registration.broId);
+                  return (
+                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <span className="font-medium">{bro?.name || 'Inconnu'}</span>
+                      <button
+                        onClick={() => {
+                          if (confirm(`Retirer ${bro?.name} de ce boulot ?`)) {
+                            removeBroFromScheduled(selectedJob.id, registration.broId);
+                          }
+                        }}
+                        className="p-2 bg-red-500 text-white rounded active:scale-95 transition-transform"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </Modal>
       </div>
     );
