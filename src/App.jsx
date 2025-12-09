@@ -3713,6 +3713,7 @@ ${job.registeredBros.map(reg => {
 
         {/* Modal pour inscrire un Bro */}
         {/* Modal pour inscrire un Bro */}
+{/* Modal pour inscrire un Bro */}
 <Modal
   isOpen={showModal && modalType === 'register-bro'}
   onClose={() => { setShowModal(false); setSelectedJob(null); }}
@@ -3749,15 +3750,16 @@ ${job.registeredBros.map(reg => {
       </div>
     )}
 
-    {/* Liste des Bro disponibles */}
+    {/* Liste de TOUS les Bro */}
     <div className="space-y-2">
       {(() => {
         // Récupérer le job à jour depuis scheduledJobs
         const currentJob = scheduledJobs.find(j => j.id === selectedJob?.id);
         
-        return bros.filter(bro =>
-          !currentJob?.registeredBros.some(reg => reg.broId === bro.id)
-        ).map(bro => {
+        return bros.map(bro => {
+          // Vérifier si le Bro est déjà inscrit
+          const isRegistered = currentJob?.registeredBros.some(reg => reg.broId === bro.id);
+          
           // Vérifier si le Bro a un conflit d'horaire
           const hasConflict = scheduledJobs.some(otherJob =>
             otherJob.id !== currentJob?.id &&
@@ -3778,44 +3780,59 @@ ${job.registeredBros.map(reg => {
                 e.preventDefault();
                 e.stopPropagation();
                 
-                if (hasConflict) {
-                  if (confirm(`⚠️ ${bro.name} est déjà inscrit sur "${conflictingJob?.description}" ce jour-là.\n\nVoulez-vous quand même l'inscrire ?`)) {
-                    registerBroToJob(currentJob?.id, bro.id);
-                    // Mettre à jour selectedJob
-                    const updatedJob = scheduledJobs.find(j => j.id === currentJob?.id);
-                    setSelectedJob(updatedJob);
+                if (isRegistered) {
+                  // Désinscrire le Bro
+                  if (confirm(`Retirer ${bro.name} de ce boulot ?`)) {
+                    removeBroFromScheduled(currentJob?.id, bro.id);
                   }
                 } else {
-                  registerBroToJob(currentJob?.id, bro.id);
-                  // Mettre à jour selectedJob après inscription
-                  setTimeout(() => {
-                    const updatedJob = scheduledJobs.find(j => j.id === currentJob?.id);
-                    setSelectedJob(updatedJob);
-                  }, 50);
+                  // Inscrire le Bro
+                  if (hasConflict) {
+                    if (confirm(`⚠️ ${bro.name} est déjà inscrit sur "${conflictingJob?.description}" ce jour-là.\n\nVoulez-vous quand même l'inscrire ?`)) {
+                      registerBroToJob(currentJob?.id, bro.id);
+                    }
+                  } else {
+                    registerBroToJob(currentJob?.id, bro.id);
+                  }
                 }
               }}
-              className={`w-full border rounded-lg p-3 text-left active:scale-95 transition-transform ${
-                hasConflict ? 'border-orange-300 bg-orange-50' : 'border-gray-200 bg-white hover:bg-gray-50'
+              className={`w-full border-2 rounded-lg p-3 text-left active:scale-95 transition-transform ${
+                isRegistered 
+                  ? 'border-green-500 bg-green-50' 
+                  : hasConflict 
+                    ? 'border-orange-300 bg-orange-50' 
+                    : 'border-gray-200 bg-white hover:bg-gray-50'
               }`}
             >
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <div className="flex items-center space-x-2">
-                    <span className="font-medium">{bro.name}</span>
-                    {hasConflict && (
+                    <span className={`font-medium ${isRegistered ? 'text-green-700' : ''}`}>
+                      {bro.name}
+                    </span>
+                    {isRegistered && (
+                      <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-semibold">
+                        ✓ Inscrit
+                      </span>
+                    )}
+                    {!isRegistered && hasConflict && (
                       <span className="px-2 py-1 bg-orange-200 text-orange-800 text-xs rounded-full">
                         ⚠️ Conflit
                       </span>
                     )}
                   </div>
-                  <span className="text-sm text-gray-500">{bro.totalHours}h totales</span>
-                  {hasConflict && conflictingJob && (
+                  <span className={`text-sm ${isRegistered ? 'text-green-600' : 'text-gray-500'}`}>
+                    {bro.totalHours}h totales
+                  </span>
+                  {!isRegistered && hasConflict && conflictingJob && (
                     <div className="text-xs text-orange-600 mt-1">
                       Déjà inscrit sur: "{conflictingJob.description}"
                     </div>
                   )}
                 </div>
-                <div className="text-gray-400">→</div>
+                <div className={`text-2xl ${isRegistered ? 'text-green-500' : 'text-gray-400'}`}>
+                  {isRegistered ? '✓' : '→'}
+                </div>
               </div>
             </button>
           );
@@ -3823,21 +3840,12 @@ ${job.registeredBros.map(reg => {
       })()}
     </div>
 
-    {/* Message si tous les Bro sont inscrits */}
-    {(() => {
-      const currentJob = scheduledJobs.find(j => j.id === selectedJob?.id);
-      return bros.filter(bro =>
-        !currentJob?.registeredBros.some(reg => reg.broId === bro.id)
-      ).length === 0 && (
-        <p className="text-center text-gray-500 py-4">Tous les Bro sont déjà inscrits</p>
-      );
-    })()}
-
-    {/* Légende */}
+    {/* Légende mise à jour */}
     <div className="bg-gray-50 p-3 rounded-lg">
       <h4 className="font-medium text-gray-800 mb-2">💡 Légende :</h4>
       <div className="text-sm text-gray-600 space-y-1">
-        <p>• <span className="font-medium">Normal</span> : Bro disponible</p>
+        <p>• <span className="font-medium text-green-600">✓ Inscrit</span> : Bro déjà inscrit (clic pour retirer)</p>
+        <p>• <span className="font-medium">Normal</span> : Bro disponible (clic pour inscrire)</p>
         <p>• <span className="font-medium text-orange-600">⚠️ Conflit</span> : Déjà inscrit ce jour-là (clic possible avec confirmation)</p>
       </div>
     </div>
