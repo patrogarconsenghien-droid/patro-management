@@ -4056,7 +4056,7 @@ ${job.registeredBros.map(reg => {
                       <span className="font-medium">{bro?.name || 'Inconnu'}</span>
                       <button
                         onClick={() => {
-                          if (confirm(`Retirer ${bro?.name} de ce boulot ?`)) {
+                           {
                             removeBroFromScheduled(selectedJob.id, registration.broId);
                           }
                         }}
