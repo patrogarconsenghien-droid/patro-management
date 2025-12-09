@@ -1412,8 +1412,7 @@ ${job.registeredBros.map(reg => {
       await updateInFirebase('scheduledJobs', jobId, {
         registeredBros: updatedRegisteredBros
       });
-      setShowModal(false);
-      setSelectedJob(null);
+    
     } catch (error) {
       alert('Erreur lors de l\'inscription');
     }
