@@ -82,6 +82,110 @@ const PatroApp = () => {
   const [tripPasswordProtected, setTripPasswordProtected] = useState(false);
   const [tripAuthenticated, setTripAuthenticated] = useState(false);
 
+const tripLockedMessages = [
+  {
+    title: "Accès refusé ❌",
+    description: "Non, cliquer plus fort ne débloquera pas le voyage. Va bosser."
+  },
+  {
+    title: "Toujours pas partis",
+    description: "Et spoiler : ce n’est pas aujourd’hui non plus."
+  },
+  {
+    title: "Bien tenté 😏",
+    description: "Mais la curiosité ne paie pas le bus."
+  },
+  {
+    title: "Zone Voyage verrouillée 🔒",
+    description: "Cette section s’ouvre avec de l’argent, pas de l’espoir."
+  },
+  {
+    title: "Calme-toi explorateur",
+    description: "L’aventure commence après le financement."
+  },
+  {
+    title: "Tu pensais vraiment voir des infos ?",
+    description: "On admire l’optimisme."
+  },
+  {
+    title: "Accès bloqué 🚫",
+    description: "Les vacances ne se débloquent pas au talent."
+  },
+  {
+    title: "Spoiler alert 🚨",
+    description: "Ce message est tout ce que tu obtiendras aujourd’hui."
+  },
+  {
+    title: "Erreur 404",
+    description: "Voyage introuvable. Cause probable : zéro départ."
+  },
+  {
+    title: "Toujours trop tôt",
+    description: "Même Google ne trouve pas encore le voyage."
+  },
+  {
+    title: "Indice du jour 💡",
+    description: "Travailler aide étrangement à partir en voyage."
+  },
+  {
+    title: "Avant de rêver",
+    description: "Il faudrait peut-être commencer par bosser."
+  },
+  {
+    title: "Accès verrouillé 🔐",
+    description: "Insister ne rendra pas cette page magique."
+  },
+  {
+    title: "Mauvais timing",
+    description: "Le voyage n’a même pas commencé à exister."
+  },
+  {
+    title: "Bien essayé",
+    description: "Mais ce bouton ne sert à rien. Vraiment."
+  },
+  {
+    title: "Patience requise ⏳",
+    description: "Oui, encore. Et oui, toujours."
+  },
+  {
+    title: "Tu veux les infos ?",
+    description: "Commence par aider à payer le voyage."
+  },
+  {
+    title: "Zone indisponible",
+    description: "Ce n’est pas un bug. C’est volontaire."
+  },
+  {
+    title: "Toujours pas l’heure",
+    description: "Reviens quand on aura quitté le pays."
+  },
+  {
+    title: "Accès refusé",
+    description: "Négociation refusée. Décision finale."
+  },
+  {
+    title: "Tu pensais contourner ?",
+    description: "Joli essai. Mauvais résultat."
+  },
+  {
+    title: "Aucune info ici",
+    description: "Même en cherchant très fort."
+  },
+  {
+    title: "Le voyage attend",
+    description: "Toi, tu peux encore travailler."
+  },
+  {
+    title: "Encore un clic inutile",
+    description: "Mais au moins tu auras essayé."
+  },
+  {
+    title: "Section bloquée",
+    description: "Parce que non, ce n’est pas encore le moment."
+  }
+];
+
+
 
 
 
@@ -180,6 +284,8 @@ const PatroApp = () => {
   const { isSupported, permission, requestPermission } = useNotifications(); // ✅ Maintenant ici
   const [selectedDay, setSelectedDay] = useState(null);
   const [salesStatsSortBy, setSalesStatsSortBy] = useState('quantity');
+  const [randomTripMessage, setRandomTripMessage] = useState(null);
+
 
   // NOUVELLE FONCTION : Créer un lien Google Calendar
   const createGoogleCalendarLink = (job) => {
@@ -229,6 +335,14 @@ ${job.registeredBros.map(reg => {
       window.removeEventListener('offline', handleOffline);
     };
   }, []);
+
+  useEffect(() => {
+    if (showModal && modalType === "trip-locked") {
+      const randomIndex = Math.floor(Math.random() * tripLockedMessages.length);
+      setRandomTripMessage(tripLockedMessages[randomIndex]);
+    }
+  }, [showModal, modalType]);
+
 
 
 
@@ -306,14 +420,14 @@ ${job.registeredBros.map(reg => {
       });
 
 
-       unsubscribeTripSettings = await loadFromFirebase('tripSettings', (settings) => {
-      if (settings && settings.length > 0) {
-        const latestSettings = settings.sort((a, b) =>
-          new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
-        )[0];
-        setTripPasswordProtected(latestSettings.isProtected || false);
-      }
-    });
+      unsubscribeTripSettings = await loadFromFirebase('tripSettings', (settings) => {
+        if (settings && settings.length > 0) {
+          const latestSettings = settings.sort((a, b) =>
+            new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
+          )[0];
+          setTripPasswordProtected(latestSettings.isProtected || false);
+        }
+      });
 
       unsubscribeSurpriseSettings = await loadFromFirebase('surpriseSettings', (settings) => {
         if (settings && settings.length > 0) {
@@ -1822,30 +1936,36 @@ ${job.registeredBros.map(reg => {
           </button>
         </div>
         {/* Modal - Section Voyage Bloquée */}
-<Modal
-  isOpen={showModal && modalType === 'trip-locked'}
-  onClose={() => setShowModal(false)}
-  title="🔒 Section Bloquée"
->
-  <div className="space-y-4">
-    <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg text-center">
-      <div className="text-6xl mb-4">🔒</div>
-      <h3 className="font-semibold text-orange-800 mb-2 text-xl">
-        Section bloquée pour le moment
-      </h3>
-      <p className="text-sm text-orange-700">
-        Cette section nécessite une authentification via les paramètres.
-      </p>
-    </div>
+        <Modal
+          isOpen={showModal && modalType === 'trip-locked'}
+          onClose={() => setShowModal(false)}
+          title="🔒 Section Bloquée"
+        >
+          <div className="space-y-4">
+            <div className="bg-orange-50 border border-orange-200 p-5 rounded-lg text-center">
+              <div className="text-6xl mb-4">🔒</div>
 
-    <button
-      onClick={() => setShowModal(false)}
-      className="w-full p-3 bg-orange-500 text-white rounded-lg active:scale-95 transition-transform"
-    >
-      Fermer
-    </button>
-  </div>
-</Modal>
+              {randomTripMessage && (
+                <>
+                  <h3 className="text-xl font-semibold text-orange-800 mb-2">
+                    {randomTripMessage.title}
+                  </h3>
+                  <p className="text-sm text-orange-700">
+                    {randomTripMessage.description}
+                  </p>
+                </>
+              )}
+            </div>
+
+            <button
+              onClick={() => setShowModal(false)}
+              className="w-full p-3 bg-orange-500 text-white rounded-lg active:scale-95 transition-transform"
+            >
+              Fermer
+            </button>
+          </div>
+        </Modal>
+
       </div>
 
 
@@ -1989,7 +2109,7 @@ ${job.registeredBros.map(reg => {
           </div>
         </div>
 
-        
+
 
         <Modal
           isOpen={showModal}
