@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import {
   Home, Beer, Wrench, Settings, Users, Plus, Minus, ShoppingCart,
   ArrowLeft, Trash2, DollarSign, Clock, User, CheckCircle,
-  BarChart3, Wifi, WifiOff
+  BarChart3, Wifi, WifiOff, Plane
 } from 'lucide-react';
 import { db } from './firebase';
 import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { useNotifications } from './useNotifications';
 import { Bell, Check, X } from 'lucide-react';
 import TonneauSurprise from './components/TonneauSurprise';
+import TripManager from './TripManager';
 
 
 
@@ -77,6 +78,9 @@ const PatroApp = () => {
   const [rouletteSurprises, setRouletteSurprises] = useState([]);
   const [rouletteResult, setRouletteResult] = useState(null);
   const [rouletteOptions, setRouletteOptions] = useState([]);
+  // ===== GESTION VOYAGE =====
+  const [tripPasswordProtected, setTripPasswordProtected] = useState(false);
+  const [tripAuthenticated, setTripAuthenticated] = useState(false);
 
 
 
@@ -282,6 +286,7 @@ ${job.registeredBros.map(reg => {
     let unsubscribePopularProducts = null;
     let unsubscribeBarSettings = null;
     let unsubscribeSurpriseSettings = null;
+    let unsubscribeTripSettings = null;
 
 
 
@@ -299,6 +304,16 @@ ${job.registeredBros.map(reg => {
           setFinancialGoal(goals[0]);
         }
       });
+
+
+       unsubscribeTripSettings = await loadFromFirebase('tripSettings', (settings) => {
+      if (settings && settings.length > 0) {
+        const latestSettings = settings.sort((a, b) =>
+          new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
+        )[0];
+        setTripPasswordProtected(latestSettings.isProtected || false);
+      }
+    });
 
       unsubscribeSurpriseSettings = await loadFromFirebase('surpriseSettings', (settings) => {
         if (settings && settings.length > 0) {
@@ -356,6 +371,7 @@ ${job.registeredBros.map(reg => {
       if (unsubscribePopularProducts) unsubscribePopularProducts();
       if (unsubscribeBarSettings) unsubscribeBarSettings();
       if (unsubscribeSurpriseSettings) unsubscribeSurpriseSettings();
+      if (unsubscribeTripSettings) unsubscribeTripSettings();
     };
   }, []);
   const activerNotifications = async () => {
@@ -1412,7 +1428,7 @@ ${job.registeredBros.map(reg => {
       await updateInFirebase('scheduledJobs', jobId, {
         registeredBros: updatedRegisteredBros
       });
-    
+
     } catch (error) {
       alert('Erreur lors de l\'inscription');
     }
@@ -1765,6 +1781,27 @@ ${job.registeredBros.map(reg => {
             </div>
           </button>
 
+          {/* BOUTON VOYAGE */}
+          <button
+            onClick={() => {
+              if (tripPasswordProtected && !settingsAuthenticated) {
+                setModalType('trip-locked');
+                setShowModal(true);
+              } else {
+                navigateTo('trip');
+              }
+            }}
+            className="w-full p-6 bg-gradient-to-r from-orange-500 to-red-500 text-white rounded-xl shadow-lg active:scale-95 transition-transform"
+          >
+            <div className="flex items-center space-x-4">
+              <Plane size={32} />
+              <div className="text-left">
+                <h3 className="text-xl font-semibold">Section Voyage</h3>
+                <p className="text-orange-100">Dépenses, calendrier, budget</p>
+              </div>
+            </div>
+          </button>
+
           <button
             onClick={() => {
               if (settingsAuthenticated) {
@@ -1784,7 +1821,35 @@ ${job.registeredBros.map(reg => {
             </div>
           </button>
         </div>
+        {/* Modal - Section Voyage Bloquée */}
+<Modal
+  isOpen={showModal && modalType === 'trip-locked'}
+  onClose={() => setShowModal(false)}
+  title="🔒 Section Bloquée"
+>
+  <div className="space-y-4">
+    <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg text-center">
+      <div className="text-6xl mb-4">🔒</div>
+      <h3 className="font-semibold text-orange-800 mb-2 text-xl">
+        Section bloquée pour le moment
+      </h3>
+      <p className="text-sm text-orange-700">
+        Cette section nécessite une authentification via les paramètres.
+      </p>
+    </div>
+
+    <button
+      onClick={() => setShowModal(false)}
+      className="w-full p-3 bg-orange-500 text-white rounded-lg active:scale-95 transition-transform"
+    >
+      Fermer
+    </button>
+  </div>
+</Modal>
       </div>
+
+
+
     );
   }
 
@@ -1923,6 +1988,8 @@ ${job.registeredBros.map(reg => {
             ))}
           </div>
         </div>
+
+        
 
         <Modal
           isOpen={showModal}
@@ -3713,152 +3780,150 @@ ${job.registeredBros.map(reg => {
 
         {/* Modal pour inscrire un Bro */}
         {/* Modal pour inscrire un Bro */}
-{/* Modal pour inscrire un Bro */}
-<Modal
-  isOpen={showModal && modalType === 'register-bro'}
-  onClose={() => { setShowModal(false); setSelectedJob(null); }}
-  title="Inscrire un Bro"
->
-  <div className="space-y-4">
-    <p className="text-sm text-gray-600">
-      Boulot: <strong>{selectedJob?.description}</strong>
-    </p>
-    <p className="text-sm text-gray-600">
-      Date: <strong>{selectedJob ? formatDate(selectedJob.date) : ''}</strong>
-    </p>
-    
-    {/* Compteur de places avec mise à jour en temps réel */}
-    <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
-      <p className="text-sm text-gray-700 font-medium">
-        Bro inscrits :
-      </p>
-      <span className={`font-bold text-lg ${
-        selectedJob && selectedJob.registeredBros.length >= selectedJob.brosNeeded 
-          ? 'text-green-600' 
-          : 'text-orange-600'
-      }`}>
-        {selectedJob?.registeredBros.length} / {selectedJob?.brosNeeded}
-      </span>
-    </div>
+        {/* Modal pour inscrire un Bro */}
+        <Modal
+          isOpen={showModal && modalType === 'register-bro'}
+          onClose={() => { setShowModal(false); setSelectedJob(null); }}
+          title="Inscrire un Bro"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Boulot: <strong>{selectedJob?.description}</strong>
+            </p>
+            <p className="text-sm text-gray-600">
+              Date: <strong>{selectedJob ? formatDate(selectedJob.date) : ''}</strong>
+            </p>
 
-    {/* Message si équipe complète */}
-    {selectedJob && selectedJob.registeredBros.length >= selectedJob.brosNeeded && (
-      <div className="p-2 bg-green-100 border border-green-300 rounded">
-        <p className="text-sm text-green-800 font-medium text-center">
-          ✅ Équipe complète !
-        </p>
-      </div>
-    )}
+            {/* Compteur de places avec mise à jour en temps réel */}
+            <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-gray-700 font-medium">
+                Bro inscrits :
+              </p>
+              <span className={`font-bold text-lg ${selectedJob && selectedJob.registeredBros.length >= selectedJob.brosNeeded
+                ? 'text-green-600'
+                : 'text-orange-600'
+                }`}>
+                {selectedJob?.registeredBros.length} / {selectedJob?.brosNeeded}
+              </span>
+            </div>
 
-    {/* Liste de TOUS les Bro */}
-    <div className="space-y-2">
-      {(() => {
-        // Récupérer le job à jour depuis scheduledJobs
-        const currentJob = scheduledJobs.find(j => j.id === selectedJob?.id);
-        
-        return bros.map(bro => {
-          // Vérifier si le Bro est déjà inscrit
-          const isRegistered = currentJob?.registeredBros.some(reg => reg.broId === bro.id);
-          
-          // Vérifier si le Bro a un conflit d'horaire
-          const hasConflict = scheduledJobs.some(otherJob =>
-            otherJob.id !== currentJob?.id &&
-            otherJob.date === currentJob?.date &&
-            otherJob.registeredBros.some(reg => reg.broId === bro.id)
-          );
-
-          const conflictingJob = hasConflict ? scheduledJobs.find(otherJob =>
-            otherJob.id !== currentJob?.id &&
-            otherJob.date === currentJob?.date &&
-            otherJob.registeredBros.some(reg => reg.broId === bro.id)
-          ) : null;
-
-          return (
-            <button
-              key={bro.id}
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                
-                if (isRegistered) {
-                  // Désinscrire le Bro
-                  if (confirm(`Retirer ${bro.name} de ce boulot ?`)) {
-                    removeBroFromScheduled(currentJob?.id, bro.id);
-                  }
-                } else {
-                  // Inscrire le Bro
-                  if (hasConflict) {
-                    if (confirm(`⚠️ ${bro.name} est déjà inscrit sur "${conflictingJob?.description}" ce jour-là.\n\nVoulez-vous quand même l'inscrire ?`)) {
-                      registerBroToJob(currentJob?.id, bro.id);
-                    }
-                  } else {
-                    registerBroToJob(currentJob?.id, bro.id);
-                  }
-                }
-              }}
-              className={`w-full border-2 rounded-lg p-3 text-left active:scale-95 transition-transform ${
-                isRegistered 
-                  ? 'border-green-500 bg-green-50' 
-                  : hasConflict 
-                    ? 'border-orange-300 bg-orange-50' 
-                    : 'border-gray-200 bg-white hover:bg-gray-50'
-              }`}
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-2">
-                    <span className={`font-medium ${isRegistered ? 'text-green-700' : ''}`}>
-                      {bro.name}
-                    </span>
-                    {isRegistered && (
-                      <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-semibold">
-                        ✓ Inscrit
-                      </span>
-                    )}
-                    {!isRegistered && hasConflict && (
-                      <span className="px-2 py-1 bg-orange-200 text-orange-800 text-xs rounded-full">
-                        ⚠️ Conflit
-                      </span>
-                    )}
-                  </div>
-                  <span className={`text-sm ${isRegistered ? 'text-green-600' : 'text-gray-500'}`}>
-                    {bro.totalHours}h totales
-                  </span>
-                  {!isRegistered && hasConflict && conflictingJob && (
-                    <div className="text-xs text-orange-600 mt-1">
-                      Déjà inscrit sur: "{conflictingJob.description}"
-                    </div>
-                  )}
-                </div>
-                <div className={`text-2xl ${isRegistered ? 'text-green-500' : 'text-gray-400'}`}>
-                  {isRegistered ? '✓' : '→'}
-                </div>
+            {/* Message si équipe complète */}
+            {selectedJob && selectedJob.registeredBros.length >= selectedJob.brosNeeded && (
+              <div className="p-2 bg-green-100 border border-green-300 rounded">
+                <p className="text-sm text-green-800 font-medium text-center">
+                  ✅ Équipe complète !
+                </p>
               </div>
+            )}
+
+            {/* Liste de TOUS les Bro */}
+            <div className="space-y-2">
+              {(() => {
+                // Récupérer le job à jour depuis scheduledJobs
+                const currentJob = scheduledJobs.find(j => j.id === selectedJob?.id);
+
+                return bros.map(bro => {
+                  // Vérifier si le Bro est déjà inscrit
+                  const isRegistered = currentJob?.registeredBros.some(reg => reg.broId === bro.id);
+
+                  // Vérifier si le Bro a un conflit d'horaire
+                  const hasConflict = scheduledJobs.some(otherJob =>
+                    otherJob.id !== currentJob?.id &&
+                    otherJob.date === currentJob?.date &&
+                    otherJob.registeredBros.some(reg => reg.broId === bro.id)
+                  );
+
+                  const conflictingJob = hasConflict ? scheduledJobs.find(otherJob =>
+                    otherJob.id !== currentJob?.id &&
+                    otherJob.date === currentJob?.date &&
+                    otherJob.registeredBros.some(reg => reg.broId === bro.id)
+                  ) : null;
+
+                  return (
+                    <button
+                      key={bro.id}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        if (isRegistered) {
+                          // Désinscrire le Bro
+                          if (confirm(`Retirer ${bro.name} de ce boulot ?`)) {
+                            removeBroFromScheduled(currentJob?.id, bro.id);
+                          }
+                        } else {
+                          // Inscrire le Bro
+                          if (hasConflict) {
+                            if (confirm(`⚠️ ${bro.name} est déjà inscrit sur "${conflictingJob?.description}" ce jour-là.\n\nVoulez-vous quand même l'inscrire ?`)) {
+                              registerBroToJob(currentJob?.id, bro.id);
+                            }
+                          } else {
+                            registerBroToJob(currentJob?.id, bro.id);
+                          }
+                        }
+                      }}
+                      className={`w-full border-2 rounded-lg p-3 text-left active:scale-95 transition-transform ${isRegistered
+                        ? 'border-green-500 bg-green-50'
+                        : hasConflict
+                          ? 'border-orange-300 bg-orange-50'
+                          : 'border-gray-200 bg-white hover:bg-gray-50'
+                        }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <span className={`font-medium ${isRegistered ? 'text-green-700' : ''}`}>
+                              {bro.name}
+                            </span>
+                            {isRegistered && (
+                              <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-semibold">
+                                ✓ Inscrit
+                              </span>
+                            )}
+                            {!isRegistered && hasConflict && (
+                              <span className="px-2 py-1 bg-orange-200 text-orange-800 text-xs rounded-full">
+                                ⚠️ Conflit
+                              </span>
+                            )}
+                          </div>
+                          <span className={`text-sm ${isRegistered ? 'text-green-600' : 'text-gray-500'}`}>
+                            {bro.totalHours}h totales
+                          </span>
+                          {!isRegistered && hasConflict && conflictingJob && (
+                            <div className="text-xs text-orange-600 mt-1">
+                              Déjà inscrit sur: "{conflictingJob.description}"
+                            </div>
+                          )}
+                        </div>
+                        <div className={`text-2xl ${isRegistered ? 'text-green-500' : 'text-gray-400'}`}>
+                          {isRegistered ? '✓' : '→'}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+
+            {/* Légende mise à jour */}
+            <div className="bg-gray-50 p-3 rounded-lg">
+              <h4 className="font-medium text-gray-800 mb-2">💡 Légende :</h4>
+              <div className="text-sm text-gray-600 space-y-1">
+                <p>• <span className="font-medium text-green-600">✓ Inscrit</span> : Bro déjà inscrit (clic pour retirer)</p>
+                <p>• <span className="font-medium">Normal</span> : Bro disponible (clic pour inscrire)</p>
+                <p>• <span className="font-medium text-orange-600">⚠️ Conflit</span> : Déjà inscrit ce jour-là (clic possible avec confirmation)</p>
+              </div>
+            </div>
+
+            {/* Bouton pour terminer */}
+            <button
+              onClick={() => { setShowModal(false); setSelectedJob(null); }}
+              className="w-full p-3 bg-gray-500 text-white rounded-lg font-medium active:scale-95 transition-transform"
+            >
+              ✅ Terminer les inscriptions
             </button>
-          );
-        });
-      })()}
-    </div>
-
-    {/* Légende mise à jour */}
-    <div className="bg-gray-50 p-3 rounded-lg">
-      <h4 className="font-medium text-gray-800 mb-2">💡 Légende :</h4>
-      <div className="text-sm text-gray-600 space-y-1">
-        <p>• <span className="font-medium text-green-600">✓ Inscrit</span> : Bro déjà inscrit (clic pour retirer)</p>
-        <p>• <span className="font-medium">Normal</span> : Bro disponible (clic pour inscrire)</p>
-        <p>• <span className="font-medium text-orange-600">⚠️ Conflit</span> : Déjà inscrit ce jour-là (clic possible avec confirmation)</p>
-      </div>
-    </div>
-
-    {/* Bouton pour terminer */}
-    <button
-      onClick={() => { setShowModal(false); setSelectedJob(null); }}
-      className="w-full p-3 bg-gray-500 text-white rounded-lg font-medium active:scale-95 transition-transform"
-    >
-      ✅ Terminer les inscriptions
-    </button>
-  </div>
-</Modal>
+          </div>
+        </Modal>
       </div>
     );
   }
@@ -4056,7 +4121,7 @@ ${job.registeredBros.map(reg => {
                       <span className="font-medium">{bro?.name || 'Inconnu'}</span>
                       <button
                         onClick={() => {
-                           {
+                          {
                             removeBroFromScheduled(selectedJob.id, registration.broId);
                           }
                         }}
@@ -7292,6 +7357,45 @@ ${job.registeredBros.map(reg => {
               <span className="text-gray-400">→</span>
             </div>
           </button>
+
+          {/* Protection Voyage */}
+          <button
+            onClick={async () => {
+              const newValue = !tripPasswordProtected;
+
+              try {
+                // Sauvegarder dans Firebase
+                await saveToFirebase('tripSettings', {
+                  isProtected: newValue,
+                  updatedAt: new Date().toISOString()
+                });
+
+                // Mettre à jour l'état local
+                setTripPasswordProtected(newValue);
+
+                alert(newValue
+                  ? '🔒 Section Voyage protégée !\nAuthentification requise pour y accéder.'
+                  : '🔓 Section Voyage accessible sans authentification.');
+              } catch (error) {
+                console.error('Erreur sauvegarde protection Voyage:', error);
+                alert('Erreur lors de la sauvegarde');
+              }
+            }}
+            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <Plane className="text-orange-500" size={24} />
+                <div className="text-left">
+                  <p className="font-semibold">Protection Voyage</p>
+                  <p className="text-sm text-gray-600">
+                    {tripPasswordProtected ? '🔒 Activée' : '🔓 Désactivée'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </button>
+
           {/* NOTIFICATIONS */}
           <div className="bg-white rounded-lg shadow-md p-4 mb-4">
             <h3 className="text-lg font-semibold mb-3 flex items-center">
@@ -8601,6 +8705,23 @@ ${job.registeredBros.map(reg => {
       </div>
     );
   }
+
+  // ===== ÉCRAN VOYAGE =====
+  if (currentScreen === 'trip') {
+    return (
+      <TripManager
+        onBack={() => navigateTo('home')}
+        bros={bros}
+        financialData={{
+          transactions: financialTransactions,
+          orders: orders,
+          jobs: jobs
+        }}
+        formatCurrency={formatCurrency}
+      />
+    );
+  }
+
 
   if (currentScreen === 'settings-goal') {
     // Calculer les totaux pour cet écran
