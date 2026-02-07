@@ -81,109 +81,110 @@ const PatroApp = () => {
   // ===== GESTION VOYAGE =====
   const [tripPasswordProtected, setTripPasswordProtected] = useState(false);
   const [tripAuthenticated, setTripAuthenticated] = useState(false);
+  const [sharedItems, setSharedItems] = useState({});
 
-const tripLockedMessages = [
-  {
-    title: "Accès refusé ❌",
-    description: "Non, cliquer plus fort ne débloquera pas le voyage. Va bosser."
-  },
-  {
-    title: "Toujours pas partis",
-    description: "Et spoiler : ce n’est pas aujourd’hui non plus."
-  },
-  {
-    title: "Bien tenté 😏",
-    description: "Mais la curiosité ne paie pas le bus."
-  },
-  {
-    title: "Zone Voyage verrouillée 🔒",
-    description: "Cette section s’ouvre avec de l’argent, pas de l’espoir."
-  },
-  {
-    title: "Calme-toi explorateur",
-    description: "L’aventure commence après le financement."
-  },
-  {
-    title: "Tu pensais vraiment voir des infos ?",
-    description: "On admire l’optimisme."
-  },
-  {
-    title: "Accès bloqué 🚫",
-    description: "Les vacances ne se débloquent pas au talent."
-  },
-  {
-    title: "Spoiler alert 🚨",
-    description: "Ce message est tout ce que tu obtiendras aujourd’hui."
-  },
-  {
-    title: "Erreur 404",
-    description: "Voyage introuvable. Cause probable : zéro départ."
-  },
-  {
-    title: "Toujours trop tôt",
-    description: "Même Google ne trouve pas encore le voyage."
-  },
-  {
-    title: "Indice du jour 💡",
-    description: "Travailler aide étrangement à partir en voyage."
-  },
-  {
-    title: "Avant de rêver",
-    description: "Il faudrait peut-être commencer par bosser."
-  },
-  {
-    title: "Accès verrouillé 🔐",
-    description: "Insister ne rendra pas cette page magique."
-  },
-  {
-    title: "Mauvais timing",
-    description: "Le voyage n’a même pas commencé à exister."
-  },
-  {
-    title: "Bien essayé",
-    description: "Mais ce bouton ne sert à rien. Vraiment."
-  },
-  {
-    title: "Patience requise ⏳",
-    description: "Oui, encore. Et oui, toujours."
-  },
-  {
-    title: "Tu veux les infos ?",
-    description: "Commence par aider à payer le voyage."
-  },
-  {
-    title: "Zone indisponible",
-    description: "Ce n’est pas un bug. C’est volontaire."
-  },
-  {
-    title: "Toujours pas l’heure",
-    description: "Reviens quand on aura quitté le pays."
-  },
-  {
-    title: "Accès refusé",
-    description: "Négociation refusée. Décision finale."
-  },
-  {
-    title: "Tu pensais contourner ?",
-    description: "Joli essai. Mauvais résultat."
-  },
-  {
-    title: "Aucune info ici",
-    description: "Même en cherchant très fort."
-  },
-  {
-    title: "Le voyage attend",
-    description: "Toi, tu peux encore travailler."
-  },
-  {
-    title: "Encore un clic inutile",
-    description: "Mais au moins tu auras essayé."
-  },
-  {
-    title: "Section bloquée",
-    description: "Parce que non, ce n’est pas encore le moment."
-  }
-];
+  const tripLockedMessages = [
+    {
+      title: "Accès refusé ❌",
+      description: "Non, cliquer plus fort ne débloquera pas le voyage. Va bosser."
+    },
+    {
+      title: "Toujours pas partis",
+      description: "Et spoiler : ce n’est pas aujourd’hui non plus."
+    },
+    {
+      title: "Bien tenté 😏",
+      description: "Mais la curiosité ne paie pas le bus."
+    },
+    {
+      title: "Zone Voyage verrouillée 🔒",
+      description: "Cette section s’ouvre avec de l’argent, pas de l’espoir."
+    },
+    {
+      title: "Calme-toi explorateur",
+      description: "L’aventure commence après le financement."
+    },
+    {
+      title: "Tu pensais vraiment voir des infos ?",
+      description: "On admire l’optimisme."
+    },
+    {
+      title: "Accès bloqué 🚫",
+      description: "Les vacances ne se débloquent pas au talent."
+    },
+    {
+      title: "Spoiler alert 🚨",
+      description: "Ce message est tout ce que tu obtiendras aujourd’hui."
+    },
+    {
+      title: "Erreur 404",
+      description: "Voyage introuvable. Cause probable : zéro départ."
+    },
+    {
+      title: "Toujours trop tôt",
+      description: "Même Google ne trouve pas encore le voyage."
+    },
+    {
+      title: "Indice du jour 💡",
+      description: "Travailler aide étrangement à partir en voyage."
+    },
+    {
+      title: "Avant de rêver",
+      description: "Il faudrait peut-être commencer par bosser."
+    },
+    {
+      title: "Accès verrouillé 🔐",
+      description: "Insister ne rendra pas cette page magique."
+    },
+    {
+      title: "Mauvais timing",
+      description: "Le voyage n’a même pas commencé à exister."
+    },
+    {
+      title: "Bien essayé",
+      description: "Mais ce bouton ne sert à rien. Vraiment."
+    },
+    {
+      title: "Patience requise ⏳",
+      description: "Oui, encore. Et oui, toujours."
+    },
+    {
+      title: "Tu veux les infos ?",
+      description: "Commence par aider à payer le voyage."
+    },
+    {
+      title: "Zone indisponible",
+      description: "Ce n’est pas un bug. C’est volontaire."
+    },
+    {
+      title: "Toujours pas l’heure",
+      description: "Reviens quand on aura quitté le pays."
+    },
+    {
+      title: "Accès refusé",
+      description: "Négociation refusée. Décision finale."
+    },
+    {
+      title: "Tu pensais contourner ?",
+      description: "Joli essai. Mauvais résultat."
+    },
+    {
+      title: "Aucune info ici",
+      description: "Même en cherchant très fort."
+    },
+    {
+      title: "Le voyage attend",
+      description: "Toi, tu peux encore travailler."
+    },
+    {
+      title: "Encore un clic inutile",
+      description: "Mais au moins tu auras essayé."
+    },
+    {
+      title: "Section bloquée",
+      description: "Parce que non, ce n’est pas encore le moment."
+    }
+  ];
 
 
 
@@ -884,100 +885,194 @@ ${job.registeredBros.map(reg => {
     });
   };
 
-  const confirmOrder = async () => {
+  // ===== FONCTIONS DE PARTAGE =====
+  const addPersonToSharedItem = (itemIndex, member) => {
+    setSharedItems(prev => {
+      const current = prev[itemIndex] || { members: [orderConfirmation.member], totalShares: 1 };
+      if (current.members.find(m => m.id === member.id)) {
+        alert('Cette personne est déjà dans le partage !');
+        return prev;
+      }
+      return {
+        ...prev,
+        [itemIndex]: {
+          members: [...current.members, member],
+          totalShares: current.totalShares + 1
+        }
+      };
+    });
+  };
+
+  const removePersonFromSharedItem = (itemIndex, memberId) => {
+    setSharedItems(prev => {
+      const current = prev[itemIndex];
+      if (!current) return prev;
+      const newMembers = current.members.filter(m => m.id !== memberId);
+      if (newMembers.length <= 1) {
+        const newState = { ...prev };
+        delete newState[itemIndex];
+        return newState;
+      }
+      return {
+        ...prev,
+        [itemIndex]: {
+          members: newMembers,
+          totalShares: current.totalShares - 1
+        }
+      };
+    });
+  };
+
+  const calculateSplitPrice = (totalPrice, numberOfPeople) => {
+    const pricePerPerson = totalPrice / numberOfPeople;
+    return Math.ceil(pricePerPerson ) ;
+  };
+
+  const isItemSharable = (item) => {
+    return item.productName.includes('Bac') || item.productName.includes('Lot de 11');
+  };
+
+  // 🔧 FONCTION confirmOrder - VERSION FINALE CORRIGÉE
+// Cette version utilise les bons noms de champs pour que l'historique fonctionne
+
+const confirmOrder = async () => {
+  try {
     const { member, items, total } = orderConfirmation;
 
-    if (!member || items.length === 0) return;
+    if (!member) return;
     if (directPayment && !directPaymentMethod) {
-      alert('Veuillez choisir un mode de paiement');
+      alert('Veuillez sélectionner un mode de paiement');
       return;
     }
 
-    // Calculer les unités totales nécessaires
-    const totalUnitsNeeded = {};
-    Object.values(cart).forEach(cartItem => {
-      if (!totalUnitsNeeded[cartItem.productId]) {
-        totalUnitsNeeded[cartItem.productId] = 0;
-      }
-      totalUnitsNeeded[cartItem.productId] += cartItem.quantity;
+    setLoading(true);
+
+    // ===== GESTION DES PARTAGES =====
+    const ordersToCreate = [];
+    const processedItems = new Set();
+
+    // Parcourir les items partagés
+    Object.entries(sharedItems).forEach(([itemIndex, shareInfo]) => {
+      const item = items[parseInt(itemIndex)];
+      processedItems.add(parseInt(itemIndex));
+
+      const splitPrice = calculateSplitPrice(item.total, shareInfo.totalShares);
+
+      // Créer une commande pour chaque personne dans le partage
+      shareInfo.members.forEach(shareMember => {
+        ordersToCreate.push({
+          member: shareMember,
+          items: [{
+            ...item,
+            total: splitPrice,
+            isShared: true,
+            sharedWith: shareInfo.members.length,
+            originalTotal: item.total
+          }],
+          total: splitPrice,
+          isPartOfSharedOrder: true
+        });
+      });
     });
 
-    try {
-      // 🎲 Si commande surprise : décrémenter les stocks des produits tirés
+    // Ajouter les items non partagés pour le membre principal
+    items.forEach((item, index) => {
+      if (!processedItems.has(index)) {
+        ordersToCreate.push({
+          member: member,
+          items: [item],
+          total: item.total,
+          isPartOfSharedOrder: false
+        });
+      }
+    });
+
+    // ===== TRAITER CHAQUE COMMANDE =====
+    for (const orderData of ordersToCreate) {
+      const orderMember = orderData.member;
+      
+      // Gestion verre surprise (si applicable)
       if (orderConfirmation.isSurprise && orderConfirmation.surprises) {
         for (const surprise of orderConfirmation.surprises) {
           await updateStock(surprise.id, -1, 'Verre Surprise');
         }
-
-        // 💾 Met à jour le nom et l’ID des items avant l’enregistrement
-        orderConfirmation.items = orderConfirmation.items.map(item => ({
-          ...item,
-          productId: 'verre_surprise'
-        }));
       }
 
-      // ⭐ SI PAIEMENT DIRECT : Créer d'abord un rechargement
-      if (directPayment && directPaymentMethod) {
+      // ⭐ SI PAIEMENT DIRECT : Créer un rechargement
+      if (directPayment && directPaymentMethod && orderData.member.id === member.id) {
         const rechargeTransaction = {
-          memberId: member.id,
-          memberName: member.name,
+          memberId: orderMember.id,
+          memberName: orderMember.name,
           type: 'recharge',
-          amount: total,
+          amount: orderData.total,  // ← IMPORTANT : "amount" pas "total"
           paymentMethod: directPaymentMethod,
           timestamp: new Date().toISOString(),
           items: []
         };
-
         await saveToFirebase('orders', rechargeTransaction);
-
-        // Mettre à jour le solde avec le rechargement
-        const rechargedBalance = member.balance + total;
-        await updateInFirebase('members', member.id, { balance: rechargedBalance });
       }
 
-      // Ensuite créer la commande (qui débite)
+      // Créer la commande
       const order = {
-        memberId: member.id,
-        memberName: member.name,
+        memberId: orderMember.id,
+        memberName: orderMember.name,
         type: 'order',
-        amount: total,
+        amount: orderData.total,  // ← IMPORTANT : "amount" pas "total"
         timestamp: new Date().toISOString(),
-        items: orderConfirmation.items // <-- items déjà modifiés si surprise
+        items: orderData.items
       };
+      await saveToFirebase('orders', order);
 
-      const finalBalance = member.balance + (directPayment ? total : 0) - total;
+      // Mettre à jour le stock (une seule fois pour les items partagés)
+      if (!orderData.isPartOfSharedOrder || orderData.member.id === member.id) {
+        for (const item of orderData.items) {
+          const product = products.find(p => p.id === item.productId);
+          if (product && item.productId !== 'verre_surprise') {
+            const quantityToReduce = item.saleType === 'pack' 
+              ? item.quantity * product.packSize
+              : item.saleType === 'eleven'
+              ? item.quantity * 11
+              : item.quantity;
 
-      // Mettre à jour le stock pour les produits normaux
-      Object.entries(totalUnitsNeeded).forEach(([productId, totalNeeded]) => {
-        if (productId !== 'verre_surprise') { // ⛔ évite de redécrémenter les surprises
-          updateStock(productId, -totalNeeded, `Vente à ${member.name}`);
+            await updateStock(item.productId, -quantityToReduce, `Vente à ${orderMember.name}`);
+          }
         }
-      });
-
-      // Sauvegarder la commande et mettre à jour le solde final
-      await Promise.all([
-        saveToFirebase('orders', order),
-        updateInFirebase('members', member.id, { balance: finalBalance })
-      ]);
-
-      // Message de confirmation
-      if (directPayment) {
-        alert(`✅ Paiement de ${formatCurrency(total)} reçu et commande validée !`);
       }
 
-      // Fermer le modal et vider le panier
-      setOrderConfirmation({ show: false, member: null, items: [], total: 0 });
-      setDirectPayment(false);
-      setDirectPaymentMethod('');
-      setCart({});
-      setSelectedMember(null);
-      navigateTo('bar-order');
-
-    } catch (error) {
-      console.error('Erreur validation commande:', error);
-      alert('Erreur lors de la validation de la commande');
+      // Mettre à jour le solde
+      const balanceChange = directPayment && orderData.member.id === member.id
+        ? 0  // Si paiement direct : +total puis -total = 0
+        : -orderData.total;  // Sinon : juste débiter
+      
+      await updateInFirebase('members', orderMember.id, {
+        balance: orderMember.balance + balanceChange
+      });
     }
-  };
+
+    // Réinitialiser tout
+    setCart({});
+    setCartTotal(0);
+    setOrderConfirmation({ show: false, member: null, items: [], total: 0 });
+    setDirectPayment(false);
+    setDirectPaymentMethod('');
+    setSharedItems({});
+    
+    alert(ordersToCreate.length > 1 
+      ? `✅ ${ordersToCreate.length} commandes validées avec succès !`
+      : '✅ Commande validée avec succès !');
+    
+    setSelectedMember(null);
+    navigateTo('bar-order');
+
+  } catch (error) {
+    console.error('Erreur lors de la validation:', error);
+    alert('Erreur lors de la validation de la commande');
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
 
   const validateOrder = async () => {
@@ -3126,6 +3221,7 @@ ${job.registeredBros.map(reg => {
             setOrderConfirmation({ show: false, member: null, items: [], total: 0 });
             setDirectPayment(false);
             setDirectPaymentMethod('');
+            setSharedItems({});
           }}
           title="Confirmer la commande"
         >
@@ -3143,16 +3239,97 @@ ${job.registeredBros.map(reg => {
 
                 <div className="space-y-2">
                   <h4 className="font-medium text-gray-700">Articles commandés :</h4>
-                  {orderConfirmation.items.map((item, index) => (
-                    <div key={index} className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                      <div>
-                        <span className="font-medium">{item.quantity}x {item.productName}</span>
+                  {orderConfirmation.items.map((item, index) => {
+                    const shared = sharedItems[index];
+                    const isSharable = isItemSharable(item);
+
+                    return (
+                      <div key={index} className="border rounded-lg p-3 bg-gray-50">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <span className="font-medium">{item.quantity}x {item.productName}</span>
+                            {shared && (
+                              <div className="text-xs text-blue-600 mt-1">
+                                Partagé entre {shared.totalShares} personne{shared.totalShares > 1 ? 's' : ''}
+                              </div>
+                            )}
+                          </div>
+                          <span className="font-semibold text-green-600">
+                            {formatCurrency(item.total)}
+                          </span>
+                        </div>
+
+                        {isSharable && (
+                          <div className="mt-3 border-t pt-3">
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-sm font-medium text-gray-700">
+                                👥 Partager avec d'autres
+                              </span>
+                              {!shared && (
+                                <button
+                                  onClick={() => {
+                                    setSharedItems(prev => ({
+                                      ...prev,
+                                      [index]: {
+                                        members: [orderConfirmation.member],
+                                        totalShares: 1
+                                      }
+                                    }));
+                                    setShowModal(true);
+                                    setModalType('add-person-to-share');
+                                    setSelectedMember({ itemIndex: index });
+                                  }}
+                                  className="px-3 py-1 bg-blue-500 text-white rounded text-sm active:scale-95 transition-transform"
+                                >
+                                  + Ajouter
+                                </button>
+                              )}
+                            </div>
+
+                            {shared && (
+                              <div className="space-y-2">
+                                {shared.members.map((member, mIndex) => {
+                                  const splitPrice = calculateSplitPrice(item.total, shared.totalShares);
+                                  return (
+                                    <div key={member.id} className="flex items-center justify-between bg-white p-2 rounded">
+                                      <div className="flex items-center space-x-2">
+                                        <User size={16} className="text-blue-500" />
+                                        <span className="text-sm font-medium">{member.name}</span>
+                                      </div>
+                                      <div className="flex items-center space-x-2">
+                                        <span className="text-sm font-semibold text-blue-600">
+                                          {formatCurrency(splitPrice)}
+                                        </span>
+                                        {mIndex > 0 && (
+                                          <button
+                                            onClick={() => removePersonFromSharedItem(index, member.id)}
+                                            className="p-1 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
+                                          >
+                                            <X size={14} />
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+
+                                <button
+                                  onClick={() => {
+                                    setShowModal(true);
+                                    setModalType('add-person-to-share');
+                                    setSelectedMember({ itemIndex: index });
+                                  }}
+                                  className="w-full py-2 border-2 border-dashed border-blue-300 text-blue-600 rounded text-sm font-medium hover:bg-blue-50 active:scale-95 transition-transform"
+                                >
+                                  + Ajouter une autre personne
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
-                      <span className="font-semibold text-green-600">
-                        {formatCurrency(item.total)}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div className="bg-green-50 p-3 rounded-lg">
@@ -3254,6 +3431,59 @@ ${job.registeredBros.map(reg => {
                 </div>
               </>
             )}
+          </div>
+        </Modal>
+        {/* Modal pour ajouter une personne au partage */}
+        <Modal
+          isOpen={showModal && modalType === 'add-person-to-share'}
+          onClose={() => {
+            setShowModal(false);
+            setSelectedMember(null);
+          }}
+          title="Ajouter au partage"
+        >
+          <div className="space-y-3">
+            <p className="text-sm text-gray-600">
+              Sélectionnez la personne avec qui partager
+            </p>
+
+            <input
+              type="text"
+              placeholder="Rechercher un membre..."
+              value={memberSearch}
+              onChange={(e) => setMemberSearch(e.target.value)}
+              className="w-full p-3 border rounded-lg"
+            />
+
+            <div className="max-h-96 overflow-y-auto space-y-2">
+              {members
+                .filter(member =>
+                  member.name.toLowerCase().includes(memberSearch.toLowerCase()) &&
+                  member.id !== orderConfirmation.member?.id &&
+                  !sharedItems[selectedMember?.itemIndex]?.members.find(m => m.id === member.id)
+                )
+                .map(member => (
+                  <button
+                    key={member.id}
+                    onClick={() => {
+                      addPersonToSharedItem(selectedMember.itemIndex, member);
+                      setShowModal(false);
+                      setMemberSearch('');
+                    }}
+                    className="w-full p-3 bg-gray-50 hover:bg-blue-50 rounded-lg text-left active:scale-95 transition-transform"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="font-medium">{member.name}</h4>
+                        <p className="text-sm text-gray-600">
+                          Solde: {formatCurrency(member.balance)}
+                        </p>
+                      </div>
+                      <Plus className="text-blue-500" size={20} />
+                    </div>
+                  </button>
+                ))}
+            </div>
           </div>
         </Modal>
       </div>
