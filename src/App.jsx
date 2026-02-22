@@ -204,10 +204,11 @@ const PatroApp = () => {
 
   // --- VERRE SURPRISE ---
   const [surpriseSettings, setSurpriseSettings] = useState({
-    price: 200,
-    eligibleProducts: [], // liste d’IDs
-    weights: {} // ex : { "productId1": 3, "productId2": 1 }
-  });
+  price: 200,
+  eligibleProducts: [],
+  weights: {},
+  exclusiveProducts: [] // 🆕 produits exclusifs au verre surprise
+});
   const rarityWeights = {
     commun: 50,
     normal: 30,
@@ -437,12 +438,13 @@ ${job.registeredBros.map(reg => {
           )[0];
 
           setSurpriseSettings({
-            enabled: latest.enabled || false,
-            price: latest.price || 2.5,
-            pricePer11: latest.pricePer11 || 25.0,
-            eligibleProducts: latest.eligibleProducts || [],
-            weights: latest.weights || {} // ✅ on recharge correctement les pondérations !
-          });
+  enabled: latest.enabled || false,
+  price: latest.price || 2.5,
+  pricePer11: latest.pricePer11 || 25.0,
+  eligibleProducts: latest.eligibleProducts || [],
+  weights: latest.weights || {},
+  exclusiveProducts: latest.exclusiveProducts || [] // 🆕
+});
         }
       });
 
@@ -993,9 +995,36 @@ const confirmOrder = async () => {
       
       // Gestion verre surprise (si applicable)
       if (orderConfirmation.isSurprise && orderConfirmation.surprises) {
-        for (const surprise of orderConfirmation.surprises) {
-          await updateStock(surprise.id, -1, 'Verre Surprise');
-        }
+        // Séparer les produits exclusifs des produits normaux
+const exclusiveDrawn = {};
+const normalSurprises = [];
+
+for (const surprise of orderConfirmation.surprises) {
+  if (surprise.isExclusive) {
+    exclusiveDrawn[surprise.id] = (exclusiveDrawn[surprise.id] || 0) + 1;
+  } else {
+    normalSurprises.push(surprise);
+  }
+}
+
+// Décrémenter le stock des produits normaux
+for (const surprise of normalSurprises) {
+  await updateStock(surprise.id, -1, 'Verre Surprise');
+}
+
+// Décrémenter le stock des produits exclusifs et sauvegarder
+if (Object.keys(exclusiveDrawn).length > 0) {
+  const updatedExclusive = (surpriseSettings.exclusiveProducts || []).map(p => ({
+    ...p,
+    stock: Math.max(0, (p.stock || 0) - (exclusiveDrawn[p.id] || 0))
+  }));
+  const newSettings = { ...surpriseSettings, exclusiveProducts: updatedExclusive };
+  setSurpriseSettings(newSettings);
+  await saveToFirebase('surpriseSettings', {
+    ...newSettings,
+    updatedAt: new Date().toISOString()
+  });
+}
       }
 
       // ⭐ SI PAIEMENT DIRECT : Créer un rechargement
@@ -1108,9 +1137,14 @@ const confirmOrder = async () => {
 
     // 🎲 --- VERRE SURPRISE ---
     if (hasSurprise) {// 🎯 Sélection des produits éligibles
-      const eligible = products.filter(
-        p => surpriseSettings.eligibleProducts.includes(p.id) && p.stock > 0
-      );
+      const exclusiveEligible = (surpriseSettings.exclusiveProducts || [])
+  .filter(p => p.stock > 0)
+  .map(p => ({ ...p, isExclusive: true }));
+
+const eligible = [
+  ...products.filter(p => surpriseSettings.eligibleProducts.includes(p.id) && p.stock > 0),
+  ...exclusiveEligible
+];
 
       if (eligible.length === 0) {
         alert("Aucun produit disponible pour le verre surprise !");
@@ -7966,6 +8000,106 @@ const confirmOrder = async () => {
                 </div>
               );
             })}
+          </div>
+          {/* 🌟 Produits exclusifs au verre surprise */}
+          <div className="bg-white p-4 rounded-lg shadow-md">
+            <h3 className="font-semibold mb-1">🌟 Produits exclusifs au verre surprise</h3>
+            <p className="text-xs text-gray-500 mb-3">
+              Ces produits n'apparaissent que dans le tirage surprise et ont leur propre stock.
+            </p>
+
+            {/* Liste des produits exclusifs existants */}
+            {(surpriseSettings.exclusiveProducts || []).map((ep) => (
+              <div key={ep.id} className="border rounded-lg p-3 mb-2 bg-gray-50">
+                <div className="flex items-center justify-between mb-2">
+                  <input
+                    type="text"
+                    value={ep.name}
+                    onChange={(e) => {
+                      const updated = surpriseSettings.exclusiveProducts.map(p =>
+                        p.id === ep.id ? { ...p, name: e.target.value } : p
+                      );
+                      setSurpriseSettings({ ...surpriseSettings, exclusiveProducts: updated });
+                    }}
+                    placeholder="Nom du produit"
+                    className="flex-1 border rounded p-1 text-sm mr-2"
+                  />
+                  <button
+                    onClick={() => {
+                      const updated = surpriseSettings.exclusiveProducts.filter(p => p.id !== ep.id);
+                      setSurpriseSettings({ ...surpriseSettings, exclusiveProducts: updated });
+                    }}
+                    className="text-red-500 font-bold text-lg px-2"
+                  >
+                    🗑️
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {/* Stock */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-600">Stock :</span>
+                    <button
+                      onClick={() => {
+                        const updated = surpriseSettings.exclusiveProducts.map(p =>
+                          p.id === ep.id ? { ...p, stock: Math.max(0, (p.stock || 0) - 1) } : p
+                        );
+                        setSurpriseSettings({ ...surpriseSettings, exclusiveProducts: updated });
+                      }}
+                      className="w-7 h-7 bg-red-100 text-red-600 rounded font-bold"
+                    >−</button>
+                    <span className="w-8 text-center font-semibold">{ep.stock || 0}</span>
+                    <button
+                      onClick={() => {
+                        const updated = surpriseSettings.exclusiveProducts.map(p =>
+                          p.id === ep.id ? { ...p, stock: (p.stock || 0) + 1 } : p
+                        );
+                        setSurpriseSettings({ ...surpriseSettings, exclusiveProducts: updated });
+                      }}
+                      className="w-7 h-7 bg-green-100 text-green-600 rounded font-bold"
+                    >+</button>
+                  </div>
+
+                  {/* Rareté */}
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-600">Rareté :</span>
+                    <select
+                      value={surpriseSettings.weights?.[ep.id] ?? 40}
+                      onChange={(e) =>
+                        setSurpriseSettings(prev => ({
+                          ...prev,
+                          weights: { ...prev.weights, [ep.id]: parseFloat(e.target.value) }
+                        }))
+                      }
+                      className="border rounded p-1 text-xs"
+                    >
+                      <option value={70}>🟩 Commun</option>
+                      <option value={40}>🟦 Normal</option>
+                      <option value={15}>🟪 Rare</option>
+                      <option value={1}>🟨 Légendaire</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            ))}
+
+            {/* Bouton pour ajouter un nouveau produit exclusif */}
+            <button
+              onClick={() => {
+                const newProduct = {
+                  id: 'excl_' + Date.now(),
+                  name: '',
+                  stock: 0
+                };
+                setSurpriseSettings({
+                  ...surpriseSettings,
+                  exclusiveProducts: [...(surpriseSettings.exclusiveProducts || []), newProduct]
+                });
+              }}
+              className="w-full p-2 border-2 border-dashed border-purple-300 text-purple-600 rounded-lg text-sm mt-2"
+            >
+              ➕ Ajouter un produit exclusif
+            </button>
           </div>
 
           {/* 💾 Bouton sauvegarde */}
