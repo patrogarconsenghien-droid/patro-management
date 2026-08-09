@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import {
-  Beer, BarChart3, Bell, Clock, FileText, Plane, Plus, Settings, Trash2
+  Beer, BarChart3, Bell, Clock, Download, FileText, Plane, Plus, Settings, Trash2
 } from 'lucide-react';
 import Modal from './components/Modal';
 import HeaderBase from './components/Header';
 import AnnualReport from './AnnualReport';
 import { formatCurrency, formatDate } from './lib/format';
+import { buildAnnualReport, getCurrentPatroYear } from './lib/annualReport';
+import { downloadReport } from './lib/reportExport';
 
 const SettingsDomain = ({
   screen,
@@ -59,6 +61,42 @@ const SettingsDomain = ({
   const Header = ({ title, onBack }) => (
     <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline} />
   );
+
+  // Génération en un clic : la saison patro en cours, sans rien demander.
+  // L'écran dédié reste là pour choisir une autre période.
+  const patroYear = getCurrentPatroYear();
+
+  const generateCurrentReport = () => {
+    const report = buildAnnualReport({
+      year: patroYear,
+      mode: 'patro',
+      orders,
+      jobs,
+      financialTransactions,
+      members,
+      bros,
+      products,
+      stockMovements
+    });
+
+    if (report.meta.isEmpty) {
+      alert(
+        `Aucune donnée pour la saison ${patroYear}–${patroYear + 1}.\n` +
+        'Ouvre le rapport annuel pour choisir une autre période.'
+      );
+      return;
+    }
+
+    downloadReport(report);
+
+    alert(
+      `📊 Rapport ${patroYear}–${patroYear + 1} généré !\n\n` +
+      `Encaissé : ${formatCurrency(report.summary.totalIn)}\n` +
+      `Dépensé : ${formatCurrency(report.summary.expenseTotal)}\n` +
+      `Résultat : ${formatCurrency(report.summary.netResult)}\n\n` +
+      'Le fichier est dans tes téléchargements.'
+    );
+  };
 
   // ===== ÉTAT LOCAL AUX ÉCRANS SETTINGS =====
   const [passwordInput, setPasswordInput] = useState('');
@@ -474,21 +512,35 @@ const SettingsDomain = ({
             </div>
           </button>
 
-          <button
-            onClick={() => navigateTo('settings-report')}
-            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
-          >
-            <div className="flex items-center justify-between">
+          <div className="bg-white rounded-lg shadow-md overflow-hidden">
+            <button
+              onClick={generateCurrentReport}
+              className="w-full p-4 active:scale-95 transition-transform"
+            >
               <div className="flex items-center space-x-3">
-                <FileText className="text-purple-500" size={24} />
+                <Download className="text-purple-500" size={24} />
                 <div className="text-left">
-                  <h3 className="font-semibold">📊 Rapport annuel</h3>
-                  <p className="text-gray-600 text-sm">Bilan de l'année, à télécharger ou imprimer</p>
+                  <h3 className="font-semibold">📊 Générer le rapport {patroYear}–{patroYear + 1}</h3>
+                  <p className="text-gray-600 text-sm">
+                    Bilan complet de la saison, téléchargé directement
+                  </p>
                 </div>
               </div>
-              <span className="text-gray-400">→</span>
-            </div>
-          </button>
+            </button>
+
+            <button
+              onClick={() => navigateTo('settings-report')}
+              className="w-full px-4 py-3 border-t border-gray-100 text-sm text-purple-600 active:scale-95 transition-transform"
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex items-center space-x-2">
+                  <FileText size={16} />
+                  <span>Voir le détail ou choisir une autre année</span>
+                </span>
+                <span className="text-gray-400">→</span>
+              </div>
+            </button>
+          </div>
           {/* --- NOUVEAU BOUTON VERRE SURPRISE --- */}
           <button
             onClick={() => navigateTo('settings-surprise')}

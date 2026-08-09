@@ -82,6 +82,13 @@ export const getPeriod = (year, mode = 'calendar') => {
   };
 };
 
+/**
+ * Saison patro en cours. Avant septembre, on est encore dans l'année qui a
+ * démarré l'automne précédent : en juin 2026, la saison est « 2025–2026 ».
+ */
+export const getCurrentPatroYear = (today = new Date()) =>
+  today.getMonth() >= 8 ? today.getFullYear() : today.getFullYear() - 1;
+
 /** Années pour lesquelles il existe au moins une donnée. */
 export const getAvailableYears = ({ orders = [], jobs = [], financialTransactions = [] }) => {
   const years = new Set();

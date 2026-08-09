@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Download, Printer, TrendingDown, TrendingUp } from 'lucide-react';
 import { formatCurrency, plural } from './lib/format';
-import { buildAnnualReport, getAvailableYears } from './lib/annualReport';
+import { buildAnnualReport, getAvailableYears, getCurrentPatroYear } from './lib/annualReport';
 import { downloadReport, printReport } from './lib/reportExport';
 
 const Kpi = ({ label, value, hint, tone = 'neutral' }) => {
@@ -75,10 +75,7 @@ const AnnualReport = ({
   const [year, setYear] = useState(availableYears[0] ?? new Date().getFullYear());
   const [mode, setMode] = useState('calendar');
 
-  // Une année patro démarre en septembre : avant septembre, l'année en cours
-  // est celle qui a commencé l'automne précédent.
-  const now = new Date();
-  const currentPatroYear = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+  const currentPatroYear = getCurrentPatroYear();
 
   const changeMode = (next) => {
     setMode(next);
