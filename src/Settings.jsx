@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import {
-  Beer, BarChart3, Bell, Clock, Plane, Plus, Settings, Trash2
+  Beer, BarChart3, Bell, Clock, FileText, Plane, Plus, Settings, Trash2
 } from 'lucide-react';
 import Modal from './components/Modal';
 import HeaderBase from './components/Header';
+import AnnualReport from './AnnualReport';
 import { formatCurrency, formatDate } from './lib/format';
 
 const SettingsDomain = ({
@@ -472,6 +473,22 @@ const SettingsDomain = ({
               </div>
             </div>
           </button>
+
+          <button
+            onClick={() => navigateTo('settings-report')}
+            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <FileText className="text-purple-500" size={24} />
+                <div className="text-left">
+                  <h3 className="font-semibold">📊 Rapport annuel</h3>
+                  <p className="text-gray-600 text-sm">Bilan de l'année, à télécharger ou imprimer</p>
+                </div>
+              </div>
+              <span className="text-gray-400">→</span>
+            </div>
+          </button>
           {/* --- NOUVEAU BOUTON VERRE SURPRISE --- */}
           <button
             onClick={() => navigateTo('settings-surprise')}
@@ -587,6 +604,22 @@ const SettingsDomain = ({
     );
   }
 
+
+  if (screen === 'settings-report') {
+    return (
+      <AnnualReport
+        Header={Header}
+        navigateTo={navigateTo}
+        orders={orders}
+        jobs={jobs}
+        financialTransactions={financialTransactions}
+        members={members}
+        bros={bros}
+        products={products}
+        stockMovements={stockMovements}
+      />
+    );
+  }
 
   if (screen === 'settings-surprise') {
     // ⚖️ Nouvelle table de pondération

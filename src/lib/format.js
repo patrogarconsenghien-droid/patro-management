@@ -6,6 +6,10 @@ export const formatCurrency = (amount) => {
 
 export const formatDate = (date) => new Date(date).toLocaleDateString('fr-FR');
 
+/** "3 commandes", "1 commande" — le pluriel français s'applique dès 2. */
+export const plural = (count, singular, pluralForm = `${singular}s`) =>
+  `${count} ${count >= 2 ? pluralForm : singular}`;
+
 export const formatDateTime = (date) => {
   const dateObj = new Date(date);
   return dateObj.toLocaleDateString('fr-FR', {
