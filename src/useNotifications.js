@@ -1,7 +1,26 @@
 import { useState, useEffect } from 'react';
-import { VAPID_KEY } from './firebase';
-import { collection, doc, setDoc } from 'firebase/firestore';
-import { db } from './firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import { app, db, VAPID_KEY } from './firebase';
+
+// Instance Messaging partagée, résolue à la demande. Firebase Messaging est
+// importé dynamiquement : il n'est pas supporté sur tous les navigateurs
+// (Safari iOS < 16.4, navigation privée, ...).
+let messagingPromise = null;
+
+const getMessagingInstance = () => {
+  if (!messagingPromise) {
+    messagingPromise = import('firebase/messaging')
+      .then(async ({ getMessaging, isSupported }) => {
+        if (!(await isSupported())) return null;
+        return getMessaging(app);
+      })
+      .catch((error) => {
+        console.error('Messaging non disponible:', error);
+        return null;
+      });
+  }
+  return messagingPromise;
+};
 
 export const useNotifications = () => {
   const [isSupported, setIsSupported] = useState(false);
@@ -9,66 +28,50 @@ export const useNotifications = () => {
   const [token, setToken] = useState(null);
 
   useEffect(() => {
-    if ('Notification' in window && 'serviceWorker' in navigator) {
-      setIsSupported(true);
-      setPermission(Notification.permission);
-      
-      // Importer Firebase Messaging seulement si supporté
-      import('firebase/messaging').then(async ({ getMessaging, getToken, isSupported }) => {
-        const supported = await isSupported();
-        if (supported) {
-          const { initializeApp } = await import('firebase/app');
-          const app = initializeApp({
-            apiKey: "AIzaSyBPLArT81P6fAyXFuvAZrEUM1KG-wYcRT0",
-            authDomain: "patro-management-2024.firebaseapp.com",
-            projectId: "patro-management-2024",
-            storageBucket: "patro-management-2024.firebasestorage.app",
-            messagingSenderId: "371769454761",
-            appId: "1:371769454761:web:782ae053effc3e4ca539b8"
-          });
-          window.messaging = getMessaging(app);
-        }
-      }).catch(err => console.log('Messaging non disponible:', err));
-    }
+    if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
+
+    setIsSupported(true);
+    setPermission(Notification.permission);
+    getMessagingInstance();
   }, []);
 
-  const saveUserToken = async (token) => {
+  const saveUserToken = async (fcmToken) => {
     try {
-      await setDoc(doc(db, 'fcmTokens', token), {
-        token: token,
+      await setDoc(doc(db, 'fcmTokens', fcmToken), {
+        token: fcmToken,
         createdAt: new Date().toISOString(),
         userAgent: navigator.userAgent.substring(0, 200)
       });
-      console.log('✅ Token sauvé');
     } catch (error) {
-      console.error('❌ Erreur token:', error);
+      console.error('Erreur sauvegarde du token FCM:', error);
     }
   };
 
   const requestPermission = async () => {
     try {
-      const permission = await Notification.requestPermission();
-      setPermission(permission);
+      const result = await Notification.requestPermission();
+      setPermission(result);
+      if (result !== 'granted') return result;
 
-      if (permission === 'granted' && window.messaging) {
-        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-        const { getToken } = await import('firebase/messaging');
-        
-        const token = await getToken(window.messaging, {
-          vapidKey: VAPID_KEY,
-          serviceWorkerRegistration: registration
-        });
+      const messaging = await getMessagingInstance();
+      if (!messaging) return result;
 
-        if (token) {
-          setToken(token);
-          await saveUserToken(token);
-          return 'granted';
-        }
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      const { getToken } = await import('firebase/messaging');
+
+      const fcmToken = await getToken(messaging, {
+        vapidKey: VAPID_KEY,
+        serviceWorkerRegistration: registration
+      });
+
+      if (fcmToken) {
+        setToken(fcmToken);
+        await saveUserToken(fcmToken);
       }
-      
-      return permission;
+
+      return result;
     } catch (error) {
-      console.error('❌ Erreur permission:', error);
+      console.error('Erreur demande de permission notifications:', error);
       return 'denied';
     }
   };

@@ -1,7 +1,9 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 
-const firebaseConfig = {
+// Config Firebase web : ces clés sont publiques par nature (elles partent dans le
+// bundle). La sécurité repose sur les règles Firestore, pas sur ces valeurs.
+export const firebaseConfig = {
   apiKey: "AIzaSyBPLArT81P6fAyXFuvAZrEUM1KG-wYcRT0",
   authDomain: "patro-management-2024.firebaseapp.com",
   projectId: "patro-management-2024",
@@ -12,6 +14,5 @@ const firebaseConfig = {
 
 export const VAPID_KEY = "BEBfDWRNwW7ZiPMhuViDk21-kKddD0nHHehHA-S3s4MfeK7rjBYFY203rT5S7mOZ6bY9_htIyEeBR6X0UxgTRP4";
 
-const app = initializeApp(firebaseConfig);
+export const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
-export let messaging = null;
