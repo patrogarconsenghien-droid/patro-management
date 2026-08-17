@@ -91,13 +91,18 @@ const RepairBalances = ({
         nom: member.name,
         ouvertureActuelle: openingBalanceOf(member),
         ouvertureCorrigee: opening,
+        soldeActuel: Number(member.balance) || 0,
         soldeCorrige: Math.round((opening + (delta.get(member.id) || 0)) * 100) / 100
       };
     });
   }, [previous, members, orders]);
 
+  // On corrige aussi les membres dont seul le champ `balance` est périmé :
+  // il reste utilisé ailleurs dans l'app, il ne doit pas rester sur une valeur
+  // héritée de l'ancien calcul.
   const changes = plan.filter(
-    (p) => Math.abs(p.ouvertureActuelle - p.ouvertureCorrigee) > 0.005
+    (p) => Math.abs(p.ouvertureActuelle - p.ouvertureCorrigee) > 0.005 ||
+           Math.abs(p.soldeActuel - p.soldeCorrige) > 0.005
   );
   const totalDebt = plan.filter((p) => p.soldeCorrige < 0).reduce((s, p) => s + p.soldeCorrige, 0);
   const totalCredit = plan.filter((p) => p.soldeCorrige > 0).reduce((s, p) => s + p.soldeCorrige, 0);
@@ -188,7 +193,7 @@ const RepairBalances = ({
                       <span className="truncate pr-2">{item.nom}</span>
                       <span className="whitespace-nowrap">
                         <span className="text-gray-400 line-through mr-2">
-                          {formatCurrency(item.ouvertureActuelle)}
+                          {formatCurrency(item.soldeActuel)}
                         </span>
                         <span className={item.soldeCorrige < 0 ? 'text-red-600 font-medium' : 'text-green-600 font-medium'}>
                           {formatCurrency(item.soldeCorrige)}
