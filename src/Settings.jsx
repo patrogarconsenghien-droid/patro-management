@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import {
-  Beer, BarChart3, Bell, Clock, Download, FileText, Plane, Plus, Settings, Trash2
+  Beer, BarChart3, Bell, Clock, Download, FileText, History, Plane, Plus, Settings, Trash2
 } from 'lucide-react';
 import Modal from './components/Modal';
 import HeaderBase from './components/Header';
+import SeasonBanner from './components/SeasonBanner';
 import AnnualReport from './AnnualReport';
+import CloseSeason from './CloseSeason';
 import { formatCurrency, formatDate } from './lib/format';
 import { buildAnnualReport, getCurrentPatroYear } from './lib/annualReport';
+import { seasonLabel } from './lib/seasons';
 import { downloadReport } from './lib/reportExport';
 
 const SettingsDomain = ({
@@ -57,9 +60,20 @@ const SettingsDomain = ({
   requestPermission,
   tripPasswordProtected,
   setTripPasswordProtected,
+  activeSeasonId,
+  viewedSeasonId,
+  seasons = [],
+  isViewingArchive = false,
+  selectSeason,
+  backToActiveSeason,
 }) => {
   const Header = ({ title, onBack }) => (
-    <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline} />
+    <>
+      <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline} />
+      {isViewingArchive && (
+        <SeasonBanner seasonId={viewedSeasonId} onBackToActive={backToActiveSeason} />
+      )}
+    </>
   );
 
   // Génération en un clic : la saison patro en cours, sans rien demander.
@@ -438,6 +452,48 @@ const SettingsDomain = ({
         <Header title="Paramètres" onBack={() => navigateTo('home')} />
 
         <div className="p-6 space-y-4">
+          {/* Saison : quelle année on consulte, et passage à la suivante */}
+          <div className="bg-white rounded-lg shadow-md p-4">
+            <div className="flex items-center space-x-3 mb-3">
+              <History className="text-purple-500" size={24} />
+              <div className="text-left">
+                <h3 className="font-semibold">Saison</h3>
+                <p className="text-gray-600 text-sm">
+                  En cours : {seasonLabel(activeSeasonId)}
+                </p>
+              </div>
+            </div>
+
+            {seasons.length > 1 && (
+              <select
+                value={viewedSeasonId}
+                onChange={(e) => selectSeason(e.target.value)}
+                className="w-full p-2 border rounded-lg bg-white mb-3"
+              >
+                {seasons.map((season) => (
+                  <option key={season.id} value={season.id}>
+                    {seasonLabel(season.id)}
+                    {season.id === activeSeasonId ? ' — en cours' : ' — archivée'}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {isViewingArchive && (
+              <p className="text-xs text-orange-700 bg-orange-50 rounded-lg p-2 mb-3">
+                Tu consultes une saison archivée. Les modifications que tu fais ici
+                n'apparaissent pas dans la saison en cours.
+              </p>
+            )}
+
+            <button
+              onClick={() => navigateTo('settings-close-season')}
+              className="w-full p-3 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-sm font-medium active:scale-95 transition-transform"
+            >
+              🎓 Clôturer la saison et en commencer une nouvelle
+            </button>
+          </div>
+
           <button
             onClick={() => navigateTo('settings-products')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
@@ -656,6 +712,27 @@ const SettingsDomain = ({
     );
   }
 
+
+  if (screen === 'settings-close-season') {
+    return (
+      <CloseSeason
+        Header={Header}
+        navigateTo={navigateTo}
+        activeSeasonId={activeSeasonId}
+        viewedSeasonId={viewedSeasonId}
+        products={products}
+        members={members}
+        bros={bros}
+        jobs={jobs}
+        orders={orders}
+        financialTransactions={financialTransactions}
+        barOpenThreshold={barOpenThreshold}
+        surpriseSettings={surpriseSettings}
+        popularProducts={popularProducts}
+        financialGoal={financialGoal}
+      />
+    );
+  }
 
   if (screen === 'settings-report') {
     return (

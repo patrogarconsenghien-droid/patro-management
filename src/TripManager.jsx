@@ -4,7 +4,8 @@ import {
   Plane, Clock, Users, MapPin
 } from 'lucide-react';
 import { db } from './firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp, getDocs, query, limit } from 'firebase/firestore';
+import { addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, getDocs, query, limit } from 'firebase/firestore';
+import { collectionRef, docRef, LEGACY_SEASON_ID } from './lib/seasons';
 
 /**
  * 🗺️ COMPOSANT TRIPMANAGER
@@ -87,7 +88,8 @@ const TripManager = ({
   onBack, 
   bros = [], 
   financialData = { transactions: [], orders: [], jobs: [] },
-  formatCurrency = (amount) => `${amount.toFixed(2)}€`
+  formatCurrency = (amount) => `${amount.toFixed(2)}€`,
+  seasonId = LEGACY_SEASON_ID
 }) => {
   
   // ============================================
@@ -142,7 +144,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
   useEffect(() => {
     // Écouter les dépenses
     const unsubExpenses = onSnapshot(
-      collection(db, 'tripExpenses'),
+      collectionRef(db, seasonId, 'tripExpenses'),
       (snapshot) => {
         const expenses = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -155,7 +157,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
     
     // Écouter les événements
     const unsubEvents = onSnapshot(
-      collection(db, 'tripEvents'),
+      collectionRef(db, seasonId, 'tripEvents'),
       (snapshot) => {
         const events = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -168,7 +170,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
     
     // Écouter les paramètres voyage
     const unsubSettings = onSnapshot(
-      collection(db, 'tripSettings'),
+      collectionRef(db, seasonId, 'tripSettings'),
       (snapshot) => {
         if (!snapshot.empty) {
           const settings = snapshot.docs[0].data();
@@ -188,7 +190,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
       unsubEvents();
       unsubSettings();
     };
-  }, []);
+  }, [seasonId]);
   
   // ============================================
   // 💰 CALCULS BUDGET
@@ -257,7 +259,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
     }
     
     try {
-      await addDoc(collection(db, 'tripExpenses'), {
+      await addDoc(collectionRef(db, seasonId, 'tripExpenses'), {
         ...newExpense,
         amount: parseFloat(newExpense.amount),
         timestamp: serverTimestamp()
@@ -282,7 +284,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
     if (!confirm('Supprimer cette dépense ?')) return;
     
     try {
-      await deleteDoc(doc(db, 'tripExpenses', expenseId));
+      await deleteDoc(docRef(db, seasonId, 'tripExpenses', expenseId));
       alert('✅ Dépense supprimée !');
     } catch (error) {
       console.error('❌ Erreur suppression:', error);
@@ -297,7 +299,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
   }
   
   try {
-    await addDoc(collection(db, 'tripEvents'), {
+    await addDoc(collectionRef(db, seasonId, 'tripEvents'), {
       ...newEvent,
       time: newEvent.timeStart, // Pour compatibilité avec anciens événements
       price: parseFloat(newEvent.price) || 0,
@@ -324,7 +326,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
     if (!confirm('Supprimer cet événement ?')) return;
     
     try {
-      await deleteDoc(doc(db, 'tripEvents', eventId));
+      await deleteDoc(docRef(db, seasonId, 'tripEvents', eventId));
       alert('✅ Événement supprimé !');
     } catch (error) {
       console.error('❌ Erreur suppression:', error);
@@ -335,16 +337,16 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
   const saveTripSettings = async (settings) => {
     try {
       // Chercher si des paramètres existent déjà
-      const q = query(collection(db, 'tripSettings'), limit(1));
+      const q = query(collectionRef(db, seasonId, 'tripSettings'), limit(1));
       const snapshot = await getDocs(q);
       
       if (snapshot.empty) {
         // Créer
-        await addDoc(collection(db, 'tripSettings'), settings);
+        await addDoc(collectionRef(db, seasonId, 'tripSettings'), settings);
       } else {
         // Mettre à jour
         const docId = snapshot.docs[0].id;
-        await updateDoc(doc(db, 'tripSettings', docId), settings);
+        await updateDoc(docRef(db, seasonId, 'tripSettings', docId), settings);
       }
       
       alert('✅ Paramètres sauvegardés !');
@@ -498,7 +500,7 @@ const EventModal = ({
     
     try {
       // Ajouter l'événement dans Firebase
-      await addDoc(collection(db, 'tripEvents'), {
+      await addDoc(collectionRef(db, seasonId, 'tripEvents'), {
         ...localEvent,
         time: localEvent.timeStart, // Pour compatibilité avec anciens événements
         price: parseFloat(localEvent.price) || 0,

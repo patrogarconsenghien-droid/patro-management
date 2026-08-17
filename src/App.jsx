@@ -10,6 +10,8 @@ import TonneauSurprise from './components/TonneauSurprise';
 import TripManager from './TripManager';
 import Modal from './components/Modal';
 import HeaderBase from './components/Header';
+import SeasonBanner from './components/SeasonBanner';
+import { useSeasons } from './hooks/useSeasons';
 import HomeScreen from './Home';
 import SettingsScreen from './Settings';
 import BoulotsScreen from './Boulots';
@@ -20,6 +22,13 @@ import { useFirestoreData } from './hooks/useFirestoreData';
 const PatroApp = () => {
 
   const [currentScreen, setCurrentScreen] = useState('home');
+
+  // La saison consultée détermine sur quelles données toute l'app travaille.
+  const {
+    activeSeasonId, viewedSeasonId, seasons, isViewingArchive,
+    selectSeason, backToActiveSeason
+  } = useSeasons();
+
   const {
     isOnline, loading,
     members, setMembers,
@@ -36,10 +45,15 @@ const PatroApp = () => {
     surpriseSettings, setSurpriseSettings,
     tripPasswordProtected, setTripPasswordProtected,
     saveToFirebase, updateInFirebase, deleteFromFirebase,
-  } = useFirestoreData();
+  } = useFirestoreData(viewedSeasonId);
   const { updateStock, getStockStatus } = createStockHelpers({ products, updateInFirebase, saveToFirebase });
   const Header = ({ title, onBack }) => (
-    <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline} />
+    <>
+      <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline} />
+      {isViewingArchive && (
+        <SeasonBanner seasonId={viewedSeasonId} onBackToActive={backToActiveSeason} />
+      )}
+    </>
   );
   const [memberSearch, setMemberSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -1033,7 +1047,7 @@ const eligible = [
 
 
 
-  const SETTINGS_SCREENS = ['settings-password', 'settings', 'settings-surprise', 'settings-bar-threshold', 'settings-products', 'settings-stock', 'settings-rate', 'settings-history', 'settings-goal', 'settings-popular', 'settings-report'];
+  const SETTINGS_SCREENS = ['settings-password', 'settings', 'settings-surprise', 'settings-bar-threshold', 'settings-products', 'settings-stock', 'settings-rate', 'settings-history', 'settings-goal', 'settings-popular', 'settings-report', 'settings-close-season'];
 
   if (currentScreen === 'home') {
     return (
@@ -1351,6 +1365,12 @@ const eligible = [
         requestPermission={requestPermission}
         tripPasswordProtected={tripPasswordProtected}
         setTripPasswordProtected={setTripPasswordProtected}
+        activeSeasonId={activeSeasonId}
+        viewedSeasonId={viewedSeasonId}
+        seasons={seasons}
+        isViewingArchive={isViewingArchive}
+        selectSeason={selectSeason}
+        backToActiveSeason={backToActiveSeason}
       />
     );
   }
@@ -5007,6 +5027,7 @@ const eligible = [
           jobs: jobs
         }}
         formatCurrency={formatCurrency}
+        seasonId={viewedSeasonId}
       />
     );
   }

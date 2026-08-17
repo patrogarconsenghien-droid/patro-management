@@ -118,7 +118,7 @@ const AnnualReport = ({
           <div className="grid grid-cols-2 gap-2">
             {[
               { key: 'calendar', label: 'Année civile', hint: 'janv. → déc.' },
-              { key: 'patro', label: 'Année patro', hint: 'sept. → août' }
+              { key: 'patro', label: 'Saison patro', hint: 'août → juillet' }
             ].map((option) => (
               <button
                 key={option.key}

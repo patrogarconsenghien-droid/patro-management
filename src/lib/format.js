@@ -6,6 +6,12 @@ export const formatCurrency = (amount) => {
 
 export const formatDate = (date) => new Date(date).toLocaleDateString('fr-FR');
 
+/**
+ * Les heures s'additionnent en flottants (0.25, 0.5, ...) : sans arrondi on
+ * affiche « 1077.9993299999999 h ».
+ */
+export const roundHours = (value) => Math.round((value || 0) * 100) / 100;
+
 /** "3 commandes", "1 commande" — le pluriel français s'applique dès 2. */
 export const plural = (count, singular, pluralForm = `${singular}s`) =>
   `${count} ${count >= 2 ? pluralForm : singular}`;

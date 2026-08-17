@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react';
 import { db } from '../firebase';
-import { collection, addDoc, updateDoc, deleteDoc, doc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
+import { collectionRef, docRef, LEGACY_SEASON_ID } from '../lib/seasons';
 
-export function useFirestoreData() {
+/**
+ * Toutes les données de l'app pour une saison donnée. Changer de saison
+ * rebranche l'ensemble des listeners sur d'autres documents : les deux saisons
+ * n'ont rien en commun.
+ */
+export function useFirestoreData(seasonId = LEGACY_SEASON_ID) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState([]);
@@ -45,12 +51,12 @@ export function useFirestoreData() {
   const saveToFirebase = async (collectionName, data) => {
     setLoading(true);
     try {
-      const docRef = await addDoc(collection(db, collectionName), {
+      const created = await addDoc(collectionRef(db, seasonId, collectionName), {
         ...data,
         createdAt: serverTimestamp()
       });
-      console.log(`Document sauvegardé dans ${collectionName} avec ID:`, docRef.id);
-      return docRef.id;
+      console.log(`Document sauvegardé dans ${seasonId}/${collectionName} avec ID:`, created.id);
+      return created.id;
     } catch (error) {
       console.error('Erreur sauvegarde Firebase:', error);
       alert(`Erreur de connexion Firebase: ${error.message}`);
@@ -63,8 +69,7 @@ export function useFirestoreData() {
   const updateInFirebase = async (collectionName, id, data) => {
     setLoading(true);
     try {
-      const docRef = doc(db, collectionName, id);
-      await updateDoc(docRef, {
+      await updateDoc(docRef(db, seasonId, collectionName, id), {
         ...data,
         updatedAt: serverTimestamp()
       });
@@ -81,8 +86,7 @@ export function useFirestoreData() {
   const deleteFromFirebase = async (collectionName, id) => {
     setLoading(true);
     try {
-      const docRef = doc(db, collectionName, id);
-      await deleteDoc(docRef);
+      await deleteDoc(docRef(db, seasonId, collectionName, id));
       console.log(`Document ${collectionName}/${id} supprimé`);
     } catch (error) {
       console.error('Erreur suppression Firebase:', error);
@@ -95,14 +99,13 @@ export function useFirestoreData() {
 
   const loadFromFirebase = async (collectionName, setState) => {
     try {
-      const unsubscribe = onSnapshot(collection(db, collectionName), (snapshot) => {
+      const unsubscribe = onSnapshot(collectionRef(db, seasonId, collectionName), (snapshot) => {
         if (!snapshot.metadata.hasPendingWrites) {
-          const data = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
+          const data = snapshot.docs.map(d => ({
+            id: d.id,
+            ...d.data()
           }));
           setState(data);
-          console.log(`Données chargées de ${collectionName}:`, data);
         }
       });
       return unsubscribe;
@@ -112,9 +115,27 @@ export function useFirestoreData() {
   };
 
   useEffect(() => {
-    console.log("Chargement des données depuis Firebase...");
+    console.log(`Chargement des données de la saison ${seasonId}...`);
 
     window.history.replaceState({ screen: 'home' }, '', '#home');
+
+    // Changement de saison : on repart d'un état vide, sinon les données de la
+    // saison précédente restent affichées le temps que les listeners répondent.
+    setMembers([]);
+    setBros([]);
+    setProducts([]);
+    setOrders([]);
+    setJobs([]);
+    setScheduledJobs([]);
+    setStockMovements([]);
+    setFinancialTransactions([]);
+    // Les réglages ne sont écrits que si la saison en contient : sans remise à
+    // zéro, une saison sans réglages hériterait de ceux de la précédente.
+    setFinancialGoal({ amount: 0, description: '', deadline: '', isActive: false });
+    setSurpriseSettings({ price: 200, eligibleProducts: [], weights: {}, exclusiveProducts: [] });
+    setBarOpenThreshold(8);
+    setPopularProducts([]);
+    setTripPasswordProtected(false);
 
     let unsubscribeMembers = null;
     let unsubscribeBros = null;
@@ -211,7 +232,7 @@ export function useFirestoreData() {
       if (unsubscribeSurpriseSettings) unsubscribeSurpriseSettings();
       if (unsubscribeTripSettings) unsubscribeTripSettings();
     };
-  }, []);
+  }, [seasonId]);
 
   return {
     isOnline,

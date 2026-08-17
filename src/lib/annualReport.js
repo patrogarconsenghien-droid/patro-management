@@ -9,6 +9,11 @@
 //  - l'argent sort via les frais manuels.
 // Le rapport garde ces deux plans séparés pour ne rien compter deux fois.
 
+import { roundHours } from './format';
+
+// Une saison démarre le 1er août (mois 7) et se termine le 31 juillet.
+export const SEASON_START_MONTH = 7;
+
 const MONTHS = [
   'Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin',
   'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'
@@ -64,15 +69,15 @@ const movementDate = (m) => toDate(m.timestamp) || toDate(m.createdAt);
 /**
  * Période couverte par le rapport.
  * - 'calendar' : 1er janvier -> 31 décembre
- * - 'patro'    : 1er septembre -> 31 août (l'année de fonctionnement d'une
+ * - 'patro'    : 1er août -> 31 juillet (l'année de fonctionnement de la
  *   section, celle qui a du sens pour un bilan de saison)
  */
 export const getPeriod = (year, mode = 'calendar') => {
   if (mode === 'patro') {
     return {
-      start: new Date(year, 8, 1),
-      end: new Date(year + 1, 8, 1),
-      label: `Année patro ${year}–${year + 1}`
+      start: new Date(year, SEASON_START_MONTH, 1),
+      end: new Date(year + 1, SEASON_START_MONTH, 1),
+      label: `Saison ${year}–${year + 1}`
     };
   }
   return {
@@ -83,11 +88,11 @@ export const getPeriod = (year, mode = 'calendar') => {
 };
 
 /**
- * Saison patro en cours. Avant septembre, on est encore dans l'année qui a
- * démarré l'automne précédent : en juin 2026, la saison est « 2025–2026 ».
+ * Saison en cours. Avant août, on est encore dans la saison ouverte l'été
+ * précédent : en juin 2026, la saison est « 2025–2026 ».
  */
 export const getCurrentPatroYear = (today = new Date()) =>
-  today.getMonth() >= 8 ? today.getFullYear() : today.getFullYear() - 1;
+  today.getMonth() >= SEASON_START_MONTH ? today.getFullYear() : today.getFullYear() - 1;
 
 /** Années pour lesquelles il existe au moins une donnée. */
 export const getAvailableYears = ({ orders = [], jobs = [], financialTransactions = [] }) => {
@@ -123,10 +128,6 @@ const buildMonthlyBuckets = (period) => {
 };
 
 const monthKey = (date) => `${date.getFullYear()}-${date.getMonth()}`;
-
-// Les heures sont additionnées en flottants (0.25, 0.5, ...) : sans arrondi on
-// affiche « 984.49933 h ».
-const roundHours = (value) => Math.round(value * 100) / 100;
 
 const topOf = (map, key, limit) =>
   [...map.values()].sort((a, b) => b[key] - a[key]).slice(0, limit);

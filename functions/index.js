@@ -3,18 +3,20 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-// Fonction v1 (plus stable) qui se déclenche quand un boulot est créé
-exports.sendJobNotifications = functions
-  .region('europe-west1') // Plus proche de la Belgique
-  .firestore
-  .document('scheduledJobs/{jobId}')
-  .onCreate(async (snap, context) => {
+/**
+ * Saison en cours, telle que la connaît l'app. Sert à ne pas notifier les Bro
+ * quand on corrige un vieux boulot dans une saison archivée.
+ */
+async function getActiveSeasonId() {
+  const snap = await admin.firestore().doc('appState/current').get();
+  return snap.exists ? snap.data().seasonId : null;
+}
+
+async function notifyNewJob(newJob, jobId) {
+  {
     try {
       console.log("🆕 Nouveau boulot créé !");
-      
-      const newJob = snap.data();
-      const jobId = context.params.jobId;
-      
+
       // Récupérer tous les tokens FCM
       const tokensSnapshot = await admin.firestore().collection('fcmTokens').get();
       
@@ -64,6 +66,35 @@ exports.sendJobNotifications = functions
     } catch (error) {
       console.error("❌ Erreur:", error);
     }
+  }
+}
+
+// Boulots de la saison historique, restée aux collections racines.
+exports.sendJobNotifications = functions
+  .region('europe-west1') // Plus proche de la Belgique
+  .firestore
+  .document('scheduledJobs/{jobId}')
+  .onCreate((snap, context) => notifyNewJob(snap.data(), context.params.jobId));
+
+// Boulots des saisons suivantes. On ne notifie que si le boulot est créé dans
+// la saison en cours : corriger un boulot dans une saison archivée ne doit pas
+// réveiller tous les Bro.
+exports.sendJobNotificationsSeason = functions
+  .region('europe-west1')
+  .firestore
+  .document('seasons/{seasonId}/scheduledJobs/{jobId}')
+  .onCreate(async (snap, context) => {
+    const activeSeasonId = await getActiveSeasonId();
+
+    if (activeSeasonId && context.params.seasonId !== activeSeasonId) {
+      console.log(
+        `⏭️ Boulot créé dans la saison ${context.params.seasonId}, ` +
+        `saison en cours ${activeSeasonId} : pas de notification.`
+      );
+      return;
+    }
+
+    return notifyNewJob(snap.data(), context.params.jobId);
   });
 
 function formatDateFr(dateString) {
