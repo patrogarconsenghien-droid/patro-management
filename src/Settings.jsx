@@ -9,7 +9,7 @@ import AnnualReport from './AnnualReport';
 import CloseSeason from './CloseSeason';
 import { formatCurrency, formatDate } from './lib/format';
 import { buildAnnualReport, getCurrentPatroYear } from './lib/annualReport';
-import { seasonLabel } from './lib/seasons';
+import { seasonLabel, startYearOf } from './lib/seasons';
 import { downloadReport } from './lib/reportExport';
 
 const SettingsDomain = ({
@@ -76,9 +76,11 @@ const SettingsDomain = ({
     </>
   );
 
-  // Génération en un clic : la saison patro en cours, sans rien demander.
+  // Génération en un clic : la saison actuellement consultée, sans rien
+  // demander. On se cale sur la saison plutôt que sur la date du jour, sinon
+  // un 17 août viserait la saison qui vient de démarrer et qui est vide.
   // L'écran dédié reste là pour choisir une autre période.
-  const patroYear = getCurrentPatroYear();
+  const patroYear = viewedSeasonId ? startYearOf(viewedSeasonId) : getCurrentPatroYear();
 
   const generateCurrentReport = () => {
     const report = buildAnnualReport({
@@ -480,18 +482,11 @@ const SettingsDomain = ({
             )}
 
             {isViewingArchive && (
-              <p className="text-xs text-orange-700 bg-orange-50 rounded-lg p-2 mb-3">
+              <p className="text-xs text-orange-700 bg-orange-50 rounded-lg p-2">
                 Tu consultes une saison archivée. Les modifications que tu fais ici
                 n'apparaissent pas dans la saison en cours.
               </p>
             )}
-
-            <button
-              onClick={() => navigateTo('settings-close-season')}
-              className="w-full p-3 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-sm font-medium active:scale-95 transition-transform"
-            >
-              🎓 Clôturer la saison et en commencer une nouvelle
-            </button>
           </div>
 
           <button
@@ -687,6 +682,25 @@ const SettingsDomain = ({
                   Actuellement : {barOpenThreshold} bouteilles minimum
                 </p>
               </div>
+            </div>
+          </button>
+
+          {/* Fin de saison : action rare et lourde, volontairement tout en bas */}
+          <button
+            onClick={() => navigateTo('settings-close-season')}
+            className="w-full p-4 bg-white border-2 border-purple-200 rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <span className="text-purple-500 text-2xl">🎓</span>
+                <div className="text-left">
+                  <h3 className="font-semibold">Clôturer la saison</h3>
+                  <p className="text-gray-600 text-sm">
+                    Archiver {seasonLabel(activeSeasonId).toLowerCase()} et en commencer une nouvelle
+                  </p>
+                </div>
+              </div>
+              <span className="text-gray-400">→</span>
             </div>
           </button>
 
