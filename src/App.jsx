@@ -42,6 +42,7 @@ const PatroApp = () => {
     financialGoal, setFinancialGoal,
     popularProducts, setPopularProducts,
     barOpenThreshold, setBarOpenThreshold,
+    hourlyRate, setHourlyRate,
     surpriseSettings, setSurpriseSettings,
     tripPasswordProtected, setTripPasswordProtected,
     saveToFirebase, updateInFirebase, deleteFromFirebase,
@@ -63,7 +64,6 @@ const PatroApp = () => {
   const [cartTotal, setCartTotal] = useState(0);
   const [repaymentAmount, setRepaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('');
-  const [hourlyRate, setHourlyRate] = useState(10.00);
   const [newMemberName, setNewMemberName] = useState('');
   const [showNotificationPrompt, setShowNotificationPrompt] = useState(false); // ✅ Ici maintenant
   const [productSearch, setProductSearch] = useState('');

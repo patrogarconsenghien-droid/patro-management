@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot, collection } from 'firebase/firestore';
-import { db } from '../firebase';
+import { authReady, db } from '../firebase';
 import { CURRENT_SEASON_DOC, LEGACY_SEASON_ID, seasonLabel } from '../lib/seasons';
 
 /**
@@ -20,33 +20,51 @@ export function useSeasons() {
   const [pinned, setPinned] = useState(false);
 
   useEffect(() => {
-    const unsubscribeCurrent = onSnapshot(
-      doc(db, ...CURRENT_SEASON_DOC),
-      (snapshot) => {
-        const id = snapshot.exists() ? snapshot.data().seasonId : LEGACY_SEASON_ID;
-        setActiveSeasonId(id || LEGACY_SEASON_ID);
-        setSeasonsReady(true);
-      },
-      (error) => {
-        // Document absent ou règles restrictives : on reste sur la saison
-        // historique, qui pointe sur les collections racines.
-        console.error('Lecture de la saison en cours impossible:', error);
-        setSeasonsReady(true);
-      }
-    );
+    let cancelled = false;
+    let unsubscribeCurrent = null;
+    let unsubscribeSeasons = null;
 
-    const unsubscribeSeasons = onSnapshot(
-      collection(db, 'seasons'),
-      (snapshot) => {
-        const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-        setSeasons(list.sort((a, b) => b.id.localeCompare(a.id)));
-      },
-      (error) => console.error('Lecture des saisons impossible:', error)
-    );
+    const subscribe = async () => {
+      // Même raison que dans useFirestoreData : les règles exigent une session.
+      await authReady;
+      if (cancelled) return;
+
+      unsubscribeCurrent = onSnapshot(
+        doc(db, ...CURRENT_SEASON_DOC),
+        (snapshot) => {
+          const id = snapshot.exists() ? snapshot.data().seasonId : LEGACY_SEASON_ID;
+          setActiveSeasonId(id || LEGACY_SEASON_ID);
+          setSeasonsReady(true);
+        },
+        (error) => {
+          // Document absent ou règles restrictives : on reste sur la saison
+          // historique, qui pointe sur les collections racines.
+          console.error('Lecture de la saison en cours impossible:', error);
+          setSeasonsReady(true);
+        }
+      );
+
+      unsubscribeSeasons = onSnapshot(
+        collection(db, 'seasons'),
+        (snapshot) => {
+          const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+          setSeasons(list.sort((a, b) => b.id.localeCompare(a.id)));
+        },
+        (error) => console.error('Lecture des saisons impossible:', error)
+      );
+
+      if (cancelled) {
+        unsubscribeCurrent();
+        unsubscribeSeasons();
+      }
+    };
+
+    subscribe();
 
     return () => {
-      unsubscribeCurrent();
-      unsubscribeSeasons();
+      cancelled = true;
+      if (unsubscribeCurrent) unsubscribeCurrent();
+      if (unsubscribeSeasons) unsubscribeSeasons();
     };
   }, []);
 

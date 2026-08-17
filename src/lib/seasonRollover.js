@@ -23,6 +23,7 @@ export const defaultChoices = {
   bros: { keep: true, hours: 'zero' },             // zero | carry
   unpaidJobs: 'leave',                             // leave | copy
   settings: {
+    hourlyRate: true,
     barThreshold: true,
     surprise: true,
     popular: true
@@ -215,6 +216,13 @@ export async function executeRollover({
   }
 
   // --- Réglages ------------------------------------------------------------
+  if (choices.settings.hourlyRate && data.hourlyRate > 0) {
+    push(docRefIn(toSeasonId, 'jobSettings'), {
+      hourlyRate: data.hourlyRate,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
   if (choices.settings.barThreshold && barSettings != null) {
     push(docRefIn(toSeasonId, 'barSettings'), {
       openThreshold: barSettings,

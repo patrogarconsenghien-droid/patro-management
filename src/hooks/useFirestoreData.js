@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '../firebase';
+import { authReady, db } from '../firebase';
 import { addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import { collectionRef, docRef, LEGACY_SEASON_ID } from '../lib/seasons';
 
@@ -20,6 +20,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID) {
   const [stockMovements, setStockMovements] = useState([]);
   const [financialTransactions, setFinancialTransactions] = useState([]);
   const [barOpenThreshold, setBarOpenThreshold] = useState(8); // Seuil par défaut : 8 bouteilles
+  const [hourlyRate, setHourlyRate] = useState(10.00); // Tarif horaire des boulots
   const [surpriseSettings, setSurpriseSettings] = useState({
     price: 200,
     eligibleProducts: [],
@@ -134,6 +135,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID) {
     setFinancialGoal({ amount: 0, description: '', deadline: '', isActive: false });
     setSurpriseSettings({ price: 200, eligibleProducts: [], weights: {}, exclusiveProducts: [] });
     setBarOpenThreshold(8);
+    setHourlyRate(10.00);
     setPopularProducts([]);
     setTripPasswordProtected(false);
 
@@ -148,11 +150,26 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID) {
     let unsubscribeFinancialGoals = null;
     let unsubscribePopularProducts = null;
     let unsubscribeBarSettings = null;
+    let unsubscribeJobSettings = null;
     let unsubscribeSurpriseSettings = null;
     let unsubscribeTripSettings = null;
 
+    // Les abonnements peuvent être posés après le démontage (changement de
+    // saison rapide) : on les coupe alors immédiatement.
+    let cancelled = false;
+    const track = (unsubscribe) => {
+      if (cancelled && unsubscribe) unsubscribe();
+      return unsubscribe;
+    };
+
     const setupListeners = async () => {
-      unsubscribeMembers = await loadFromFirebase('members', setMembers);
+      // Les règles Firestore exigent une session : on attend la connexion
+      // anonyme avant de s'abonner, sinon les premières lectures sont
+      // refusées.
+      await authReady;
+      if (cancelled) return;
+
+      unsubscribeMembers = track(await loadFromFirebase('members', setMembers));
       unsubscribeBros = await loadFromFirebase('bros', setBros);
       unsubscribeProducts = await loadFromFirebase('products', setProducts);
       unsubscribeOrders = await loadFromFirebase('orders', setOrders);
@@ -204,6 +221,15 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID) {
           setPopularProducts(['Jupiler', 'Coca', 'Stella', 'Fanta']);
         }
       });
+      unsubscribeJobSettings = await loadFromFirebase('jobSettings', (settings) => {
+        if (settings && settings.length > 0) {
+          const latest = settings.sort((a, b) =>
+            new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
+          )[0];
+          if (latest.hourlyRate > 0) setHourlyRate(latest.hourlyRate);
+        }
+      });
+
       // Charger le seuil d'ouverture du bar
       unsubscribeBarSettings = await loadFromFirebase('barSettings', (settings) => {
         if (settings && settings.length > 0) {
@@ -218,6 +244,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID) {
     setupListeners();
 
     return () => {
+      cancelled = true;
       if (unsubscribeMembers) unsubscribeMembers();
       if (unsubscribeBros) unsubscribeBros();
       if (unsubscribeProducts) unsubscribeProducts();
@@ -229,6 +256,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID) {
       if (unsubscribeFinancialGoals) unsubscribeFinancialGoals();
       if (unsubscribePopularProducts) unsubscribePopularProducts();
       if (unsubscribeBarSettings) unsubscribeBarSettings();
+      if (unsubscribeJobSettings) unsubscribeJobSettings();
       if (unsubscribeSurpriseSettings) unsubscribeSurpriseSettings();
       if (unsubscribeTripSettings) unsubscribeTripSettings();
     };
@@ -248,6 +276,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID) {
     financialGoal, setFinancialGoal,
     popularProducts, setPopularProducts,
     barOpenThreshold, setBarOpenThreshold,
+    hourlyRate, setHourlyRate,
     surpriseSettings, setSurpriseSettings,
     tripPasswordProtected, setTripPasswordProtected,
     saveToFirebase, updateInFirebase, deleteFromFirebase,

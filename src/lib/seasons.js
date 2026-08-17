@@ -38,6 +38,7 @@ export const SEASON_COLLECTIONS = [
   'financialGoals',
   'popularProducts',
   'barSettings',
+  'jobSettings',
   'surpriseSettings',
   'tripSettings',
   'tripExpenses',

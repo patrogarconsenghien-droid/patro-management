@@ -3,7 +3,7 @@ import {
   ArrowLeft, Plus, Trash2, DollarSign, Calendar, BarChart3, 
   Plane, Clock, Users, MapPin
 } from 'lucide-react';
-import { db } from './firebase';
+import { authReady, db } from './firebase';
 import { addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, getDocs, query, limit } from 'firebase/firestore';
 import { collectionRef, docRef, LEGACY_SEASON_ID } from './lib/seasons';
 
@@ -142,6 +142,14 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
   // ============================================
   
   useEffect(() => {
+    let cancelled = false;
+    const subscriptions = [];
+
+    const subscribe = async () => {
+      // Les règles Firestore exigent une session : voir firebase.js.
+      await authReady;
+      if (cancelled) return;
+
     // Écouter les dépenses
     const unsubExpenses = onSnapshot(
       collectionRef(db, seasonId, 'tripExpenses'),
@@ -185,10 +193,15 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
       (error) => console.error('❌ Erreur tripSettings:', error)
     );
     
+      subscriptions.push(unsubExpenses, unsubEvents, unsubSettings);
+      if (cancelled) subscriptions.forEach((stop) => stop());
+    };
+
+    subscribe();
+
     return () => {
-      unsubExpenses();
-      unsubEvents();
-      unsubSettings();
+      cancelled = true;
+      subscriptions.forEach((stop) => stop());
     };
   }, [seasonId]);
   

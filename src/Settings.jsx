@@ -727,6 +727,7 @@ const SettingsDomain = ({
         orders={orders}
         financialTransactions={financialTransactions}
         barOpenThreshold={barOpenThreshold}
+        hourlyRate={hourlyRate}
         surpriseSettings={surpriseSettings}
         popularProducts={popularProducts}
         financialGoal={financialGoal}
@@ -1852,11 +1853,22 @@ const SettingsDomain = ({
   if (screen === 'settings-rate') {
 
 
-    const updateRate = () => {
+    const updateRate = async () => {
       const rate = parseFloat(newRate);
-      if (rate > 0) {
-        setHourlyRate(rate);
+      if (!(rate > 0)) return;
+
+      setHourlyRate(rate);
+      try {
+        // Sans cette écriture le tarif repartait à 10,00 € à chaque
+        // rechargement de l'app.
+        await saveToFirebase('jobSettings', {
+          hourlyRate: rate,
+          updatedAt: new Date().toISOString()
+        });
         navigateTo('settings');
+      } catch (error) {
+        console.error('Erreur sauvegarde du tarif horaire:', error);
+        alert('Le tarif est appliqué mais n\'a pas pu être enregistré.');
       }
     };
 

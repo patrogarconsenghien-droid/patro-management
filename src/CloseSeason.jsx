@@ -66,6 +66,7 @@ const CloseSeason = ({
   orders = [],
   financialTransactions = [],
   barOpenThreshold,
+  hourlyRate,
   surpriseSettings,
   popularProducts,
   financialGoal
@@ -127,6 +128,7 @@ const CloseSeason = ({
           bros,
           jobs,
           barSettings: barOpenThreshold,
+          hourlyRate,
           surpriseSettings,
           popularProducts,
           financialGoal
@@ -292,6 +294,11 @@ const CloseSeason = ({
         </Section>
 
         <Section title="Réglages">
+          <Toggle
+            checked={choices.settings.hourlyRate}
+            onChange={(v) => set('settings.hourlyRate', v)}
+            label={`Tarif horaire des boulots (${formatCurrency(hourlyRate)}/h)`}
+          />
           <Toggle
             checked={choices.settings.barThreshold}
             onChange={(v) => set('settings.barThreshold', v)}
