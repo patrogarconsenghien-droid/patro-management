@@ -4,7 +4,7 @@ import { formatCurrency, plural, roundHours } from './lib/format';
 import { nextSeasonId, seasonLabel } from './lib/seasons';
 import {
   buildRolloverPreview,
-  carriedBalance,
+  computeMemberBalances,
   computeTreasury,
   defaultChoices,
   executeRollover,
@@ -98,9 +98,15 @@ const CloseSeason = ({
   }, [activeSeasonId]);
 
   const preview = useMemo(
-    () => buildRolloverPreview({ choices, products, members, bros, jobs, tripCounts }),
-    [choices, products, members, bros, jobs, tripCounts]
+    () => buildRolloverPreview({ choices, products, members, bros, jobs, orders, tripCounts }),
+    [choices, products, members, bros, jobs, orders, tripCounts]
   );
+
+  // Mêmes soldes que ceux affichés dans la section Bar : recalculés depuis
+  // l'historique, pas lus sur le champ `balance` du membre.
+  const balances = useMemo(() => computeMemberBalances({ members, orders }), [members, orders]);
+  const debtTotal = [...balances.values()].filter((b) => b < 0).reduce((a, b) => a + b, 0);
+  const creditTotal = [...balances.values()].filter((b) => b > 0).reduce((a, b) => a + b, 0);
 
   const set = (path, value) =>
     setChoices((current) => {
@@ -111,8 +117,6 @@ const CloseSeason = ({
       return next;
     });
 
-  const debtTotal = members.reduce((sum, m) => (m.balance < 0 ? sum + m.balance : sum), 0);
-  const creditTotal = members.reduce((sum, m) => (m.balance > 0 ? sum + m.balance : sum), 0);
 
   const run = async () => {
     setRunning(true);
@@ -127,6 +131,7 @@ const CloseSeason = ({
           members,
           bros,
           jobs,
+          orders,
           barSettings: barOpenThreshold,
           hourlyRate,
           surpriseSettings,

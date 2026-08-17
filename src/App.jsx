@@ -15,7 +15,7 @@ import { useSeasons } from './hooks/useSeasons';
 import HomeScreen from './Home';
 import SettingsScreen from './Settings';
 import BoulotsScreen from './Boulots';
-import { formatCurrency, formatDate, formatDateTime } from './lib/format';
+import { formatCurrency, formatDate, formatDateTime, openingBalanceOf } from './lib/format';
 import { createStockHelpers } from './lib/stock';
 import { useFirestoreData } from './hooks/useFirestoreData';
 
@@ -1047,7 +1047,7 @@ const eligible = [
 
 
 
-  const SETTINGS_SCREENS = ['settings-password', 'settings', 'settings-surprise', 'settings-bar-threshold', 'settings-products', 'settings-stock', 'settings-rate', 'settings-history', 'settings-goal', 'settings-popular', 'settings-report', 'settings-close-season'];
+  const SETTINGS_SCREENS = ['settings-password', 'settings', 'settings-surprise', 'settings-bar-threshold', 'settings-products', 'settings-stock', 'settings-rate', 'settings-history', 'settings-goal', 'settings-popular', 'settings-report', 'settings-close-season', 'settings-repair-balances'];
 
   if (currentScreen === 'home') {
     return (
@@ -1166,7 +1166,7 @@ const eligible = [
                         .filter(order => order.type === 'repayment' || order.type === 'recharge')
                         .reduce((sum, order) => sum + (order.amount || 0), 0);
 
-                      const realBalance = totalRecharged - totalSpent;
+                      const realBalance = openingBalanceOf(member) + totalRecharged - totalSpent;
 
                       return (
                         <p className={`text-sm font-semibold ${realBalance < 0 ? 'text-red-500' : 'text-green-500'}`}>
@@ -1250,7 +1250,7 @@ const eligible = [
                 const totalRecharged = memberOrders
                   .filter(order => order.type === 'repayment' || order.type === 'recharge')
                   .reduce((sum, order) => sum + (order.amount || 0), 0);
-                const realBalance = totalRecharged - totalSpent;
+                const realBalance = openingBalanceOf(selectedMember) + totalRecharged - totalSpent;
 
                 return (
                   <p>Solde actuel: <strong className={realBalance < 0 ? 'text-red-500' : 'text-green-500'}>
@@ -1418,7 +1418,7 @@ const eligible = [
                   const totalRecharged = memberOrders
                     .filter(order => order.type === 'repayment' || order.type === 'recharge')
                     .reduce((sum, order) => sum + (order.amount || 0), 0);
-                  const realBalance = totalRecharged - totalSpent;
+                  const realBalance = openingBalanceOf(member) + totalRecharged - totalSpent;
 
                   return (
                     <div key={member.id} className="bg-white rounded-lg shadow-sm">
@@ -1480,7 +1480,7 @@ const eligible = [
                   const totalRecharged = memberOrders
                     .filter(order => order.type === 'repayment' || order.type === 'recharge')
                     .reduce((sum, order) => sum + (order.amount || 0), 0);
-                  const realBalance = totalRecharged - totalSpent;
+                  const realBalance = openingBalanceOf(selectedMember) + totalRecharged - totalSpent;
 
                   return (
                     <p>Solde actuel: <strong className={realBalance < 0 ? 'text-red-500' : 'text-green-500'}>
@@ -1620,7 +1620,7 @@ const eligible = [
               <div className="text-center">
                 {(() => {
                   // Calculer le solde réel à partir des transactions
-                  const realBalance = totalRecharged - totalSpent;
+                  const realBalance = openingBalanceOf(selectedMember) + totalRecharged - totalSpent;
 
                   return (
                     <div className={`p-3 rounded-lg ${realBalance >= 0 ? 'bg-green-100' : 'bg-red-100'}`}>

@@ -8,7 +8,7 @@ import {
   collection, doc, setDoc, getDocs, writeBatch, serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../firebase';
-import { roundHours } from './format';
+import { openingBalanceOf, roundHours } from './format';
 import {
   collectionPath, CURRENT_SEASON_DOC, seasonBounds, seasonLabel
 } from './seasons';
@@ -74,6 +74,34 @@ export function computeTreasury({ orders = [], jobs = [], financialTransactions 
   return { ...totals, total: totals.cash + totals.account };
 }
 
+/**
+ * Solde réel de chaque membre, recalculé depuis l'historique des commandes de
+ * la saison, exactement comme l'affichent les écrans du bar.
+ *
+ * C'est cette valeur qui fait foi, et non le champ `balance` stocké sur le
+ * membre : les deux ont divergé au fil des corrections d'historique, et le
+ * recalcul est celui que les membres ont sous les yeux.
+ *
+ * On repart du solde d'ouverture de la saison, sinon un report serait perdu
+ * à chaque clôture successive.
+ */
+export function computeMemberBalances({ members = [], orders = [] }) {
+  const balances = new Map(members.map((m) => [m.id, openingBalanceOf(m)]));
+
+  orders.forEach((order) => {
+    if (!balances.has(order.memberId)) return;
+    const amount = order.amount || 0;
+    const current = balances.get(order.memberId);
+
+    if (order.type === 'order') balances.set(order.memberId, current - amount);
+    else if (order.type === 'recharge' || order.type === 'repayment') {
+      balances.set(order.memberId, current + amount);
+    }
+  });
+
+  return balances;
+}
+
 /** Solde d'un membre après application du choix de report. */
 export const carriedBalance = (balance, mode) => {
   const value = balance || 0;
@@ -92,16 +120,20 @@ export function buildRolloverPreview({
   members = [],
   bros = [],
   jobs = [],
+  orders = [],
   tripCounts = { expenses: 0, events: 0 }
 }) {
   const unpaidJobs = jobs.filter((j) => !j.isPaid);
   const carriedMembers = choices.members.keep ? members : [];
+  const balances = computeMemberBalances({ members, orders });
+  const carriedOf = (m) => carriedBalance(balances.get(m.id) || 0, choices.members.balances);
+
   const carriedDebt = carriedMembers.reduce((sum, m) => {
-    const balance = carriedBalance(m.balance, choices.members.balances);
+    const balance = carriedOf(m);
     return balance < 0 ? sum + balance : sum;
   }, 0);
   const carriedCredit = carriedMembers.reduce((sum, m) => {
-    const balance = carriedBalance(m.balance, choices.members.balances);
+    const balance = carriedOf(m);
     return balance > 0 ? sum + balance : sum;
   }, 0);
   const carriedStock = choices.products.keep && choices.products.stock === 'carry'
@@ -187,11 +219,17 @@ export async function executeRollover({
 
   // --- Membres -------------------------------------------------------------
   if (choices.members.keep) {
+    const balances = computeMemberBalances({ members, orders: data.orders });
+
     members.forEach((member) => {
       const { id, createdAt, updatedAt, ...rest } = member;
+      const carried = carriedBalance(balances.get(member.id) || 0, choices.members.balances);
       push(docRefIn(toSeasonId, 'members', id), {
         ...rest,
-        balance: carriedBalance(member.balance, choices.members.balances)
+        balance: carried,
+        // Point de départ du solde recalculé à l'écran : l'historique des
+        // commandes ne suit pas la saison, le report serait sinon invisible.
+        openingBalance: carried
       });
     });
   }

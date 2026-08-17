@@ -7,6 +7,7 @@ import HeaderBase from './components/Header';
 import SeasonBanner from './components/SeasonBanner';
 import AnnualReport from './AnnualReport';
 import CloseSeason from './CloseSeason';
+import RepairBalances from './RepairBalances';
 import { formatCurrency, formatDate } from './lib/format';
 import { buildAnnualReport, getCurrentPatroYear } from './lib/annualReport';
 import { seasonLabel, startYearOf } from './lib/seasons';
@@ -684,6 +685,13 @@ const SettingsDomain = ({
                 n'apparaissent pas dans la saison en cours.
               </p>
             )}
+
+            <button
+              onClick={() => navigateTo('settings-repair-balances')}
+              className="w-full mt-3 p-2 text-sm text-purple-600 border border-purple-200 rounded-lg active:scale-95 transition-transform"
+            >
+              Réparer les soldes reportés
+            </button>
           </div>
 
           <button
@@ -726,6 +734,21 @@ const SettingsDomain = ({
     );
   }
 
+
+  if (screen === 'settings-repair-balances') {
+    return (
+      <RepairBalances
+        Header={Header}
+        navigateTo={navigateTo}
+        activeSeasonId={activeSeasonId}
+        viewedSeasonId={viewedSeasonId}
+        seasons={seasons}
+        members={members}
+        orders={orders}
+        updateInFirebase={updateInFirebase}
+      />
+    );
+  }
 
   if (screen === 'settings-close-season') {
     return (

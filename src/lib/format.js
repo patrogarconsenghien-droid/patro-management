@@ -12,6 +12,17 @@ export const formatDate = (date) => new Date(date).toLocaleDateString('fr-FR');
  */
 export const roundHours = (value) => Math.round((value || 0) * 100) / 100;
 
+/**
+ * Solde d'ouverture d'un membre pour la saison en cours.
+ *
+ * L'app recalcule le solde affiché à partir des commandes de la saison
+ * (rechargements moins dépenses). L'historique n'étant pas repris d'une saison
+ * à l'autre, un solde reporté à la clôture serait invisible sans ce point de
+ * départ. Absent sur les membres d'une saison qui n'a pas été ouverte par une
+ * clôture : le solde repart alors de zéro, comme avant.
+ */
+export const openingBalanceOf = (member) => Number(member?.openingBalance) || 0;
+
 /** "3 commandes", "1 commande" — le pluriel français s'applique dès 2. */
 export const plural = (count, singular, pluralForm = `${singular}s`) =>
   `${count} ${count >= 2 ? pluralForm : singular}`;
