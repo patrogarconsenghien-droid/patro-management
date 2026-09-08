@@ -30,7 +30,7 @@ const PatroApp = () => {
   } = useSeasons();
 
   const {
-    isOnline, loading,
+    isOnline, loading, setLoading,
     members, setMembers,
     bros, setBros,
     products, setProducts,

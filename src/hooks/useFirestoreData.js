@@ -264,7 +264,9 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID) {
 
   return {
     isOnline,
-    loading,
+    // setLoading est utilisé par les écrans qui enchaînent plusieurs écritures
+    // (validation d'une commande) et pilotent eux-mêmes l'indicateur.
+    loading, setLoading,
     members, setMembers,
     bros, setBros,
     products, setProducts,
