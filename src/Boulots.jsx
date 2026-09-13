@@ -880,8 +880,9 @@ ${job.registeredBros.map(reg => {
                                 {(() => {
                                   const unavailableIds = new Set((job.unavailableBros || []).map(u => u.broId));
                                   const registeredIds = new Set(job.registeredBros.map(reg => reg.broId));
-                                  const unavailable = bros.filter(bro => unavailableIds.has(bro.id));
-                                  // À relancer : ni inscrit, ni « ne peut pas », ni déjà pris ce jour-là.
+                                  // À relancer : ceux de MA section (bros ne contient que les nôtres)
+                                  // qui n'ont pas répondu : ni inscrits, ni « ne peut pas », ni déjà
+                                  // pris ce jour-là. Ceux qui ont dit non ne sont pas affichés.
                                   const toAsk = bros.filter(bro =>
                                     !registeredIds.has(bro.id) &&
                                     !unavailableIds.has(bro.id) &&
@@ -894,20 +895,6 @@ ${job.registeredBros.map(reg => {
 
                                   return (
                                     <div className="space-y-2 mb-3">
-                                      {unavailable.length > 0 && (
-                                        <div>
-                                          <p className="text-xs font-medium text-gray-600 mb-1">
-                                            Ne peuvent pas ({unavailable.length}) :
-                                          </p>
-                                          <div className="flex flex-wrap gap-1.5">
-                                            {unavailable.map(bro => (
-                                              <span key={bro.id} className="px-2 py-0.5 rounded-full text-xs bg-gray-200 text-gray-600 line-through">
-                                                {bro.name}
-                                              </span>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
                                       {canManage && job.registeredBros.length < job.brosNeeded && toAsk.length > 0 && (
                                         <div>
                                           <p className="text-xs font-medium text-gray-600 mb-1">
