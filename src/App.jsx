@@ -1411,7 +1411,10 @@ const eligible = [
   }
 
   if (currentScreen === 'bar-order') {
-    if (!selectedMember) {
+    // La fenêtre de remboursement choisit le membre avant de s'ouvrir : la liste
+    // doit rester affichée tant qu'elle est ouverte. Sans ça, choisir le membre
+    // faisait quitter cette branche, et l'app tombait sur un écran vide.
+    if (!selectedMember || (showModal && modalType === 'repay')) {
       // Filtrer les membres selon la recherche
       const filteredMembers = members.filter(member =>
         member.name.toLowerCase().includes(memberSearch.toLowerCase())
