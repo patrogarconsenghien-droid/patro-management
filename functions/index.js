@@ -1,4 +1,5 @@
-const functions = require("firebase-functions");
+// API v1 explicite : depuis firebase-functions 6, l'import racine renvoie la v2.
+const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
 
 admin.initializeApp();

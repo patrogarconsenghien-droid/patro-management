@@ -2012,13 +2012,17 @@ ${job.registeredBros.map(reg => {
                       <div className="flex-1">
                         <div className="flex items-center space-x-2 mb-1">
                           <h3 className="font-medium">{job.broName}</h3>
+                          {/* Marquer payé : c'est l'animateur qui remet l'argent, lui seul confirme. */}
                           <button
                             onClick={() => {
+                              if (!canManage) return;
                               setSelectedJob(job);
                               setModalType('toggle-job-payment');
                               setShowModal(true);
                             }}
-                            className={`px-2 py-1 rounded-full text-xs font-medium active:scale-95 transition-transform ${job.isPaid
+                            disabled={!canManage}
+                            title={canManage ? undefined : 'Seul un animateur peut marquer un paiement'}
+                            className={`px-2 py-1 rounded-full text-xs font-medium active:scale-95 transition-transform disabled:active:scale-100 ${job.isPaid
                               ? 'bg-green-100 text-green-800'
                               : 'bg-orange-100 text-orange-800'
                               }`}
@@ -2055,7 +2059,7 @@ ${job.registeredBros.map(reg => {
 
         {/* Modal pour le paiement des boulots */}
         <Modal
-          isOpen={showModal && modalType === 'toggle-job-payment'}
+          isOpen={canManage && showModal && modalType === 'toggle-job-payment'}
           onClose={() => { setShowModal(false); setSelectedJob(null); setPaymentMethod(''); }}
           title={selectedJob?.isPaid ? "Annuler le paiement" : "Confirmer le paiement"}
         >
