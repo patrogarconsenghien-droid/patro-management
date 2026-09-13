@@ -128,6 +128,10 @@ for (const [treeName, prefix] of [['racine', []], ['saison', ['seasons', '2026-2
     updateDoc(ref(as(ANIME), 'bros', 'bro-kid'), { totalHours: 99, updatedAt: 'x' }));
   await ok(t('animateur crédite les heures d\'un Bro'),
     updateDoc(ref(as(ANIMATEUR), 'bros', 'bro-kid2'), { totalHours: 3, updatedAt: 'x' }));
+  await ok(t('animé change la photo de son propre Bro'),
+    updateDoc(ref(as(ANIME), 'bros', 'bro-kid'), { photoURL: 'https://x/y.jpg', updatedAt: 'x' }));
+  await ko(t('animé ne change pas la photo d\'un autre Bro'),
+    updateDoc(ref(as(ANIME), 'bros', 'bro-kid2'), { photoURL: 'https://x/y.jpg', updatedAt: 'x' }));
   await ko(t('animé ne renomme pas un Bro'),
     updateDoc(ref(as(ANIME), 'bros', 'bro-kid2'), { name: 'Autre', updatedAt: 'x' }));
   await ko(t('animé ne crée pas de Bro'), setDoc(ref(as(ANIME), 'bros', 'bro-new'), { name: 'Nouveau', totalHours: 0 }));

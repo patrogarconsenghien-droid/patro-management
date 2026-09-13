@@ -25,6 +25,7 @@ import { createStockHelpers } from './lib/stock';
 import { useFirestoreData } from './hooks/useFirestoreData';
 import { canManage as canManageAccount, isAdmin as isAdminAccount, useCurrentAccount } from './auth/account';
 import { DEFAULT_SECTION_ID } from './lib/seasons';
+import { useBroPhotos } from './hooks/useBroPhotos';
 
 // Écrans accessibles à un animé : l'accueil et les boulots programmés.
 const ANIME_SCREENS = ['home', 'boulots', 'boulots-scheduled', 'boulots-stats', 'boulots-history'];
@@ -84,6 +85,8 @@ const PatroApp = () => {
     saveToFirebase, updateInFirebase, deleteFromFirebase,
   } = useFirestoreData(viewedSeasonId, { manager: canManage, sectionId });
   const { updateStock, getStockStatus } = createStockHelpers({ products, updateInFirebase, saveToFirebase });
+  // Photo de chaque Bro : celle envoyée dans l'app, sinon celle du compte Google relié.
+  const broPhotos = useBroPhotos(bros);
   const Header = ({ title, onBack }) => (
     <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline}>
       {isViewingArchive && (
@@ -1124,6 +1127,8 @@ const eligible = [
         jobs={jobs}
         bros={bros}
         sectionId={sectionId}
+        broPhotos={broPhotos}
+        updateInFirebase={updateInFirebase}
         viewedSeasonId={viewedSeasonId}
         isViewingArchive={isViewingArchive}
         backToActiveSeason={backToActiveSeason}
@@ -2640,6 +2645,7 @@ const eligible = [
         sharedJobs={sharedJobs}
         sharedSeasonId={sharedSeasonId}
         sectionId={sectionId}
+        broPhotos={broPhotos}
       />
     );
   }

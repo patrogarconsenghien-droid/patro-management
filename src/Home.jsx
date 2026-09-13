@@ -5,6 +5,7 @@ import Modal from './components/Modal';
 import SeasonBanner from './components/SeasonBanner';
 import NotificationPrompt from './components/NotificationPrompt';
 import AnimatedAmount from './components/AnimatedAmount';
+import PhotoPicker from './components/PhotoPicker';
 import { formatDate, plural, roundHours } from './lib/format';
 import { seasonLabel } from './lib/seasons';
 
@@ -53,7 +54,9 @@ const Home = ({
   scheduledJobs = [],
   jobs = [],
   bros = [],
-  sectionId
+  sectionId,
+  broPhotos = {},
+  updateInFirebase
 }) => {
   const profile = account?.profile;
   const manager = canManage(profile);
@@ -116,11 +119,23 @@ const Home = ({
         )}
       </header>
 
-      <div className="px-5 pt-3 pb-5">
-        <p className="text-sm text-gray-600">Gestion Patro</p>
-        <h1 className="font-display text-4xl font-extrabold tracking-tight leading-none mt-1">
-          {greeting()}{firstName ? `, ${firstName}` : ''}
-        </h1>
+      <div className="px-5 pt-3 pb-5 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-sm text-gray-600">Gestion Patro</p>
+          <h1 className="font-display text-4xl font-extrabold tracking-tight leading-none mt-1">
+            {greeting()}{firstName ? `, ${firstName}` : ''}
+          </h1>
+        </div>
+        {myBroId && (
+          <PhotoPicker
+            name={bros.find((b) => b.id === myBroId)?.name || firstName}
+            photoURL={broPhotos[myBroId]}
+            sectionId={sectionId}
+            broId={myBroId}
+            onSaved={(url) => updateInFirebase('bros', myBroId, { photoURL: url })}
+            size="lg"
+          />
+        )}
       </div>
 
       <div className="px-4 mb-3 empty:hidden">

@@ -162,6 +162,9 @@ service cloud.firestore {
         // Valider un boulot ouvert crédite les heures d'un Bro de l'autre section.
         || (coll == 'bros' && isActive() && me().role in ['animateur', 'admin']
           && changedKeys().hasOnly(['totalHours', 'updatedAt']))
+        // Chacun change la photo de son propre Bro.
+        || (coll == 'bros' && isActiveIn(sec) && me().broId == resource.id
+          && changedKeys().hasOnly(['photoURL', 'updatedAt']))
       );
     }
 

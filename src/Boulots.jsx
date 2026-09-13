@@ -3,7 +3,8 @@ import NotificationPrompt from './components/NotificationPrompt';
 import {
   BarChart3, Calendar, CheckCircle, Clock, Euro, MapPin, Minus, Pencil, Phone, Plus, Settings, Trash2, User, Wrench
 } from 'lucide-react';
-import MemberAvatar from './components/MemberAvatar';
+import BroAvatar from './components/BroAvatar';
+import PhotoPicker from './components/PhotoPicker';
 import Modal from './components/Modal';
 import HeaderBase from './components/Header';
 import { formatCurrency, formatDate } from './lib/format';
@@ -35,6 +36,7 @@ const BoulotsDomain = ({
   sharedJobs = [],
   sharedSeasonId,
   sectionId,
+  broPhotos = {},
   newJob,
   setNewJob,
   paymentMethod,
@@ -802,7 +804,7 @@ ${job.registeredBros.map(reg => {
                                           title={busy ? 'Déjà inscrit sur un autre boulot ce jour-là' : undefined}
                                           className={`inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full text-sm ${busy ? 'bg-orange-50 ring-1 ring-orange-300' : 'bg-gray-100'}`}
                                         >
-                                          <MemberAvatar name={name} size="sm" />
+                                          <BroAvatar name={name} photoURL={broPhotos[registration.broId]} size="sm" />
                                           <span className="font-medium">{busy && '⚠️ '}{name}</span>
                                           {canManage && (
                                             <button
@@ -1675,8 +1677,9 @@ ${job.registeredBros.map(reg => {
                   onClick={() => navigateTo('bro-details', null, bro)}
                   className="w-full p-4 text-left hover:bg-gray-50 active:scale-95 transition-transform"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <BroAvatar name={bro.name} photoURL={broPhotos[bro.id]} size="lg" />
+                    <div className="flex-1 min-w-0">
                       <h3 className="font-medium">{bro.name}</h3>
                       <p className="text-sm text-gray-600">
                         Heures totales: <span className="font-semibold text-green-600">{bro.totalHours}h</span>
@@ -1697,7 +1700,15 @@ ${job.registeredBros.map(reg => {
                     </div>
                   </div>
                 </button>
-                <div className="px-4 pb-4 flex justify-end">
+                <div className="px-4 pb-4 flex items-center justify-between">
+                  <PhotoPicker
+                    name={bro.name}
+                    photoURL={broPhotos[bro.id]}
+                    sectionId={sectionId}
+                    broId={bro.id}
+                    onSaved={(url) => updateInFirebase('bros', bro.id, { photoURL: url })}
+                    compact
+                  />
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
@@ -2175,6 +2186,7 @@ ${job.registeredBros.map(reg => {
       const realEarnings = broJobs.reduce((sum, job) => sum + (job.total || 0), 0);
 
       return {
+        id: bro.id,
         name: bro.name,
         hours: bro.totalHours,
         earnings: realEarnings,
@@ -2243,6 +2255,7 @@ ${job.registeredBros.map(reg => {
                       }`}>
                       {index + 1}
                     </div>
+                    <BroAvatar name={bro.name} photoURL={broPhotos[bro.id]} />
                     <div>
                       <h4 className="font-medium">{bro.name}</h4>
                       <p className="text-sm text-gray-600">{bro.jobs} boulots effectués</p>
