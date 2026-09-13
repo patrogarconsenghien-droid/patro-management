@@ -134,6 +134,37 @@ for (const [treeName, prefix] of [['racine', []], ['saison', ['seasons', '2026-2
   await ok(t('animateur crée un Bro'), setDoc(ref(as(ANIMATEUR), 'bros', `bro-new-${treeName}`), { name: 'Nouveau', totalHours: 0 }));
 }
 
+// --- sections : garçons et filles ne se voient pas, l'admin voit tout ---
+const FILLE_ANIM = { uid: 'fanim1', email: 'fanim@patro.be' };
+const FILLE_KID = { uid: 'fkid1', email: 'fkid@patro.be', broId: 'fbro1' };
+await env.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'users', FILLE_ANIM.uid), { uid: FILLE_ANIM.uid, email: FILLE_ANIM.email, displayName: 'F', role: 'animateur', status: 'active', sectionId: 'filles', broId: null });
+  await setDoc(doc(db, 'users', FILLE_KID.uid), { uid: FILLE_KID.uid, email: FILLE_KID.email, displayName: 'FK', role: 'anime', status: 'active', sectionId: 'filles', broId: 'fbro1' });
+  await setDoc(doc(db, 'sections', 'filles', 'appState', 'current'), { seasonId: '2026-2027' });
+  await setDoc(doc(db, 'sections', 'filles', 'seasons', '2026-2027', 'members', 'fm1'), { name: 'Léa', balance: 0 });
+  await setDoc(doc(db, 'sections', 'filles', 'seasons', '2026-2027', 'scheduledJobs', 'fsj1'), { description: 'Filles', createdBy: FILLE_ANIM.uid, brosNeeded: 1, registeredBros: [], unavailableBros: [] });
+});
+const F = (db, ...segs) => doc(db, 'sections', 'filles', 'seasons', '2026-2027', ...segs);
+const FC = (db, name) => collection(db, 'sections', 'filles', 'seasons', '2026-2027', name);
+
+await ok('animatrice lit les membres des filles', getDocs(FC(as(FILLE_ANIM), 'members')));
+await ko('animatrice ne lit pas les membres des garçons (racine)', getDocs(collection(as(FILLE_ANIM), 'members')));
+await ko('animatrice ne lit pas les membres des garçons (saison)', getDocs(collection(as(FILLE_ANIM), 'seasons', '2026-2027', 'members')));
+await ko('animateur garçons ne lit pas les membres des filles', getDocs(FC(as(ANIMATEUR), 'members')));
+await ko('animateur garçons n\'écrit pas chez les filles', setDoc(F(as(ANIMATEUR), 'members', 'x'), { name: 'X', balance: 0 }));
+await ko('animé garçons ne lit pas les boulots des filles', getDocs(FC(as(ANIME), 'scheduledJobs')));
+await ok('animée filles répond à un boulot des filles', updateDoc(F(as(FILLE_KID), 'scheduledJobs', 'fsj1'), { registeredBros: [{ broId: 'fbro1' }], updatedAt: 'x' }));
+await ko('animée filles ne répond pas à un boulot des garçons', updateDoc(doc(as(FILLE_KID), 'scheduledJobs', 'sj-anim'), { registeredBros: [{ broId: 'fbro1' }], updatedAt: 'x' }));
+await ok('admin lit les membres des filles', getDocs(FC(as(ADMIN), 'members')));
+await ok('admin écrit chez les filles', setDoc(F(as(ADMIN), 'members', 'fm2'), { name: 'Zoé', balance: 0 }));
+await ok('animatrice lit la saison en cours des filles', getDoc(doc(as(FILLE_ANIM), 'sections', 'filles', 'appState', 'current')));
+await ko('animatrice ne lit pas la saison en cours des garçons', getDoc(doc(as(FILLE_ANIM), 'appState', 'current')));
+await ko('animatrice ne change pas la saison des filles', setDoc(doc(as(FILLE_ANIM), 'sections', 'filles', 'appState', 'current'), { seasonId: '2027-2028' }));
+await ok('admin change la saison des filles', setDoc(doc(as(ADMIN), 'sections', 'filles', 'appState', 'current'), { seasonId: '2026-2027' }));
+await ko('animateur garçons ne valide pas un compte dans la section filles', updateDoc(doc(as(ANIMATEUR), 'users', PENDING.uid), { status: 'active', role: 'anime', sectionId: 'filles', updatedAt: 'x' }));
+await ko('animatrice ne modifie pas un compte des garçons', updateDoc(doc(as(FILLE_ANIM), 'users', ANIME.uid), { status: 'disabled', updatedAt: 'x' }));
+
 // --- comptes ---
 const newUser = (u, extra) => setDoc(doc(as(u), 'users', u.uid), {
   uid: u.uid, email: u.email, displayName: 'X', photoURL: null,

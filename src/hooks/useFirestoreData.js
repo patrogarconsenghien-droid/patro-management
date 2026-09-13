@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { authReady, db } from '../firebase';
 import { addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
-import { collectionRef, docRef, LEGACY_SEASON_ID } from '../lib/seasons';
+import { collectionRef, docRef, DEFAULT_SECTION_ID, LEGACY_SEASON_ID } from '../lib/seasons';
 
 /**
  * Toutes les données de l'app pour une saison donnée. Changer de saison
  * rebranche l'ensemble des listeners sur d'autres documents : les deux saisons
  * n'ont rien en commun.
  */
-export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true } = {}) {
+export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, sectionId = DEFAULT_SECTION_ID } = {}) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState([]);
@@ -52,7 +52,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true }
   const saveToFirebase = async (collectionName, data) => {
     setLoading(true);
     try {
-      const created = await addDoc(collectionRef(db, seasonId, collectionName), {
+      const created = await addDoc(collectionRef(db, seasonId, collectionName, sectionId), {
         ...data,
         createdAt: serverTimestamp()
       });
@@ -70,7 +70,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true }
   const updateInFirebase = async (collectionName, id, data) => {
     setLoading(true);
     try {
-      await updateDoc(docRef(db, seasonId, collectionName, id), {
+      await updateDoc(docRef(db, seasonId, collectionName, id, sectionId), {
         ...data,
         updatedAt: serverTimestamp()
       });
@@ -87,7 +87,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true }
   const deleteFromFirebase = async (collectionName, id) => {
     setLoading(true);
     try {
-      await deleteDoc(docRef(db, seasonId, collectionName, id));
+      await deleteDoc(docRef(db, seasonId, collectionName, id, sectionId));
       console.log(`Document ${collectionName}/${id} supprimé`);
     } catch (error) {
       console.error('Erreur suppression Firebase:', error);
@@ -100,7 +100,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true }
 
   const loadFromFirebase = async (collectionName, setState) => {
     try {
-      const unsubscribe = onSnapshot(collectionRef(db, seasonId, collectionName), (snapshot) => {
+      const unsubscribe = onSnapshot(collectionRef(db, seasonId, collectionName, sectionId), (snapshot) => {
         if (!snapshot.metadata.hasPendingWrites) {
           const data = snapshot.docs.map(d => ({
             id: d.id,
@@ -116,7 +116,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true }
   };
 
   useEffect(() => {
-    console.log(`Chargement des données de la saison ${seasonId}...`);
+    console.log(`Chargement des données de la saison ${seasonId} (${sectionId})...`);
 
     window.history.replaceState({ screen: 'home' }, '', '#home');
 
@@ -266,7 +266,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true }
       if (unsubscribeSurpriseSettings) unsubscribeSurpriseSettings();
       if (unsubscribeTripSettings) unsubscribeTripSettings();
     };
-  }, [seasonId, manager]);
+  }, [seasonId, manager, sectionId]);
 
   return {
     isOnline,

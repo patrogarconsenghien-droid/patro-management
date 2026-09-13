@@ -1,6 +1,6 @@
 import React from 'react';
 import { Beer, Wrench, Coins, Plane, Settings, WifiOff, LogOut, Clock, MapPin } from 'lucide-react';
-import { canManage, firstNameOf } from './auth/account';
+import { SECTIONS, canManage, firstNameOf } from './auth/account';
 import Modal from './components/Modal';
 import SeasonBanner from './components/SeasonBanner';
 import NotificationPrompt from './components/NotificationPrompt';
@@ -52,7 +52,8 @@ const Home = ({
   account,
   scheduledJobs = [],
   jobs = [],
-  bros = []
+  bros = [],
+  sectionId
 }) => {
   const profile = account?.profile;
   const manager = canManage(profile);
@@ -101,7 +102,7 @@ const Home = ({
         <div className="flex items-center justify-between px-5 pt-4 pb-2">
           {viewedSeasonId ? (
             <span className="font-mono text-xs px-2.5 py-1 rounded-full bg-white ring-1 ring-gray-200 text-gray-600">
-              {seasonLabel(viewedSeasonId)}
+              {SECTIONS[sectionId] ? `${SECTIONS[sectionId]} · ` : ''}{seasonLabel(viewedSeasonId)}
             </span>
           ) : <span />}
           {isOnline ? (

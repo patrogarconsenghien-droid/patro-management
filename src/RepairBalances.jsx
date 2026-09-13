@@ -23,7 +23,8 @@ const RepairBalances = ({
   seasons = [],
   members = [],
   orders = [],
-  updateInFirebase
+  updateInFirebase,
+  sectionId
 }) => {
   const [previous, setPrevious] = useState(null);
   const [loadingPrevious, setLoadingPrevious] = useState(true);
@@ -43,8 +44,8 @@ const RepairBalances = ({
     (async () => {
       try {
         const [membersSnap, ordersSnap] = await Promise.all([
-          getDocs(collection(db, ...collectionPath(previousSeasonId, 'members'))),
-          getDocs(collection(db, ...collectionPath(previousSeasonId, 'orders')))
+          getDocs(collection(db, ...collectionPath(previousSeasonId, 'members', sectionId))),
+          getDocs(collection(db, ...collectionPath(previousSeasonId, 'orders', sectionId)))
         ]);
         if (cancelled) return;
         setPrevious({
@@ -59,7 +60,7 @@ const RepairBalances = ({
     })();
 
     return () => { cancelled = true; };
-  }, [previousSeasonId]);
+  }, [previousSeasonId, sectionId]);
 
   // Ce que les membres avaient réellement à la clôture, recalculé depuis
   // l'historique de la saison précédente.

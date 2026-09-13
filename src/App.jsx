@@ -23,7 +23,8 @@ import BalancePill from './components/BalancePill';
 import MemberAvatar from './components/MemberAvatar';
 import { createStockHelpers } from './lib/stock';
 import { useFirestoreData } from './hooks/useFirestoreData';
-import { canManage as canManageAccount, useCurrentAccount } from './auth/account';
+import { canManage as canManageAccount, isAdmin as isAdminAccount, useCurrentAccount } from './auth/account';
+import { DEFAULT_SECTION_ID } from './lib/seasons';
 
 // Écrans accessibles à un animé : l'accueil et les boulots programmés.
 const ANIME_SCREENS = ['home', 'boulots', 'boulots-scheduled', 'boulots-stats', 'boulots-history'];
@@ -46,16 +47,22 @@ const PatroApp = () => {
     root.classList.add('screen-enter');
   }, [currentScreen]);
 
-  // La saison consultée détermine sur quelles données toute l'app travaille.
-  const {
-    activeSeasonId, viewedSeasonId, seasons, isViewingArchive,
-    selectSeason, backToActiveSeason
-  } = useSeasons();
-
   // L'accès aux réglages dépend du rôle du compte connecté : plus de mot de
   // passe partagé, lisible par n'importe qui dans le code de l'app.
   const account = useCurrentAccount();
   const canManage = canManageAccount(account?.profile);
+
+  // La section : celle du compte. Un admin peut en changer.
+  const ownSectionId = account?.profile?.sectionId || DEFAULT_SECTION_ID;
+  const [adminSectionId, setAdminSectionId] = useState(ownSectionId);
+  const sectionId = isAdminAccount(account?.profile) ? adminSectionId : ownSectionId;
+  const selectSection = (id) => { if (isAdminAccount(account?.profile)) setAdminSectionId(id); };
+
+  // La saison consultée détermine sur quelles données toute l'app travaille.
+  const {
+    activeSeasonId, viewedSeasonId, seasons, isViewingArchive,
+    selectSeason, backToActiveSeason
+  } = useSeasons(sectionId);
 
   const {
     isOnline, loading, setLoading,
@@ -74,7 +81,7 @@ const PatroApp = () => {
     surpriseSettings, setSurpriseSettings,
     tripPasswordProtected, setTripPasswordProtected,
     saveToFirebase, updateInFirebase, deleteFromFirebase,
-  } = useFirestoreData(viewedSeasonId, { manager: canManage });
+  } = useFirestoreData(viewedSeasonId, { manager: canManage, sectionId });
   const { updateStock, getStockStatus } = createStockHelpers({ products, updateInFirebase, saveToFirebase });
   const Header = ({ title, onBack }) => (
     <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline}>
@@ -1115,6 +1122,7 @@ const eligible = [
         scheduledJobs={scheduledJobs}
         jobs={jobs}
         bros={bros}
+        sectionId={sectionId}
         viewedSeasonId={viewedSeasonId}
         isViewingArchive={isViewingArchive}
         backToActiveSeason={backToActiveSeason}
@@ -1428,6 +1436,8 @@ const eligible = [
         selectSeason={selectSeason}
         backToActiveSeason={backToActiveSeason}
         account={account}
+        sectionId={sectionId}
+        selectSection={selectSection}
       />
     );
   }
@@ -5092,6 +5102,7 @@ const eligible = [
         }}
         formatCurrency={formatCurrency}
         seasonId={viewedSeasonId}
+        sectionId={sectionId}
       />
     );
   }

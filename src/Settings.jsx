@@ -14,6 +14,7 @@ import DuplicateOrders from './DuplicateOrders';
 import { formatCurrency, formatDate } from './lib/format';
 import { buildAnnualReport, getCurrentPatroYear } from './lib/annualReport';
 import { seasonLabel, startYearOf } from './lib/seasons';
+import { SECTIONS, isAdmin as isAdminAccount2 } from './auth/account';
 import { toast } from './lib/feedback';
 import { downloadReport } from './lib/reportExport';
 
@@ -72,6 +73,8 @@ const SettingsDomain = ({
   selectSeason,
   backToActiveSeason,
   account,
+  sectionId,
+  selectSection,
 }) => {
   const Header = ({ title, onBack }) => (
     <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline}>
@@ -713,12 +716,30 @@ const SettingsDomain = ({
             <div className="flex items-center space-x-3">
               <History className="text-purple-500" size={24} />
               <div className="text-left">
-                <h3 className="font-semibold">Saison</h3>
+                <h3 className="font-semibold">Section {SECTIONS[sectionId] || sectionId} · Saison</h3>
                 <p className="text-gray-600 text-sm">
                   En cours : {seasonLabel(activeSeasonId)}
                 </p>
               </div>
             </div>
+
+            {/* Un admin bascule entre les sections ; les autres sont dans la leur. */}
+            {isAdminAccount2(account?.profile) && (
+              <div className="grid grid-cols-2 gap-2 mt-3">
+                {Object.entries(SECTIONS).map(([id, label]) => (
+                  <button
+                    key={id}
+                    onClick={() => selectSection(id)}
+                    className={`p-2 rounded-lg border text-sm font-medium active:scale-95 transition-transform ${sectionId === id
+                      ? 'bg-purple-500 text-white border-purple-500'
+                      : 'bg-white text-gray-700 border-gray-200'
+                      }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {seasons.length > 1 && (
               <select
@@ -804,6 +825,7 @@ const SettingsDomain = ({
         account={account}
         bros={bros}
         saveToFirebase={saveToFirebase}
+        sectionId={sectionId}
       />
     );
   }
@@ -843,6 +865,7 @@ const SettingsDomain = ({
         members={members}
         orders={orders}
         updateInFirebase={updateInFirebase}
+        sectionId={sectionId}
       />
     );
   }
@@ -865,6 +888,7 @@ const SettingsDomain = ({
         surpriseSettings={surpriseSettings}
         popularProducts={popularProducts}
         financialGoal={financialGoal}
+        sectionId={sectionId}
       />
     );
   }

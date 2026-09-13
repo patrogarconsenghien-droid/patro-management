@@ -26,7 +26,7 @@ const initialsOf = (name) =>
  * peut pas nommer d'admin ni modifier un admin. Personne ne modifie son propre
  * compte, pour ne jamais se retirer l'accès par erreur.
  */
-const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase }) => {
+const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase, sectionId }) => {
   const [users, setUsers] = useState([]);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
@@ -199,6 +199,11 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase }) =>
                 </button>
               )}
 
+              {target.sectionId && target.sectionId !== sectionId ? (
+                <p className="text-xs text-gray-500">
+                  Ses Bro sont dans la section {SECTIONS[target.sectionId]} : passe sur cette section pour le relier.
+                </p>
+              ) : (
               <label className="block text-xs text-gray-600">
                 Relié au Bro
                 <select
@@ -221,8 +226,9 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase }) =>
                     })}
                 </select>
               </label>
+              )}
 
-              {!target.broId && !hasMatchingBro && !broLocked && target.displayName && (
+              {!target.broId && !hasMatchingBro && !broLocked && target.displayName && (!target.sectionId || target.sectionId === sectionId) && (
                 <button
                   onClick={() => createBroFor(target)}
                   className="text-xs text-blue-600 underline"

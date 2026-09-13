@@ -5,6 +5,7 @@ const admin = require("firebase-admin");
 admin.initializeApp();
 
 const APP_URL = "https://patro-management.vercel.app";
+const DEFAULT_SECTION = "garcons";
 
 // Codes d'erreur qui désignent un jeton mort (app désinstallée, notifications
 // révoquées...). Seuls ceux-là entraînent la suppression du jeton : une erreur
@@ -14,12 +15,15 @@ const DEAD_TOKEN_CODES = new Set([
   "messaging/invalid-registration-token",
 ]);
 
+const sectionPrefix = (sectionId) =>
+  sectionId === DEFAULT_SECTION ? "" : `sections/${sectionId}/`;
+
 /**
- * Saison en cours, telle que la connaît l'app. Sert à ne pas notifier les Bro
- * quand on corrige un vieux boulot dans une saison archivée.
+ * Saison en cours d'une section, telle que la connaît l'app. Sert à ne pas
+ * notifier les Bro quand on corrige un vieux boulot dans une saison archivée.
  */
-async function getActiveSeasonId() {
-  const snap = await admin.firestore().doc("appState/current").get();
+async function getActiveSeasonId(sectionId) {
+  const snap = await admin.firestore().doc(`${sectionPrefix(sectionId)}appState/current`).get();
   return snap.exists ? snap.data().seasonId : null;
 }
 
@@ -34,13 +38,37 @@ function formatDateFr(dateString) {
   });
 }
 
-async function notifyNewJob(newJob, jobId) {
+/**
+ * Jetons des appareils à prévenir pour une section : ceux des comptes de la
+ * section (et des admins), plus, pour les garçons, les jetons enregistrés
+ * avant les comptes, qui n'ont pas d'identifiant.
+ */
+async function tokensForSection(sectionId) {
+  const db = admin.firestore();
+  const [tokensSnap, usersSnap] = await Promise.all([
+    db.collection("fcmTokens").get(),
+    db.collection("users").where("status", "==", "active").get(),
+  ]);
+
+  const allowedUids = new Set();
+  usersSnap.forEach((doc) => {
+    const user = doc.data();
+    if (user.role === "admin" || user.sectionId === sectionId) allowedUids.add(doc.id);
+  });
+
+  return tokensSnap.docs
+    .map((doc) => doc.data())
+    .filter((data) => data.token)
+    .filter((data) => (data.uid ? allowedUids.has(data.uid) : sectionId === DEFAULT_SECTION))
+    .map((data) => data.token);
+}
+
+async function notifyNewJob(newJob, jobId, sectionId) {
   try {
-    const tokensSnapshot = await admin.firestore().collection("fcmTokens").get();
-    const tokens = tokensSnapshot.docs.map((doc) => doc.data().token).filter(Boolean);
+    const tokens = await tokensForSection(sectionId);
 
     if (tokens.length === 0) {
-      console.log("Aucun appareil inscrit aux notifications.");
+      console.log(`Aucun appareil à prévenir pour la section ${sectionId}.`);
       return;
     }
 
@@ -54,6 +82,7 @@ async function notifyNewJob(newJob, jobId) {
     const data = {
       type: "new_job",
       jobId: String(jobId),
+      sectionId: String(sectionId),
       title: "Nouveau boulot disponible",
       body: date ? `${description} · ${date}` : description,
       link: `${APP_URL}/#boulots-scheduled`,
@@ -87,7 +116,7 @@ async function notifyNewJob(newJob, jobId) {
     );
 
     console.log(
-      `Boulot ${jobId} : ${sent}/${tokens.length} notifications envoyées, ` +
+      `Boulot ${jobId} (${sectionId}) : ${sent}/${tokens.length} notifications envoyées, ` +
       `${deadTokens.length} jeton(s) mort(s) supprimé(s).`
     );
   } catch (error) {
@@ -95,30 +124,40 @@ async function notifyNewJob(newJob, jobId) {
   }
 }
 
-// Boulots de la saison historique, restée aux collections racines.
+// On ne notifie que si le boulot est créé dans la saison en cours de sa
+// section : corriger un boulot dans une saison archivée ne doit pas réveiller
+// tous les Bro.
+async function notifyIfActiveSeason(snap, context, sectionId) {
+  const activeSeasonId = await getActiveSeasonId(sectionId);
+
+  if (activeSeasonId && context.params.seasonId !== activeSeasonId) {
+    console.log(
+      `Boulot créé dans la saison ${context.params.seasonId} (${sectionId}), ` +
+      `saison en cours ${activeSeasonId} : pas de notification.`
+    );
+    return;
+  }
+
+  return notifyNewJob(snap.data(), context.params.jobId, sectionId);
+}
+
+// Garçons : saison historique, restée aux collections racines.
 exports.sendJobNotifications = functions
   .region("europe-west1")
   .firestore
   .document("scheduledJobs/{jobId}")
-  .onCreate((snap, context) => notifyNewJob(snap.data(), context.params.jobId));
+  .onCreate((snap, context) => notifyNewJob(snap.data(), context.params.jobId, DEFAULT_SECTION));
 
-// Boulots des saisons suivantes. On ne notifie que si le boulot est créé dans
-// la saison en cours : corriger un boulot dans une saison archivée ne doit pas
-// réveiller tous les Bro.
+// Garçons : saisons suivantes.
 exports.sendJobNotificationsSeason = functions
   .region("europe-west1")
   .firestore
   .document("seasons/{seasonId}/scheduledJobs/{jobId}")
-  .onCreate(async (snap, context) => {
-    const activeSeasonId = await getActiveSeasonId();
+  .onCreate((snap, context) => notifyIfActiveSeason(snap, context, DEFAULT_SECTION));
 
-    if (activeSeasonId && context.params.seasonId !== activeSeasonId) {
-      console.log(
-        `Boulot créé dans la saison ${context.params.seasonId}, ` +
-        `saison en cours ${activeSeasonId} : pas de notification.`
-      );
-      return;
-    }
-
-    return notifyNewJob(snap.data(), context.params.jobId);
-  });
+// Autres sections (filles).
+exports.sendJobNotificationsSection = functions
+  .region("europe-west1")
+  .firestore
+  .document("sections/{sectionId}/seasons/{seasonId}/scheduledJobs/{jobId}")
+  .onCreate((snap, context) => notifyIfActiveSeason(snap, context, context.params.sectionId));

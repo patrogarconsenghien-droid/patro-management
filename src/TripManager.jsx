@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { authReady, db } from './firebase';
 import { addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, getDocs, query, limit } from 'firebase/firestore';
-import { collectionRef, docRef, LEGACY_SEASON_ID } from './lib/seasons';
+import { collectionRef, docRef, DEFAULT_SECTION_ID, LEGACY_SEASON_ID } from './lib/seasons';
 
 /**
  * 🗺️ COMPOSANT TRIPMANAGER
@@ -89,7 +89,8 @@ const TripManager = ({
   bros = [], 
   financialData = { transactions: [], orders: [], jobs: [] },
   formatCurrency = (amount) => `${amount.toFixed(2)}€`,
-  seasonId = LEGACY_SEASON_ID
+  seasonId = LEGACY_SEASON_ID,
+  sectionId = DEFAULT_SECTION_ID
 }) => {
   
   // ============================================
@@ -152,7 +153,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
 
     // Écouter les dépenses
     const unsubExpenses = onSnapshot(
-      collectionRef(db, seasonId, 'tripExpenses'),
+      collectionRef(db, seasonId, 'tripExpenses', sectionId),
       (snapshot) => {
         const expenses = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -165,7 +166,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
     
     // Écouter les événements
     const unsubEvents = onSnapshot(
-      collectionRef(db, seasonId, 'tripEvents'),
+      collectionRef(db, seasonId, 'tripEvents', sectionId),
       (snapshot) => {
         const events = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -178,7 +179,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
     
     // Écouter les paramètres voyage
     const unsubSettings = onSnapshot(
-      collectionRef(db, seasonId, 'tripSettings'),
+      collectionRef(db, seasonId, 'tripSettings', sectionId),
       (snapshot) => {
         if (!snapshot.empty) {
           const settings = snapshot.docs[0].data();
@@ -203,7 +204,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
       cancelled = true;
       subscriptions.forEach((stop) => stop());
     };
-  }, [seasonId]);
+  }, [seasonId, sectionId]);
   
   // ============================================
   // 💰 CALCULS BUDGET
@@ -272,7 +273,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
     }
     
     try {
-      await addDoc(collectionRef(db, seasonId, 'tripExpenses'), {
+      await addDoc(collectionRef(db, seasonId, 'tripExpenses', sectionId), {
         ...newExpense,
         amount: parseFloat(newExpense.amount),
         timestamp: serverTimestamp()
@@ -297,7 +298,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
     if (!confirm('Supprimer cette dépense ?')) return;
     
     try {
-      await deleteDoc(docRef(db, seasonId, 'tripExpenses', expenseId));
+      await deleteDoc(docRef(db, seasonId, 'tripExpenses', expenseId, sectionId));
       alert('✅ Dépense supprimée !');
     } catch (error) {
       console.error('❌ Erreur suppression:', error);
@@ -312,7 +313,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
   }
   
   try {
-    await addDoc(collectionRef(db, seasonId, 'tripEvents'), {
+    await addDoc(collectionRef(db, seasonId, 'tripEvents', sectionId), {
       ...newEvent,
       time: newEvent.timeStart, // Pour compatibilité avec anciens événements
       price: parseFloat(newEvent.price) || 0,
@@ -339,7 +340,7 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
     if (!confirm('Supprimer cet événement ?')) return;
     
     try {
-      await deleteDoc(docRef(db, seasonId, 'tripEvents', eventId));
+      await deleteDoc(docRef(db, seasonId, 'tripEvents', eventId, sectionId));
       alert('✅ Événement supprimé !');
     } catch (error) {
       console.error('❌ Erreur suppression:', error);
@@ -350,16 +351,16 @@ const [showEventModal, setShowEventModal] = useState(false); // Modal d'ajout d'
   const saveTripSettings = async (settings) => {
     try {
       // Chercher si des paramètres existent déjà
-      const q = query(collectionRef(db, seasonId, 'tripSettings'), limit(1));
+      const q = query(collectionRef(db, seasonId, 'tripSettings', sectionId), limit(1));
       const snapshot = await getDocs(q);
       
       if (snapshot.empty) {
         // Créer
-        await addDoc(collectionRef(db, seasonId, 'tripSettings'), settings);
+        await addDoc(collectionRef(db, seasonId, 'tripSettings', sectionId), settings);
       } else {
         // Mettre à jour
         const docId = snapshot.docs[0].id;
-        await updateDoc(docRef(db, seasonId, 'tripSettings', docId), settings);
+        await updateDoc(docRef(db, seasonId, 'tripSettings', docId, sectionId), settings);
       }
       
       alert('✅ Paramètres sauvegardés !');
@@ -513,7 +514,7 @@ const EventModal = ({
     
     try {
       // Ajouter l'événement dans Firebase
-      await addDoc(collectionRef(db, seasonId, 'tripEvents'), {
+      await addDoc(collectionRef(db, seasonId, 'tripEvents', sectionId), {
         ...localEvent,
         time: localEvent.timeStart, // Pour compatibilité avec anciens événements
         price: parseFloat(localEvent.price) || 0,

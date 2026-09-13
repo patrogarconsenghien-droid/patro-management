@@ -1,27 +1,27 @@
-// Découpage des données par saison.
+// Découpage des données par section et par saison.
 //
-// Chaque saison vit dans ses propres sous-collections :
-//   seasons/{seasonId}/members, seasons/{seasonId}/orders, ...
-// Deux saisons ne partagent donc aucun document : modifier une saison close
-// n'a aucun effet sur la saison en cours, et inversement.
+// Deux sections, garçons et filles, totalement séparées. Dans chaque section,
+// chaque saison vit dans ses propres sous-collections :
+//   garçons : seasons/{seasonId}/members, seasons/{seasonId}/orders, ...
+//   filles  : sections/filles/seasons/{seasonId}/members, ...
+// Deux saisons, ou deux sections, ne partagent donc aucun document.
 //
 // EXCEPTION HISTORIQUE : les données antérieures au découpage vivent encore
 // aux collections racines ('members', 'orders', ...). Plutôt que de déplacer
-// des milliers de documents de production, la saison LEGACY_SEASON_ID pointe
-// directement sur ces collections racines. C'est transparent pour le reste de
-// l'app : tout passe par collectionRef() / docRef().
+// des milliers de documents de production, la saison LEGACY_SEASON_ID des
+// garçons pointe directement sur ces collections racines. C'est transparent
+// pour le reste de l'app : tout passe par collectionRef() / docRef().
 import { collection, doc } from 'firebase/firestore';
 import { SEASON_START_MONTH } from './annualReport';
 
-/** Saison dont les données sont restées aux collections racines. */
+export const DEFAULT_SECTION_ID = 'garcons';
+
+/** Saison des garçons dont les données sont restées aux collections racines. */
 export const LEGACY_SEASON_ID = '2025-2026';
 
-/** Document qui désigne la saison en cours, commun à tous les appareils. */
-export const CURRENT_SEASON_DOC = ['appState', 'current'];
-
 /**
- * Collections qui ne dépendent pas d'une saison : les tokens de notification
- * identifient des appareils, pas une année de fonctionnement.
+ * Collections qui ne dépendent ni d'une section ni d'une saison : les jetons
+ * de notification identifient des appareils, pas une année de fonctionnement.
  */
 export const GLOBAL_COLLECTIONS = ['fcmTokens'];
 
@@ -67,30 +67,40 @@ export const seasonIdAt = (date = new Date()) =>
 /** Saison qui suit une saison donnée. */
 export const nextSeasonId = (seasonId) => seasonIdFor(startYearOf(seasonId) + 1);
 
-const isLegacy = (seasonId) => seasonId === LEGACY_SEASON_ID;
+const isLegacy = (sectionId, seasonId) =>
+  sectionId === DEFAULT_SECTION_ID && seasonId === LEGACY_SEASON_ID;
+
+/** Préfixe de chemin d'une section : rien pour les garçons (historique). */
+export const sectionPrefix = (sectionId = DEFAULT_SECTION_ID) =>
+  sectionId === DEFAULT_SECTION_ID ? [] : ['sections', sectionId];
+
+/** Document qui désigne la saison en cours d'une section, commun à tous les appareils. */
+export const currentSeasonDocPath = (sectionId = DEFAULT_SECTION_ID) =>
+  [...sectionPrefix(sectionId), 'appState', 'current'];
+
+/** Collection des fiches de saison d'une section. */
+export const seasonsCollectionPath = (sectionId = DEFAULT_SECTION_ID) =>
+  [...sectionPrefix(sectionId), 'seasons'];
+
+/** Fiche d'une saison. */
+export const seasonDocPath = (sectionId, seasonId) =>
+  [...seasonsCollectionPath(sectionId), seasonId];
 
 /**
- * Référence de collection pour une saison. Unique endroit du code qui connaît
- * la structure des chemins.
+ * Chemin sous forme de segments d'une collection de saison. Unique endroit du
+ * code qui connaît la structure des chemins.
  */
-export const collectionRef = (db, seasonId, name) => {
-  if (GLOBAL_COLLECTIONS.includes(name)) return collection(db, name);
-  return isLegacy(seasonId)
-    ? collection(db, name)
-    : collection(db, 'seasons', seasonId, name);
+export const collectionPath = (seasonId, name, sectionId = DEFAULT_SECTION_ID) => {
+  if (GLOBAL_COLLECTIONS.includes(name)) return [name];
+  return isLegacy(sectionId, seasonId)
+    ? [name]
+    : [...sectionPrefix(sectionId), 'seasons', seasonId, name];
 };
 
-/** Référence de document pour une saison. */
-export const docRef = (db, seasonId, name, id) => {
-  if (GLOBAL_COLLECTIONS.includes(name)) return doc(db, name, id);
-  return isLegacy(seasonId)
-    ? doc(db, name, id)
-    : doc(db, 'seasons', seasonId, name, id);
-};
+/** Référence de collection pour une saison d'une section. */
+export const collectionRef = (db, seasonId, name, sectionId = DEFAULT_SECTION_ID) =>
+  collection(db, ...collectionPath(seasonId, name, sectionId));
 
-/**
- * Chemin sous forme de segments, pour les écritures par lots qui ne peuvent
- * pas passer par collectionRef (création de la saison suivante).
- */
-export const collectionPath = (seasonId, name) =>
-  isLegacy(seasonId) ? [name] : ['seasons', seasonId, name];
+/** Référence de document pour une saison d'une section. */
+export const docRef = (db, seasonId, name, id, sectionId = DEFAULT_SECTION_ID) =>
+  doc(db, ...collectionPath(seasonId, name, sectionId), id);

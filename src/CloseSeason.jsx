@@ -69,7 +69,8 @@ const CloseSeason = ({
   hourlyRate,
   surpriseSettings,
   popularProducts,
-  financialGoal
+  financialGoal,
+  sectionId
 }) => {
   const [choices, setChoices] = useState(defaultChoices);
   const [tripCounts, setTripCounts] = useState({ expenses: 0, events: 0 });
@@ -94,8 +95,8 @@ const CloseSeason = ({
   }, [treasury.cash, treasury.account]);
 
   useEffect(() => {
-    fetchTripCounts(activeSeasonId).then(setTripCounts);
-  }, [activeSeasonId]);
+    fetchTripCounts(activeSeasonId, sectionId).then(setTripCounts);
+  }, [activeSeasonId, sectionId]);
 
   const preview = useMemo(
     () => buildRolloverPreview({ choices, products, members, bros, jobs, orders, tripCounts }),
@@ -125,6 +126,7 @@ const CloseSeason = ({
       const result = await executeRollover({
         fromSeasonId: activeSeasonId,
         toSeasonId,
+        sectionId,
         choices,
         data: {
           products,

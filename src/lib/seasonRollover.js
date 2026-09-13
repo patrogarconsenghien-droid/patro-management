@@ -10,7 +10,7 @@ import {
 import { db } from '../firebase';
 import { openingBalanceOf, roundHours } from './format';
 import {
-  collectionPath, CURRENT_SEASON_DOC, seasonBounds, seasonLabel
+  collectionPath, DEFAULT_SECTION_ID, currentSeasonDocPath, seasonBounds, seasonDocPath, seasonLabel
 } from './seasons';
 
 // Firestore plafonne à 500 opérations par lot ; on garde de la marge.
@@ -33,8 +33,8 @@ export const defaultChoices = {
   trip: 'reset'                                    // reset | settings | full
 };
 
-const docRefIn = (seasonId, name, id) => {
-  const path = collectionPath(seasonId, name);
+const docRefInSection = (seasonId, name, id, sectionId = DEFAULT_SECTION_ID) => {
+  const path = collectionPath(seasonId, name, sectionId);
   return id ? doc(db, ...path, id) : doc(collection(db, ...path));
 };
 
@@ -160,11 +160,11 @@ export function buildRolloverPreview({
 }
 
 /** Compte les documents Voyage de la saison, pour l'aperçu. */
-export async function fetchTripCounts(seasonId) {
+export async function fetchTripCounts(seasonId, sectionId = DEFAULT_SECTION_ID) {
   try {
     const [expenses, events] = await Promise.all([
-      getDocs(collection(db, ...collectionPath(seasonId, 'tripExpenses'))),
-      getDocs(collection(db, ...collectionPath(seasonId, 'tripEvents')))
+      getDocs(collection(db, ...collectionPath(seasonId, 'tripExpenses', sectionId))),
+      getDocs(collection(db, ...collectionPath(seasonId, 'tripEvents', sectionId)))
     ]);
     return { expenses: expenses.size, events: events.size };
   } catch (error) {
@@ -186,8 +186,11 @@ export async function executeRollover({
   choices,
   data,
   opening,
+  sectionId = DEFAULT_SECTION_ID,
   onProgress = () => {}
 }) {
+  // Toutes les écritures visent la section de la saison clôturée.
+  const docRefIn = (seasonId, name, id) => docRefInSection(seasonId, name, id, sectionId);
   const { products = [], members = [], bros = [], jobs = [],
           barSettings, surpriseSettings, popularProducts, financialGoal } = data;
 
@@ -196,7 +199,7 @@ export async function executeRollover({
 
   // --- Marque la nouvelle saison comme en cours de création -----------------
   const bounds = seasonBounds(toSeasonId);
-  await setDoc(doc(db, 'seasons', toSeasonId), {
+  await setDoc(doc(db, ...seasonDocPath(sectionId, toSeasonId)), {
     label: seasonLabel(toSeasonId),
     status: 'creating',
     startDate: bounds.start.toISOString(),
@@ -316,7 +319,7 @@ export async function executeRollover({
   // --- Voyage --------------------------------------------------------------
   if (choices.trip !== 'reset') {
     const settingsSnap = await getDocs(
-      collection(db, ...collectionPath(fromSeasonId, 'tripSettings'))
+      collection(db, ...collectionPath(fromSeasonId, 'tripSettings', sectionId))
     );
     settingsSnap.docs.forEach((d) => {
       const { createdAt, updatedAt, ...rest } = d.data();
@@ -325,8 +328,8 @@ export async function executeRollover({
 
     if (choices.trip === 'full') {
       const [expenses, events] = await Promise.all([
-        getDocs(collection(db, ...collectionPath(fromSeasonId, 'tripExpenses'))),
-        getDocs(collection(db, ...collectionPath(fromSeasonId, 'tripEvents')))
+        getDocs(collection(db, ...collectionPath(fromSeasonId, 'tripExpenses', sectionId))),
+        getDocs(collection(db, ...collectionPath(fromSeasonId, 'tripEvents', sectionId)))
       ]);
       expenses.docs.forEach((d) => push(docRefIn(toSeasonId, 'tripExpenses', d.id), d.data()));
       events.docs.forEach((d) => push(docRefIn(toSeasonId, 'tripEvents', d.id), d.data()));
@@ -343,7 +346,7 @@ export async function executeRollover({
 
   // --- Clôture de l'ancienne saison et bascule -----------------------------
   await setDoc(
-    doc(db, 'seasons', fromSeasonId),
+    doc(db, ...seasonDocPath(sectionId, fromSeasonId)),
     {
       label: seasonLabel(fromSeasonId),
       status: 'closed',
@@ -354,10 +357,10 @@ export async function executeRollover({
     { merge: true }
   );
 
-  await setDoc(doc(db, 'seasons', toSeasonId), { status: 'active' }, { merge: true });
+  await setDoc(doc(db, ...seasonDocPath(sectionId, toSeasonId)), { status: 'active' }, { merge: true });
 
   // En dernier : c'est ce document qui fait basculer tous les appareils.
-  await setDoc(doc(db, ...CURRENT_SEASON_DOC), {
+  await setDoc(doc(db, ...currentSeasonDocPath(sectionId)), {
     seasonId: toSeasonId,
     updatedAt: serverTimestamp()
   });

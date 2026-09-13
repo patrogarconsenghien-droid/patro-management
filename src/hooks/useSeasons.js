@@ -1,17 +1,26 @@
 import { useEffect, useState } from 'react';
 import { doc, onSnapshot, collection } from 'firebase/firestore';
 import { authReady, db } from '../firebase';
-import { CURRENT_SEASON_DOC, LEGACY_SEASON_ID, seasonLabel } from '../lib/seasons';
+import {
+  DEFAULT_SECTION_ID, LEGACY_SEASON_ID, currentSeasonDocPath, seasonIdAt,
+  seasonLabel, seasonsCollectionPath
+} from '../lib/seasons';
+
+// Saison par défaut d'une section qui n'a pas encore de fiche « en cours » :
+// la saison historique pour les garçons (collections racines), la saison
+// calendaire pour une section qui démarre à vide.
+const defaultSeasonFor = (sectionId) =>
+  sectionId === DEFAULT_SECTION_ID ? LEGACY_SEASON_ID : seasonIdAt();
 
 /**
- * Saison en cours (partagée par tous les appareils) et saison consultée
- * (locale à l'appareil, remise sur la saison en cours à chaque ouverture de
- * l'app : on ne veut pas rouvrir l'app dans une saison archivée sans le
- * vouloir).
+ * Saison en cours d'une section (partagée par tous les appareils) et saison
+ * consultée (locale à l'appareil, remise sur la saison en cours à chaque
+ * ouverture de l'app : on ne veut pas rouvrir l'app dans une saison archivée
+ * sans le vouloir).
  */
-export function useSeasons() {
-  const [activeSeasonId, setActiveSeasonId] = useState(LEGACY_SEASON_ID);
-  const [viewedSeasonId, setViewedSeasonId] = useState(LEGACY_SEASON_ID);
+export function useSeasons(sectionId = DEFAULT_SECTION_ID) {
+  const [activeSeasonId, setActiveSeasonId] = useState(() => defaultSeasonFor(sectionId));
+  const [viewedSeasonId, setViewedSeasonId] = useState(() => defaultSeasonFor(sectionId));
   const [seasons, setSeasons] = useState([]);
   const [seasonsReady, setSeasonsReady] = useState(false);
 
@@ -24,28 +33,34 @@ export function useSeasons() {
     let unsubscribeCurrent = null;
     let unsubscribeSeasons = null;
 
+    // Changement de section : on repart de la saison par défaut de celle-ci.
+    setActiveSeasonId(defaultSeasonFor(sectionId));
+    setSeasons([]);
+    setSeasonsReady(false);
+    setPinned(false);
+
     const subscribe = async () => {
       // Même raison que dans useFirestoreData : les règles exigent une session.
       await authReady;
       if (cancelled) return;
 
       unsubscribeCurrent = onSnapshot(
-        doc(db, ...CURRENT_SEASON_DOC),
+        doc(db, ...currentSeasonDocPath(sectionId)),
         (snapshot) => {
-          const id = snapshot.exists() ? snapshot.data().seasonId : LEGACY_SEASON_ID;
-          setActiveSeasonId(id || LEGACY_SEASON_ID);
+          const id = snapshot.exists() ? snapshot.data().seasonId : null;
+          setActiveSeasonId(id || defaultSeasonFor(sectionId));
           setSeasonsReady(true);
         },
         (error) => {
           // Document absent ou règles restrictives : on reste sur la saison
-          // historique, qui pointe sur les collections racines.
+          // par défaut de la section.
           console.error('Lecture de la saison en cours impossible:', error);
           setSeasonsReady(true);
         }
       );
 
       unsubscribeSeasons = onSnapshot(
-        collection(db, 'seasons'),
+        collection(db, ...seasonsCollectionPath(sectionId)),
         (snapshot) => {
           const list = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
           setSeasons(list.sort((a, b) => b.id.localeCompare(a.id)));
@@ -66,7 +81,7 @@ export function useSeasons() {
       if (unsubscribeCurrent) unsubscribeCurrent();
       if (unsubscribeSeasons) unsubscribeSeasons();
     };
-  }, []);
+  }, [sectionId]);
 
   useEffect(() => {
     if (!pinned) setViewedSeasonId(activeSeasonId);
@@ -82,11 +97,11 @@ export function useSeasons() {
     setViewedSeasonId(activeSeasonId);
   };
 
-  // La saison historique n'a pas de document tant qu'aucune clôture n'a eu
-  // lieu : on l'ajoute pour que le sélecteur ne soit jamais vide.
-  const knownSeasons = seasons.some((s) => s.id === LEGACY_SEASON_ID)
+  // La saison en cours n'a pas toujours de fiche (saison historique, ou
+  // section qui démarre) : on l'ajoute pour que le sélecteur ne soit jamais vide.
+  const knownSeasons = seasons.some((s) => s.id === activeSeasonId)
     ? seasons
-    : [...seasons, { id: LEGACY_SEASON_ID, label: seasonLabel(LEGACY_SEASON_ID), status: 'legacy' }]
+    : [...seasons, { id: activeSeasonId, label: seasonLabel(activeSeasonId), status: 'active' }]
         .sort((a, b) => b.id.localeCompare(a.id));
 
   return {
