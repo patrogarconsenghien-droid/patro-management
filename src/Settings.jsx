@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Beer, BarChart3, Bell, Clock, Download, FileText, History, Plane, Plus, Settings, Trash2
 } from 'lucide-react';
@@ -8,6 +8,7 @@ import SeasonBanner from './components/SeasonBanner';
 import AnnualReport from './AnnualReport';
 import CloseSeason from './CloseSeason';
 import RepairBalances from './RepairBalances';
+import DuplicateOrders from './DuplicateOrders';
 import { formatCurrency, formatDate } from './lib/format';
 import { buildAnnualReport, getCurrentPatroYear } from './lib/annualReport';
 import { seasonLabel, startYearOf } from './lib/seasons';
@@ -130,6 +131,12 @@ const SettingsDomain = ({
     moneyFlow: 'none', amount: '', paymentMethod: ''
   });
   const [newRate, setNewRate] = useState(hourlyRate.toString());
+
+  // Le tarif arrive de Firestore après l'ouverture : sans resynchronisation,
+  // l'écran du tarif affichait toujours la valeur par défaut.
+  useEffect(() => {
+    if (screen === 'settings-rate') setNewRate(hourlyRate.toString());
+  }, [screen, hourlyRate]);
   const [newGoal, setNewGoal] = useState({
     amount: '',
     description: '',
@@ -326,15 +333,34 @@ const SettingsDomain = ({
   };
 
   const adjustStock = async () => {
-    const quantity = parseInt(stockAdjustment.quantity);
-    const amount = parseFloat(stockAdjustment.amount);
+    // Les virgules sont acceptées : « 12,50 » était lu 12 par parseFloat.
+    const quantity = Number(String(stockAdjustment.quantity).replace(',', '.'));
+    const amount = parseFloat(String(stockAdjustment.amount).replace(',', '.'));
 
-    if (stockAdjustment.productId && quantity !== 0 && stockAdjustment.reason.trim()) {
+    if (!stockAdjustment.productId || !stockAdjustment.reason.trim()) return;
+
+    // Une quantité à virgule ou nulle ne faisait rien, sans aucun message.
+    if (!Number.isInteger(quantity) || quantity <= 0) {
+      alert("La quantité doit être un nombre entier d'unités, supérieur à zéro.");
+      return;
+    }
+
+    const product = products.find(p => p.id === stockAdjustment.productId);
+
+    if (stockAdjustment.type === 'remove' && product && quantity > (Number(product.stock) || 0)) {
+      const ok = confirm(
+        `Le stock affiché de ${product.name} est de ${product.stock}.\n` +
+        `Retirer ${quantity} unités le fera passer en négatif. Continuer ?`
+      );
+      if (!ok) return;
+    }
+
+    {
       const change = stockAdjustment.type === 'add' ? quantity : -quantity;
-      const product = products.find(p => p.id === stockAdjustment.productId);
 
       // Faire l'ajustement de stock
-      await updateStock(stockAdjustment.productId, change, stockAdjustment.reason.trim());
+      const updated = await updateStock(stockAdjustment.productId, change, stockAdjustment.reason.trim());
+      if (!updated) return;
 
       // Si impact financier, enregistrer la transaction
       if (stockAdjustment.moneyFlow !== 'none' && amount > 0 && stockAdjustment.paymentMethod) {
@@ -637,6 +663,19 @@ const SettingsDomain = ({
 
           </div>
           <button
+            onClick={() => navigateTo('settings-rate')}
+            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center space-x-3">
+              <Clock className="text-purple-500" size={24} />
+              <div className="text-left">
+                <h3 className="font-semibold">Tarif horaire des boulots</h3>
+                <p className="text-gray-600 text-sm">Actuellement : {formatCurrency(hourlyRate)} de l'heure</p>
+              </div>
+            </div>
+          </button>
+
+          <button
             onClick={() => navigateTo('settings-bar-threshold')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
           >
@@ -692,6 +731,13 @@ const SettingsDomain = ({
             >
               Réparer les soldes reportés
             </button>
+
+            <button
+              onClick={() => navigateTo('settings-duplicates')}
+              className="w-full mt-2 p-2 text-sm text-red-600 border border-red-200 rounded-lg active:scale-95 transition-transform"
+            >
+              Vérifier les commandes en double
+            </button>
           </div>
 
           <button
@@ -734,6 +780,18 @@ const SettingsDomain = ({
     );
   }
 
+
+  if (screen === 'settings-duplicates') {
+    return (
+      <DuplicateOrders
+        Header={Header}
+        navigateTo={navigateTo}
+        orders={orders}
+        deleteFromFirebase={deleteFromFirebase}
+        viewedSeasonId={viewedSeasonId}
+      />
+    );
+  }
 
   if (screen === 'settings-repair-balances') {
     return (

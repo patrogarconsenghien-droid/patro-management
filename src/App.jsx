@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Beer, Wrench, Settings, Users, Plus, Minus, ShoppingCart,
   ArrowLeft, Trash2, DollarSign, Clock, User, CheckCircle,
@@ -22,6 +22,11 @@ import { useFirestoreData } from './hooks/useFirestoreData';
 const PatroApp = () => {
 
   const [currentScreen, setCurrentScreen] = useState('home');
+
+  // Une commande en cours d'encaissement bloque toute nouvelle validation.
+  // Sans ce verrou, un réseau lent laissait « Valider » sans réaction, et
+  // chaque nouvel appui créait une commande de plus.
+  const orderInProgress = useRef(false);
 
   // La saison consultée détermine sur quelles données toute l'app travaille.
   const {
@@ -570,6 +575,9 @@ const PatroApp = () => {
 // Cette version utilise les bons noms de champs pour que l'historique fonctionne
 
 const confirmOrder = async () => {
+  if (orderInProgress.current) return;
+  orderInProgress.current = true;
+
   try {
     const { member, items, total } = orderConfirmation;
 
@@ -729,6 +737,7 @@ if (Object.keys(exclusiveDrawn).length > 0) {
     console.error('Erreur lors de la validation:', error);
     alert('Erreur lors de la validation de la commande');
   } finally {
+    orderInProgress.current = false;
     setLoading(false);
   }
 };
@@ -1047,7 +1056,7 @@ const eligible = [
 
 
 
-  const SETTINGS_SCREENS = ['settings-password', 'settings', 'settings-surprise', 'settings-bar-threshold', 'settings-products', 'settings-stock', 'settings-rate', 'settings-history', 'settings-goal', 'settings-popular', 'settings-report', 'settings-close-season', 'settings-repair-balances'];
+  const SETTINGS_SCREENS = ['settings-password', 'settings', 'settings-surprise', 'settings-bar-threshold', 'settings-products', 'settings-stock', 'settings-rate', 'settings-history', 'settings-goal', 'settings-popular', 'settings-report', 'settings-close-season', 'settings-repair-balances', 'settings-duplicates'];
 
   if (currentScreen === 'home') {
     return (
@@ -2405,10 +2414,10 @@ const eligible = [
                   </button>
                   <button
                     onClick={confirmOrder}
-                    disabled={directPayment && !directPaymentMethod}
+                    disabled={loading || (directPayment && !directPaymentMethod)}
                     className="flex-1 p-3 bg-green-500 text-white rounded-lg active:scale-95 transition-transform disabled:bg-gray-300"
                   >
-                    {directPayment ? '💳 Payer et Valider' : '✅ Valider'}
+                    {loading ? 'Encaissement…' : directPayment ? '💳 Payer et Valider' : '✅ Valider'}
                   </button>
                 </div>
               </>

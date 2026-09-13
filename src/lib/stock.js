@@ -1,39 +1,48 @@
-export function createStockHelpers({ products, updateInFirebase, saveToFirebase }) {
-  const updateStock = async (productId, quantityChange, reason) => {
-    console.log('updateStock appelée avec:', { productId, quantityChange, reason });
+import { increment } from 'firebase/firestore';
 
+export function createStockHelpers({ products, updateInFirebase, saveToFirebase }) {
+  /**
+   * Ajoute (ou retire, si négatif) des unités au stock d'un produit.
+   *
+   * L'écriture se fait par incrément côté serveur : chaque changement
+   * s'additionne au stock réel en base. Avant, on écrivait « stock affiché +
+   * changement » : deux ventes rapprochées (ou deux téléphones au bar)
+   * partaient du même stock affiché, et la seconde écrasait la première.
+   * Contrairement à une transaction, l'incrément fonctionne aussi hors ligne.
+   *
+   * Renvoie true si le stock a été mis à jour.
+   */
+  const updateStock = async (productId, quantityChange, reason) => {
     const product = products.find(p => p.id === productId);
-    console.log('Produit trouvé:', product);
+    const change = Number(quantityChange);
 
     if (!product) {
-      console.log('Produit non trouvé!');
-      return;
+      console.error('updateStock : produit introuvable', productId);
+      return false;
+    }
+    if (!Number.isFinite(change) || change === 0) {
+      console.error('updateStock : changement de stock invalide', quantityChange);
+      return false;
     }
 
-    const newStock = Math.max(0, product.stock + quantityChange);
-    console.log('Nouveau stock calculé:', newStock);
-
     try {
-      console.log('Mise à jour du produit dans Firebase...');
-      await updateInFirebase('products', productId, { stock: newStock });
-      console.log('Produit mis à jour avec succès');
+      await updateInFirebase('products', productId, { stock: increment(change) });
 
-      const movement = {
+      await saveToFirebase('stockMovements', {
         productId,
         productName: product.name,
-        quantityChange,
-        newStock,
+        quantityChange: change,
+        // Estimation à partir du stock affiché : le stock réel est celui en base.
+        newStock: (Number(product.stock) || 0) + change,
         reason,
         timestamp: new Date().toISOString()
-      };
+      });
 
-      console.log('Sauvegarde du mouvement de stock...');
-      await saveToFirebase('stockMovements', movement);
-      console.log('Mouvement de stock sauvegardé');
-
+      return true;
     } catch (error) {
       console.error('Erreur mise à jour stock:', error);
       alert('Erreur lors de la mise à jour du stock');
+      return false;
     }
   };
 
