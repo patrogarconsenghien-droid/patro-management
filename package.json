@@ -8,7 +8,9 @@
     "build": "vite build",
     "preview": "vite preview",
     "deploy": "pnpm run build && firebase deploy --only hosting",
-    "deploy:functions": "node scripts/deploy-functions.mjs"
+    "deploy:functions": "node scripts/deploy-functions.mjs",
+    "test:rules": "firebase emulators:exec --only firestore --project patro-rules-test \"node firestore-tests/rules.test.mjs\"",
+    "deploy:rules": "firebase deploy --only firestore:rules --project patro-management-2024"
   },
   "dependencies": {
     "firebase": "^12.1.0",

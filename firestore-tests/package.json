@@ -1,0 +1,10 @@
+{
+  "name": "firestore-rules-tests",
+  "private": true,
+  "type": "module",
+  "description": "Tests des règles Firestore sur l'émulateur. Lancer depuis la racine : npm run test:rules",
+  "dependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
+    "firebase": "^12.1.0"
+  }
+}

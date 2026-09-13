@@ -8,7 +8,7 @@ import { collectionRef, docRef, LEGACY_SEASON_ID } from '../lib/seasons';
  * rebranche l'ensemble des listeners sur d'autres documents : les deux saisons
  * n'ont rien en commun.
  */
-export function useFirestoreData(seasonId = LEGACY_SEASON_ID) {
+export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true } = {}) {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [loading, setLoading] = useState(false);
   const [members, setMembers] = useState([]);
@@ -169,13 +169,19 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID) {
       await authReady;
       if (cancelled) return;
 
+      // Boulots, Bro et boulots programmés : lisibles par tout compte actif.
+      unsubscribeBros = track(await loadFromFirebase('bros', setBros));
+      unsubscribeJobs = track(await loadFromFirebase('jobs', setJobs));
+      unsubscribeScheduledJobs = track(await loadFromFirebase('scheduledJobs', setScheduledJobs));
+
+      // Le reste est réservé aux animateurs par les règles Firestore : un
+      // animé n'y est pas abonné, sinon chaque lecture serait refusée.
+      if (!manager) return;
+
       unsubscribeMembers = track(await loadFromFirebase('members', setMembers));
-      unsubscribeBros = await loadFromFirebase('bros', setBros);
-      unsubscribeProducts = await loadFromFirebase('products', setProducts);
-      unsubscribeOrders = await loadFromFirebase('orders', setOrders);
-      unsubscribeJobs = await loadFromFirebase('jobs', setJobs);
-      unsubscribeStockMovements = await loadFromFirebase('stockMovements', setStockMovements);
-      unsubscribeScheduledJobs = await loadFromFirebase('scheduledJobs', setScheduledJobs);
+      unsubscribeProducts = track(await loadFromFirebase('products', setProducts));
+      unsubscribeOrders = track(await loadFromFirebase('orders', setOrders));
+      unsubscribeStockMovements = track(await loadFromFirebase('stockMovements', setStockMovements));
       unsubscribeFinancialTransactions = await loadFromFirebase('financialTransactions', setFinancialTransactions);
       unsubscribeFinancialGoals = await loadFromFirebase('financialGoals', (goals) => {
         if (goals && goals.length > 0) {
@@ -260,7 +266,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID) {
       if (unsubscribeSurpriseSettings) unsubscribeSurpriseSettings();
       if (unsubscribeTripSettings) unsubscribeTripSettings();
     };
-  }, [seasonId]);
+  }, [seasonId, manager]);
 
   return {
     isOnline,

@@ -26,7 +26,7 @@ import { useFirestoreData } from './hooks/useFirestoreData';
 import { canManage as canManageAccount, useCurrentAccount } from './auth/account';
 
 // Écrans accessibles à un animé : l'accueil et les boulots programmés.
-const ANIME_SCREENS = ['home', 'boulots', 'boulots-scheduled', 'boulots-stats', 'boulots-validate', 'boulots-history'];
+const ANIME_SCREENS = ['home', 'boulots', 'boulots-scheduled', 'boulots-stats', 'boulots-history'];
 
 const PatroApp = () => {
 
@@ -52,6 +52,11 @@ const PatroApp = () => {
     selectSeason, backToActiveSeason
   } = useSeasons();
 
+  // L'accès aux réglages dépend du rôle du compte connecté : plus de mot de
+  // passe partagé, lisible par n'importe qui dans le code de l'app.
+  const account = useCurrentAccount();
+  const canManage = canManageAccount(account?.profile);
+
   const {
     isOnline, loading, setLoading,
     members, setMembers,
@@ -69,7 +74,7 @@ const PatroApp = () => {
     surpriseSettings, setSurpriseSettings,
     tripPasswordProtected, setTripPasswordProtected,
     saveToFirebase, updateInFirebase, deleteFromFirebase,
-  } = useFirestoreData(viewedSeasonId);
+  } = useFirestoreData(viewedSeasonId, { manager: canManage });
   const { updateStock, getStockStatus } = createStockHelpers({ products, updateInFirebase, saveToFirebase });
   const Header = ({ title, onBack }) => (
     <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline}>
@@ -92,10 +97,6 @@ const PatroApp = () => {
   const [activeCategory, setActiveCategory] = useState('all');
   const [showOnlyInStock, setShowOnlyInStock] = useState(false);
   const [sortBy, setSortBy] = useState('name'); // 'name', 'price', 'stock'
-  // L'accès aux réglages dépend du rôle du compte connecté : plus de mot de
-  // passe partagé, lisible par n'importe qui dans le code de l'app.
-  const account = useCurrentAccount();
-  const canManage = canManageAccount(account?.profile);
   const settingsAuthenticated = canManage;
   const setSettingsAuthenticated = () => {};
 

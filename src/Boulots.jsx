@@ -546,6 +546,7 @@ ${job.registeredBros.map(reg => {
             </div>
           </button>
 
+          {canManage && (
           <button
             onClick={() => navigateTo('boulots-validate')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
@@ -558,6 +559,7 @@ ${job.registeredBros.map(reg => {
               </div>
             </div>
           </button>
+          )}
 
           <button
             onClick={() => navigateTo('boulots-history')}
@@ -926,7 +928,9 @@ ${job.registeredBros.map(reg => {
                                 {hasEnoughBros ? (
                                   <div className="p-2 bg-green-100 border border-green-300 rounded text-center">
                                     <p className="text-sm text-green-800 font-medium">✅ Équipe complète</p>
-                                    <p className="text-xs text-green-700">Passe par « Valider les boulots » une fois le boulot fait</p>
+                                    <p className="text-xs text-green-700">
+                                      {canManage ? 'Passe par « Valider les boulots » une fois le boulot fait' : "Un animateur validera le boulot une fois fait"}
+                                    </p>
                                   </div>
                                 ) : (
                                   <button
@@ -1717,7 +1721,7 @@ ${job.registeredBros.map(reg => {
     );
   }
 
-  if ((screen === 'boulots-new' || screen === 'boulots-bros') && !canManage) {
+  if ((screen === 'boulots-new' || screen === 'boulots-bros' || screen === 'boulots-validate') && !canManage) {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header title="Boulots" onBack={() => navigateTo('boulots')} />

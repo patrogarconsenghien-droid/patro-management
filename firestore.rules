@@ -1,0 +1,169 @@
+rules_version = '2';
+
+// Règles d'accès de Gestion Patro.
+//
+// Trois rôles, lus sur la fiche users/{uid} du compte connecté :
+//   - anime      : voit les boulots, y répond, en propose, valide un boulot fait
+//   - animateur  : tout dans sa section (bar, finances, comptes...)
+//   - admin      : idem, plus les comptes admin, la saison et sa clôture
+// Un compte « pending » ou « disabled » ne lit que sa propre fiche.
+//
+// Les données de saison vivent à la racine (saison historique) et sous
+// seasons/{sid}/... : les deux arbres appliquent les mêmes règles.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ------------------------------------------------------------ helpers
+    function signedIn() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    function hasProfile() {
+      return signedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function me() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isActive() {
+      return hasProfile() && me().status == 'active';
+    }
+
+    function isManager() {
+      return isActive() && me().role in ['animateur', 'admin'];
+    }
+
+    function isAdmin() {
+      return isActive() && me().role == 'admin';
+    }
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // Premiers admins : deviennent admin à leur première connexion, sinon
+    // personne ne pourrait valider le tout premier compte.
+    function isBootstrapAdmin() {
+      return request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in ['rscokart@gmail.com'];
+    }
+
+    // ------------------------------------------------------------ comptes
+    match /users/{uid} {
+      // Sa propre fiche toujours ; celles des autres pour tout compte actif
+      // (voir qui a accès à l'app).
+      allow read: if signedIn() && (request.auth.uid == uid || isActive());
+
+      // Création de sa propre fiche, en attente. Le rôle vient d'un animateur.
+      allow create: if signedIn() && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.email == request.auth.token.email.lower()
+        && (
+          (request.resource.data.status == 'pending'
+            && request.resource.data.role == null
+            && request.resource.data.sectionId == null
+            && request.resource.data.broId == null)
+          || (isBootstrapAdmin()
+            && request.resource.data.status == 'active'
+            && request.resource.data.role == 'admin')
+        );
+
+      // Soi-même : son Bro et ses infos d'affichage, jamais son rôle ni son statut.
+      allow update: if signedIn() && request.auth.uid == uid
+        && changedKeys().hasOnly(['broId', 'displayName', 'photoURL', 'lastLoginAt', 'updatedAt', 'updatedBy']);
+
+      // Un animateur valide et règle les autres comptes. Seul un admin touche
+      // à un admin ou nomme un admin.
+      allow update: if isManager() && request.auth.uid != uid
+        && changedKeys().hasOnly(['role', 'sectionId', 'status', 'broId', 'validatedAt', 'updatedAt', 'updatedBy'])
+        && (isAdmin() || (resource.data.role != 'admin' && request.resource.data.role != 'admin'));
+
+      allow delete: if isAdmin() && request.auth.uid != uid;
+    }
+
+    // ------------------------------------------------------------ global
+    match /appState/{doc} {
+      allow read: if isActive();
+      allow write: if isAdmin();
+    }
+
+    match /seasons/{sid} {
+      allow read: if isActive();
+      allow write: if isAdmin();
+
+      match /{coll}/{doc} {
+        allow read: if canReadSeasonDoc(coll);
+        allow create: if canCreateSeasonDoc(coll);
+        allow update: if canUpdateSeasonDoc(coll);
+        allow delete: if canDeleteSeasonDoc(coll);
+      }
+    }
+
+    // Jetons de notification : chaque appareil écrit le sien. La Cloud
+    // Function qui les lit passe par le SDK admin, hors règles.
+    match /fcmTokens/{token} {
+      allow read: if isManager();
+      allow create, update: if isActive();
+      allow delete: if isManager();
+    }
+
+    // ------------------------------------------------------------ saison
+    // Collections réservées aux animateurs : bar, stock, finances, réglages, voyage.
+    function isManagerOnlyColl(coll) {
+      return coll in [
+        'members', 'products', 'orders', 'stockMovements', 'financialTransactions',
+        'financialGoals', 'popularProducts', 'barSettings', 'surpriseSettings',
+        'jobSettings', 'tripSettings', 'tripExpenses', 'tripEvents'
+      ];
+    }
+
+    function isSeasonColl(coll) {
+      return isManagerOnlyColl(coll) || coll in ['bros', 'jobs', 'scheduledJobs'];
+    }
+
+    function canReadSeasonDoc(coll) {
+      return isSeasonColl(coll) && (isManager() || (isActive() && !isManagerOnlyColl(coll)));
+    }
+
+    function canCreateSeasonDoc(coll) {
+      // Les boulots faits (jobs) ne sont créés que par la validation, réservée
+      // aux animateurs : un animé ne peut pas s'inventer des heures.
+      return isSeasonColl(coll) && (
+        isManager()
+        // Proposer un boulot : l'auteur est enregistré.
+        || (coll == 'scheduledJobs' && isActive() && request.resource.data.createdBy == request.auth.uid)
+      );
+    }
+
+    function canUpdateSeasonDoc(coll) {
+      return isSeasonColl(coll) && (
+        isManager()
+        // Répondre à un boulot, inscrire ou retirer quelqu'un ; l'auteur peut tout modifier.
+        || (coll == 'scheduledJobs' && isActive() && (
+          resource.data.createdBy == request.auth.uid
+          || changedKeys().hasOnly(['registeredBros', 'unavailableBros', 'updatedAt'])
+        ))
+      );
+    }
+
+    function canDeleteSeasonDoc(coll) {
+      return isSeasonColl(coll) && (
+        isManager()
+        // Un animé ne supprime que les boulots qu'il a proposés.
+        || (coll == 'scheduledJobs' && isActive() && resource.data.createdBy == request.auth.uid)
+      );
+    }
+
+    // Saison historique, restée aux collections racines. Les noms réservés
+    // (users, appState, seasons, fcmTokens) ne sont pas des collections de
+    // saison : isSeasonColl les refuse, donc aucune règle ne s'additionne.
+    match /{coll}/{doc} {
+      allow read: if canReadSeasonDoc(coll);
+      allow create: if canCreateSeasonDoc(coll);
+      allow update: if canUpdateSeasonDoc(coll);
+      allow delete: if canDeleteSeasonDoc(coll);
+    }
+  }
+}
