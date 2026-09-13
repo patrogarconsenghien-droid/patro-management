@@ -1,7 +1,10 @@
 import { useState, useEffect } from 'react';
 import { authReady, db } from '../firebase';
-import { addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
-import { collectionRef, docRef, DEFAULT_SECTION_ID, LEGACY_SEASON_ID } from '../lib/seasons';
+import { addDoc, updateDoc, deleteDoc, doc, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore';
+import {
+  collectionRef, currentSeasonDocPath, docRef, otherSectionId, seasonIdAt,
+  DEFAULT_SECTION_ID, LEGACY_SEASON_ID
+} from '../lib/seasons';
 
 /**
  * Toutes les données de l'app pour une saison donnée. Changer de saison
@@ -17,6 +20,9 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
   const [orders, setOrders] = useState([]);
   const [jobs, setJobs] = useState([]);
   const [scheduledJobs, setScheduledJobs] = useState([]);
+  // Boulots de l'autre section qui lui sont ouverts, dans sa saison en cours.
+  const [sharedJobs, setSharedJobs] = useState([]);
+  const [sharedSeasonId, setSharedSeasonId] = useState(null);
   const [stockMovements, setStockMovements] = useState([]);
   const [financialTransactions, setFinancialTransactions] = useState([]);
   const [barOpenThreshold, setBarOpenThreshold] = useState(8); // Seuil par défaut : 8 bouteilles
@@ -153,6 +159,8 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
     let unsubscribeJobSettings = null;
     let unsubscribeSurpriseSettings = null;
     let unsubscribeTripSettings = null;
+    let unsubscribeOtherCurrent = null;
+    let unsubscribeShared = null;
 
     // Les abonnements peuvent être posés après le démontage (changement de
     // saison rapide) : on les coupe alors immédiatement.
@@ -173,6 +181,26 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
       unsubscribeBros = track(await loadFromFirebase('bros', setBros));
       unsubscribeJobs = track(await loadFromFirebase('jobs', setJobs));
       unsubscribeScheduledJobs = track(await loadFromFirebase('scheduledJobs', setScheduledJobs));
+
+      // Boulots ouverts par l'autre section : on suit sa saison en cours, puis
+      // ses boulots marqués openToOtherSection (la requête doit porter ce
+      // filtre, c'est ce que les règles vérifient).
+      const other = otherSectionId(sectionId);
+      setSharedJobs([]);
+      unsubscribeOtherCurrent = track(onSnapshot(
+        doc(db, ...currentSeasonDocPath(other)),
+        (snapshot) => {
+          const otherSeason = (snapshot.exists() && snapshot.data().seasonId) || seasonIdAt();
+          setSharedSeasonId(otherSeason);
+          if (unsubscribeShared) unsubscribeShared();
+          unsubscribeShared = track(onSnapshot(
+            query(collectionRef(db, otherSeason, 'scheduledJobs', other), where('openToOtherSection', '==', true)),
+            (snap) => setSharedJobs(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+            (error) => console.error("Lecture des boulots ouverts par l'autre section impossible:", error)
+          ));
+        },
+        (error) => console.error("Lecture de la saison de l'autre section impossible:", error)
+      ));
 
       // Le reste est réservé aux animateurs par les règles Firestore : un
       // animé n'y est pas abonné, sinon chaque lecture serait refusée.
@@ -265,6 +293,8 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
       if (unsubscribeJobSettings) unsubscribeJobSettings();
       if (unsubscribeSurpriseSettings) unsubscribeSurpriseSettings();
       if (unsubscribeTripSettings) unsubscribeTripSettings();
+      if (unsubscribeOtherCurrent) unsubscribeOtherCurrent();
+      if (unsubscribeShared) unsubscribeShared();
     };
   }, [seasonId, manager, sectionId]);
 
@@ -279,6 +309,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
     orders, setOrders,
     jobs, setJobs,
     scheduledJobs, setScheduledJobs,
+    sharedJobs, sharedSeasonId,
     stockMovements, setStockMovements,
     financialTransactions, setFinancialTransactions,
     financialGoal, setFinancialGoal,

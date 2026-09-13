@@ -159,11 +159,46 @@ await ko('animée filles ne répond pas à un boulot des garçons', updateDoc(do
 await ok('admin lit les membres des filles', getDocs(FC(as(ADMIN), 'members')));
 await ok('admin écrit chez les filles', setDoc(F(as(ADMIN), 'members', 'fm2'), { name: 'Zoé', balance: 0 }));
 await ok('animatrice lit la saison en cours des filles', getDoc(doc(as(FILLE_ANIM), 'sections', 'filles', 'appState', 'current')));
-await ko('animatrice ne lit pas la saison en cours des garçons', getDoc(doc(as(FILLE_ANIM), 'appState', 'current')));
+await ok('animatrice lit la saison en cours des garçons (pour les boulots ouverts)', getDoc(doc(as(FILLE_ANIM), 'appState', 'current')));
 await ko('animatrice ne change pas la saison des filles', setDoc(doc(as(FILLE_ANIM), 'sections', 'filles', 'appState', 'current'), { seasonId: '2027-2028' }));
 await ok('admin change la saison des filles', setDoc(doc(as(ADMIN), 'sections', 'filles', 'appState', 'current'), { seasonId: '2026-2027' }));
 await ko('animateur garçons ne valide pas un compte dans la section filles', updateDoc(doc(as(ANIMATEUR), 'users', PENDING.uid), { status: 'active', role: 'anime', sectionId: 'filles', updatedAt: 'x' }));
 await ko('animatrice ne modifie pas un compte des garçons', updateDoc(doc(as(FILLE_ANIM), 'users', ANIME.uid), { status: 'disabled', updatedAt: 'x' }));
+
+// --- boulots ouverts à l'autre section ---
+import { query, where, addDoc } from 'firebase/firestore';
+await env.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'seasons', '2026-2027', 'scheduledJobs', 'open1'), { description: 'Ouvert', createdBy: ANIMATEUR.uid, openToOtherSection: true, brosNeeded: 3, registeredBros: [], unavailableBros: [] });
+  await setDoc(doc(db, 'seasons', '2026-2027', 'scheduledJobs', 'closed1'), { description: 'Fermé', createdBy: ANIMATEUR.uid, openToOtherSection: false, brosNeeded: 3, registeredBros: [], unavailableBros: [] });
+  await setDoc(doc(db, 'sections', 'filles', 'seasons', '2026-2027', 'bros', 'fbro1'), { name: 'Léa', totalHours: 2 });
+});
+const G = (db, ...segs) => doc(db, 'seasons', '2026-2027', ...segs);
+await ok('animée filles lit les boulots ouverts des garçons (requête filtrée)',
+  getDocs(query(collection(as(FILLE_KID), 'seasons', '2026-2027', 'scheduledJobs'), where('openToOtherSection', '==', true))));
+await ko('animée filles ne lit pas tous les boulots des garçons', getDocs(collection(as(FILLE_KID), 'seasons', '2026-2027', 'scheduledJobs')));
+await ko('animée filles ne lit pas un boulot fermé des garçons', getDoc(G(as(FILLE_KID), 'scheduledJobs', 'closed1')));
+await ok('animée filles lit la saison en cours des garçons', getDoc(doc(as(FILLE_KID), 'appState', 'current')));
+await ok('animée filles s\'inscrit sur un boulot ouvert des garçons',
+  updateDoc(G(as(FILLE_KID), 'scheduledJobs', 'open1'), { registeredBros: [{ broId: 'fbro1', sectionId: 'filles', name: 'Léa' }], updatedAt: 'x' }));
+await ko('animée filles ne modifie pas la description d\'un boulot ouvert',
+  updateDoc(G(as(FILLE_KID), 'scheduledJobs', 'open1'), { description: 'Piraté', updatedAt: 'x' }));
+await ko('animée filles ne s\'inscrit pas sur un boulot fermé',
+  updateDoc(G(as(FILLE_KID), 'scheduledJobs', 'closed1'), { registeredBros: [{ broId: 'fbro1' }], updatedAt: 'x' }));
+await ok('animateur garçons crée le boulot fait d\'une fille chez les filles, signé garçons',
+  addDoc(FC(as(ANIMATEUR), 'jobs'), { broId: 'fbro1', hours: 2, total: 20, isPaid: false, crossSectionFrom: 'garcons' }));
+await ko('animateur garçons ne crée pas de boulot fait chez les filles sans signature',
+  addDoc(FC(as(ANIMATEUR), 'jobs'), { broId: 'fbro1', hours: 2, total: 20, isPaid: false }));
+await ko('animateur garçons ne signe pas « filles » pour écrire chez les filles',
+  addDoc(FC(as(ANIMATEUR), 'jobs'), { broId: 'fbro1', hours: 2, total: 20, isPaid: false, crossSectionFrom: 'filles' }));
+await ko('animé garçons ne crée pas de boulot fait chez les filles',
+  addDoc(FC(as(ANIME), 'jobs'), { broId: 'fbro1', hours: 2, total: 20, isPaid: false, crossSectionFrom: 'garcons' }));
+await ok('animateur garçons crédite les heures d\'une fille',
+  updateDoc(F(as(ANIMATEUR), 'bros', 'fbro1'), { totalHours: 4, updatedAt: 'x' }));
+await ko('animateur garçons ne renomme pas une fille',
+  updateDoc(F(as(ANIMATEUR), 'bros', 'fbro1'), { name: 'X', updatedAt: 'x' }));
+await ko('animateur garçons ne marque pas payé chez les filles',
+  updateDoc(F(as(ANIMATEUR), 'jobs', 'j1'), { isPaid: true, updatedAt: 'x' }));
 
 // --- comptes ---
 const newUser = (u, extra) => setDoc(doc(as(u), 'users', u.uid), {

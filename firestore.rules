@@ -118,17 +118,34 @@ service cloud.firestore {
       return isManagerOnlyColl(coll) || coll in ['bros', 'jobs', 'scheduledJobs'];
     }
 
+    // Un boulot ouvert à l'autre section se lit depuis l'autre section, avec
+    // une requête filtrée sur openToOtherSection == true.
+    function isOpenJob(coll) {
+      return coll == 'scheduledJobs' && isActive() && resource.data.openToOtherSection == true;
+    }
+
     function canReadSeasonDoc(sec, coll) {
-      return isSeasonColl(coll) && (isManagerOf(sec) || (isActiveIn(sec) && !isManagerOnlyColl(coll)));
+      return isSeasonColl(coll) && (
+        isManagerOf(sec)
+        || (isActiveIn(sec) && !isManagerOnlyColl(coll))
+        || isOpenJob(coll)
+      );
     }
 
     // Les boulots faits (jobs) ne sont créés que par la validation, réservée
     // aux animateurs : un animé ne peut pas s'inventer des heures.
+    // Un boulot ouvert à l'autre section, validé par son organisateur, crée le
+    // boulot fait de chaque participant dans la section de celui-ci : l'animateur
+    // organisateur écrit alors chez l'autre section, en signant sa section.
     function canCreateSeasonDoc(sec, coll) {
       return isSeasonColl(coll) && (
         isManagerOf(sec)
         // Proposer un boulot : l'auteur est enregistré.
         || (coll == 'scheduledJobs' && isActiveIn(sec) && request.resource.data.createdBy == request.auth.uid)
+        || (coll == 'jobs'
+          && request.resource.data.crossSectionFrom is string
+          && request.resource.data.crossSectionFrom != sec
+          && isManagerOf(request.resource.data.crossSectionFrom))
       );
     }
 
@@ -140,6 +157,11 @@ service cloud.firestore {
           resource.data.createdBy == request.auth.uid
           || changedKeys().hasOnly(['registeredBros', 'unavailableBros', 'updatedAt'])
         ))
+        // Depuis l'autre section : répondre à un boulot ouvert.
+        || (isOpenJob(coll) && changedKeys().hasOnly(['registeredBros', 'unavailableBros', 'updatedAt']))
+        // Valider un boulot ouvert crédite les heures d'un Bro de l'autre section.
+        || (coll == 'bros' && isActive() && me().role in ['animateur', 'admin']
+          && changedKeys().hasOnly(['totalHours', 'updatedAt']))
       );
     }
 
@@ -152,8 +174,10 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------ garçons
+    // La saison en cours se lit depuis n'importe quelle section : il faut la
+    // connaître pour voir les boulots ouverts de l'autre section.
     match /appState/{doc} {
-      allow read: if isActiveIn('garcons');
+      allow read: if isActive();
       allow write: if isAdmin();
     }
 
@@ -185,7 +209,7 @@ service cloud.firestore {
       allow write: if isAdmin();
 
       match /appState/{doc} {
-        allow read: if isActiveIn(sec);
+        allow read: if isActive();
         allow write: if isAdmin();
       }
 

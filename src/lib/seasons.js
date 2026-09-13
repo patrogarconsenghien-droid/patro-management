@@ -104,3 +104,7 @@ export const collectionRef = (db, seasonId, name, sectionId = DEFAULT_SECTION_ID
 /** Référence de document pour une saison d'une section. */
 export const docRef = (db, seasonId, name, id, sectionId = DEFAULT_SECTION_ID) =>
   doc(db, ...collectionPath(seasonId, name, sectionId), id);
+
+/** L'autre section : il n'y en a que deux. */
+export const otherSectionId = (sectionId = DEFAULT_SECTION_ID) =>
+  sectionId === DEFAULT_SECTION_ID ? 'filles' : DEFAULT_SECTION_ID;

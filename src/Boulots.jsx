@@ -6,7 +6,10 @@ import {
 import Modal from './components/Modal';
 import HeaderBase from './components/Header';
 import { formatCurrency, formatDate } from './lib/format';
-import { canManage as canManageAccount } from './auth/account';
+import { SECTIONS, canManage as canManageAccount } from './auth/account';
+import { addDoc, increment, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from './firebase';
+import { collectionRef, docRef, otherSectionId } from './lib/seasons';
 
 const BoulotsDomain = ({
   screen,
@@ -28,6 +31,9 @@ const BoulotsDomain = ({
   permission,
   requestPermission,
   account,
+  sharedJobs = [],
+  sharedSeasonId,
+  sectionId,
   newJob,
   setNewJob,
   paymentMethod,
@@ -46,14 +52,29 @@ const BoulotsDomain = ({
   const myBroId = account?.profile?.broId || null;
   const myUid = account?.user?.uid || null;
   // Modifier ou supprimer : les animateurs, et l'auteur pour ses propres boulots.
-  const canEditJob = (job) => canManage || (myUid && job.createdBy === myUid);
+  const canEditJob = (job) => !job._shared && (canManage || (myUid && job.createdBy === myUid));
+
+  // Boulots de ma section, plus ceux que l'autre section nous a ouverts.
+  const otherId = otherSectionId(sectionId);
+  const otherLabel = SECTIONS[otherId] || otherId;
+  const allScheduledJobs = [
+    ...scheduledJobs,
+    ...sharedJobs.map(job => ({ ...job, _shared: true }))
+  ];
+  const findScheduled = (jobId) => allScheduledJobs.find(j => j.id === jobId);
+
+  // Écrire sur un boulot : le nôtre passe par la saison courante ; un boulot
+  // ouvert par l'autre section vit chez elle.
+  const writeScheduled = (job, data) => job._shared
+    ? updateDoc(docRef(db, sharedSeasonId, 'scheduledJobs', job.id, otherId), { ...data, updatedAt: serverTimestamp() })
+    : updateInFirebase('scheduledJobs', job.id, data);
 
   // ===== ÉTAT LOCAL AUX ÉCRANS BOULOTS =====
   const [showBroDropdown, setShowBroDropdown] = useState(false);
   const [newBroName, setNewBroName] = useState('');
   const [newScheduledJob, setNewScheduledJob] = useState({
     description: '', date: new Date().toISOString().split('T')[0],
-    timeStart: '09:00', estimatedHours: 1, location: '', contactName: '', contactPhone: '', customRate: 10.00, brosNeeded: 1,
+    timeStart: '09:00', estimatedHours: 1, location: '', contactName: '', contactPhone: '', openToOtherSection: false, customRate: 10.00, brosNeeded: 1,
     registeredBros: [], status: 'planned'
   });
   const [editingScheduledJob, setEditingScheduledJob] = useState(null);
@@ -85,8 +106,8 @@ const BoulotsDomain = ({
 
   // ===== HANDLERS PROPRES À BOULOTS =====
   const deleteScheduledJob = async (jobId) => {
-    const job = scheduledJobs.find(j => j.id === jobId);
-    if (!job) return;
+    const job = findScheduled(jobId);
+    if (!job || job._shared) return;
 
     const confirmMessage = `Êtes-vous sûr de vouloir supprimer ce boulot programmé ?\n\n"${job.description}"\nDate: ${formatDate(job.date)}\n\nCette action est irréversible.`;
 
@@ -245,6 +266,7 @@ ${job.registeredBros.map(reg => {
         contactPhone: (newScheduledJob.contactPhone || '').trim(),
         customRate: newScheduledJob.customRate,
         brosNeeded: newScheduledJob.brosNeeded,
+        openToOtherSection: canManage ? Boolean(newScheduledJob.openToOtherSection) : false,
         registeredBros: [],
         unavailableBros: [],
         status: 'planned',
@@ -261,7 +283,7 @@ ${job.registeredBros.map(reg => {
           estimatedHours: 1,
           location: '',
           contactName: '',
-          contactPhone: '',
+          contactPhone: '', openToOtherSection: false,
           customRate: hourlyRate,
           brosNeeded: 1,
           registeredBros: [],
@@ -291,6 +313,7 @@ ${job.registeredBros.map(reg => {
         contactPhone: (newScheduledJob.contactPhone || '').trim(),
         customRate: newScheduledJob.customRate,
         brosNeeded: newScheduledJob.brosNeeded,
+        openToOtherSection: canManage ? Boolean(newScheduledJob.openToOtherSection) : false,
         // Garder les Bro déjà inscrits
         registeredBros: editingScheduledJob.registeredBros,
         unavailableBros: editingScheduledJob.unavailableBros || [],
@@ -306,7 +329,7 @@ ${job.registeredBros.map(reg => {
           estimatedHours: 1,
           location: '',
           contactName: '',
-          contactPhone: '',
+          contactPhone: '', openToOtherSection: false,
           customRate: hourlyRate,
           brosNeeded: 1,
           registeredBros: [],
@@ -323,14 +346,14 @@ ${job.registeredBros.map(reg => {
   };
 
   const registerBroToJob = async (jobId, broId) => {
-    const job = scheduledJobs.find(j => j.id === jobId);
+    const job = findScheduled(jobId);
     if (!job || job.registeredBros.length >= job.brosNeeded) return;
 
     // Vérifier que le Bro n'est pas déjà inscrit sur ce boulot
     if (job.registeredBros.some(reg => reg.broId === broId)) return;
 
     // NOUVELLE VÉRIFICATION : Conflit d'horaires
-    const conflictingJob = scheduledJobs.find(otherJob =>
+    const conflictingJob = allScheduledJobs.find(otherJob =>
       otherJob.id !== jobId &&
       otherJob.date === job.date &&
       otherJob.registeredBros.some(reg => reg.broId === broId)
@@ -347,8 +370,13 @@ ${job.registeredBros.map(reg => {
       }
     }
 
+    // Section et nom du Bro : sur un boulot ouvert à l'autre section, elle ne
+    // peut pas lire nos Bro, et la validation doit savoir où créditer chacun.
+    const registrant = bros.find(b => b.id === broId);
     const newRegistration = {
       broId: broId,
+      sectionId,
+      name: registrant?.name || null,
       registeredAt: new Date().toISOString(),
       hours: 0 // À définir plus tard quand le boulot sera terminé
     };
@@ -356,7 +384,7 @@ ${job.registeredBros.map(reg => {
     const updatedRegisteredBros = [...job.registeredBros, newRegistration];
 
     try {
-      await updateInFirebase('scheduledJobs', jobId, {
+      await writeScheduled(job, {
         registeredBros: updatedRegisteredBros,
         // S'inscrire annule un « ne peut pas » donné plus tôt.
         unavailableBros: (job.unavailableBros || []).filter(u => u.broId !== broId)
@@ -372,16 +400,16 @@ ${job.registeredBros.map(reg => {
    * inscrits s'il y était, et n'apparaît plus dans « À relancer ».
    */
   const markBroUnavailable = async (jobId, broId) => {
-    const job = scheduledJobs.find(j => j.id === jobId);
+    const job = findScheduled(jobId);
     if (!job) return;
 
     const unavailable = job.unavailableBros || [];
     if (unavailable.some(u => u.broId === broId)) return;
 
     try {
-      await updateInFirebase('scheduledJobs', jobId, {
+      await writeScheduled(job, {
         registeredBros: job.registeredBros.filter(reg => reg.broId !== broId),
-        unavailableBros: [...unavailable, { broId, markedAt: new Date().toISOString() }]
+        unavailableBros: [...unavailable, { broId, sectionId, markedAt: new Date().toISOString() }]
       });
     } catch (error) {
       console.error('Erreur lors de l\'enregistrement de l\'indisponibilité:', error);
@@ -391,11 +419,11 @@ ${job.registeredBros.map(reg => {
 
   /** Annule un « ne peut pas » : le Bro repasse dans « À relancer ». */
   const clearBroUnavailable = async (jobId, broId) => {
-    const job = scheduledJobs.find(j => j.id === jobId);
+    const job = findScheduled(jobId);
     if (!job) return;
 
     try {
-      await updateInFirebase('scheduledJobs', jobId, {
+      await writeScheduled(job, {
         unavailableBros: (job.unavailableBros || []).filter(u => u.broId !== broId)
       });
     } catch (error) {
@@ -405,7 +433,7 @@ ${job.registeredBros.map(reg => {
   };
 
   const removeBroFromScheduled = async (jobId, broId) => {
-    const job = scheduledJobs.find(j => j.id === jobId);
+    const job = findScheduled(jobId);
     if (!job) return;
 
 
@@ -417,7 +445,7 @@ ${job.registeredBros.map(reg => {
 
     try {
       // Mettre à jour dans Firebase
-      await updateInFirebase('scheduledJobs', jobId, {
+      await writeScheduled(job, {
         registeredBros: updatedRegisteredBros
       });
 
@@ -429,8 +457,8 @@ ${job.registeredBros.map(reg => {
   };
 
   const completeScheduledJob = async (jobId, isPartial = false) => {
-    const job = scheduledJobs.find(j => j.id === jobId);
-    if (!job) return;
+    const job = findScheduled(jobId);
+    if (!job || job._shared) return;
 
     // Validation : soit quota complet, soit au moins 1 Bro inscrit pour validation partielle
     if (!isPartial && job.registeredBros.length < job.brosNeeded) {
@@ -457,7 +485,7 @@ ${job.registeredBros.map(reg => {
 
       return {
         broId: registration.broId,
-        broName: bro ? bro.name : 'Inconnu',
+        broName: bro ? bro.name : (registration.name || 'Inconnu'),
         description: isPartial
           ? `${job.description} (PARTIEL ${job.registeredBros.length}/${job.brosNeeded})`
           : job.description,
@@ -475,23 +503,35 @@ ${job.registeredBros.map(reg => {
     });
 
     try {
-      // Sauvegarder tous les boulots terminés
-      await Promise.all(completedJobs.map(completedJob =>
-        saveToFirebase('jobs', completedJob)
-      ));
+      // Chaque boulot fait est créé dans la section du participant : sa part
+      // compte dans la caisse de sa section, et ses heures sur son compteur.
+      const actualHours = job.estimatedHours || 1;
+      await Promise.all(job.registeredBros.map((registration, index) => {
+        const completedJob = completedJobs[index];
+        const targetSection = registration.sectionId || sectionId;
+        if (targetSection === sectionId) return saveToFirebase('jobs', completedJob);
+        return addDoc(collectionRef(db, sharedSeasonId, 'jobs', targetSection), {
+          ...completedJob,
+          broName: registration.name || completedJob.broName,
+          crossSectionFrom: sectionId,
+          createdAt: serverTimestamp()
+        });
+      }));
 
-      // Mettre à jour les heures totales des Bro
-      const broUpdates = job.registeredBros.map(registration => {
-        const bro = bros.find(b => b.id === registration.broId);
-        if (bro) {
-          const actualHours = job.estimatedHours || 1; // Même calcul
-          return updateInFirebase('bros', bro.id, {
-            totalHours: bro.totalHours + actualHours
-          });
+      // Mettre à jour les heures totales des Bro, par incrément : on ne connaît
+      // pas le compteur d'un Bro de l'autre section.
+      await Promise.all(job.registeredBros.map(registration => {
+        const targetSection = registration.sectionId || sectionId;
+        if (targetSection === sectionId) {
+          return bros.some(b => b.id === registration.broId)
+            ? updateInFirebase('bros', registration.broId, { totalHours: increment(actualHours) })
+            : Promise.resolve();
         }
-        return Promise.resolve();
-      });
-      await Promise.all(broUpdates);
+        return updateDoc(docRef(db, sharedSeasonId, 'bros', registration.broId, targetSection), {
+          totalHours: increment(actualHours),
+          updatedAt: serverTimestamp()
+        });
+      }));
 
       // Supprimer le boulot programmé
       await deleteFromFirebase('scheduledJobs', jobId);
@@ -617,7 +657,7 @@ ${job.registeredBros.map(reg => {
         <div className="p-4">
 
           {/* Liste des boulots programmés */}
-          {scheduledJobs.length === 0 ? (
+          {allScheduledJobs.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <Clock size={48} className="mx-auto mb-2 opacity-50" />
               <p>Aucun boulot programmé pour le moment</p>
@@ -626,7 +666,7 @@ ${job.registeredBros.map(reg => {
             <div className="space-y-3">
               {(() => {
                 // Grouper les boulots par date
-                const jobsByDate = scheduledJobs
+                const jobsByDate = [...allScheduledJobs]
                   .sort((a, b) => new Date(a.date) - new Date(b.date))
                   .reduce((groups, job) => {
                     const dateKey = job.date;
@@ -709,6 +749,16 @@ ${job.registeredBros.map(reg => {
                                     ) : (
                                       <p className="text-xs text-gray-400">📍 Lieu à préciser</p>
                                     )}
+                                    {job._shared && (
+                                      <p className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                                        Boulot des {otherLabel}
+                                      </p>
+                                    )}
+                                    {!job._shared && job.openToOtherSection && (
+                                      <p className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                                        Ouvert aux {otherLabel}
+                                      </p>
+                                    )}
                                     {job.createdByName && (
                                       <p className="text-xs text-gray-400">Proposé par {job.createdByName}</p>
                                     )}
@@ -754,6 +804,7 @@ ${job.registeredBros.map(reg => {
                                           location: job.location || '',
                                           contactName: job.contactName || '',
                                           contactPhone: job.contactPhone || '',
+                                          openToOtherSection: Boolean(job.openToOtherSection),
                                           customRate: job.customRate,
                                           brosNeeded: job.brosNeeded,
                                           registeredBros: job.registeredBros,
@@ -806,7 +857,7 @@ ${job.registeredBros.map(reg => {
                                         <div key={index} className={`flex items-center px-2 py-1 rounded-full text-xs ${hasOtherJobsSameDay ? 'bg-orange-100 border border-orange-300' : 'bg-blue-100'
                                           }`}>
                                           <span className="mr-1">
-                                            {hasOtherJobsSameDay && '⚠️ '}{bro?.name || 'Inconnu'}
+                                            {hasOtherJobsSameDay && '⚠️ '}{registration.name || bro?.name || 'Inconnu'}
                                           </span>
                                           {canManage && (
                                           <button
@@ -983,7 +1034,7 @@ ${job.registeredBros.map(reg => {
               estimatedHours: 1,
               location: '',
               contactName: '',
-              contactPhone: '',
+              contactPhone: '', openToOtherSection: false,
               customRate: hourlyRate,
               brosNeeded: 1,
               registeredBros: [],
@@ -1071,6 +1122,22 @@ ${job.registeredBros.map(reg => {
                 />
               </div>
             </div>
+
+            {/* Ouvrir à l'autre section : animateurs seulement */}
+            {canManage && (
+              <label className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer">
+                <span>
+                  <span className="block text-sm font-medium text-gray-700">Ouvrir aussi aux {otherLabel}</span>
+                  <span className="block text-xs text-gray-500">Ils verront ce boulot et pourront s'y inscrire</span>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(newScheduledJob.openToOtherSection)}
+                  onChange={(e) => setNewScheduledJob({ ...newScheduledJob, openToOtherSection: e.target.checked })}
+                  className="w-5 h-5"
+                />
+              </label>
+            )}
 
             {/* Durée estimée AVEC BOUTONS +/- */}
             <div>
@@ -1289,7 +1356,7 @@ ${job.registeredBros.map(reg => {
             <div className="space-y-2">
               {(() => {
                 // Récupérer le job à jour depuis scheduledJobs
-                const currentJob = scheduledJobs.find(j => j.id === selectedJob?.id);
+                const currentJob = findScheduled(selectedJob?.id);
 
                 return bros.map(bro => {
                   // Vérifier si le Bro est déjà inscrit
@@ -1509,7 +1576,7 @@ ${job.registeredBros.map(reg => {
                                 key={index}
                                 className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded font-medium"
                               >
-                                {bro?.name || 'Inconnu'}
+                                {registration.name || bro?.name || 'Inconnu'}
                               </span>
                             );
                           })}
@@ -1612,7 +1679,7 @@ ${job.registeredBros.map(reg => {
                   const bro = bros.find(b => b.id === registration.broId);
                   return (
                     <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                      <span className="font-medium">{bro?.name || 'Inconnu'}</span>
+                      <span className="font-medium">{registration.name || bro?.name || 'Inconnu'}</span>
                       <button
                         onClick={() => {
                           {

@@ -72,6 +72,7 @@ const PatroApp = () => {
     orders, setOrders,
     jobs, setJobs,
     scheduledJobs, setScheduledJobs,
+    sharedJobs, sharedSeasonId,
     stockMovements, setStockMovements,
     financialTransactions, setFinancialTransactions,
     financialGoal, setFinancialGoal,
@@ -1119,7 +1120,7 @@ const eligible = [
         loading={loading}
         isOnline={isOnline}
         stats={homeStats}
-        scheduledJobs={scheduledJobs}
+        scheduledJobs={[...scheduledJobs, ...sharedJobs]}
         jobs={jobs}
         bros={bros}
         sectionId={sectionId}
@@ -2636,6 +2637,9 @@ const eligible = [
         permission={permission}
         requestPermission={requestPermission}
         account={account}
+        sharedJobs={sharedJobs}
+        sharedSeasonId={sharedSeasonId}
+        sectionId={sectionId}
       />
     );
   }

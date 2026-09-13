@@ -124,21 +124,40 @@ async function notifyNewJob(newJob, jobId, sectionId) {
   }
 }
 
-// On ne notifie que si le boulot est créé dans la saison en cours de sa
-// section : corriger un boulot dans une saison archivée ne doit pas réveiller
-// tous les Bro.
-async function notifyIfActiveSeason(snap, context, sectionId) {
-  const activeSeasonId = await getActiveSeasonId(sectionId);
+const otherSection = (sectionId) => (sectionId === DEFAULT_SECTION ? "filles" : DEFAULT_SECTION);
 
+async function isActiveSeason(context, sectionId) {
+  if (!context.params.seasonId) return true; // saison historique, à la racine
+  const activeSeasonId = await getActiveSeasonId(sectionId);
   if (activeSeasonId && context.params.seasonId !== activeSeasonId) {
     console.log(
-      `Boulot créé dans la saison ${context.params.seasonId} (${sectionId}), ` +
+      `Boulot dans la saison ${context.params.seasonId} (${sectionId}), ` +
       `saison en cours ${activeSeasonId} : pas de notification.`
     );
-    return;
+    return false;
   }
+  return true;
+}
 
-  return notifyNewJob(snap.data(), context.params.jobId, sectionId);
+// Nouveau boulot : sa section est prévenue ; l'autre aussi s'il lui est ouvert.
+// On ne notifie que dans la saison en cours : corriger un boulot dans une
+// saison archivée ne doit pas réveiller tous les Bro.
+async function onJobCreated(snap, context, sectionId) {
+  if (!(await isActiveSeason(context, sectionId))) return;
+  const job = snap.data();
+  await notifyNewJob(job, context.params.jobId, sectionId);
+  if (job.openToOtherSection === true) {
+    await notifyNewJob(job, context.params.jobId, otherSection(sectionId));
+  }
+}
+
+// Boulot ouvert à l'autre section après coup : l'autre section est prévenue.
+async function onJobUpdated(change, context, sectionId) {
+  const before = change.before.data();
+  const after = change.after.data();
+  if (before.openToOtherSection === true || after.openToOtherSection !== true) return;
+  if (!(await isActiveSeason(context, sectionId))) return;
+  await notifyNewJob(after, context.params.jobId, otherSection(sectionId));
 }
 
 // Garçons : saison historique, restée aux collections racines.
@@ -146,18 +165,36 @@ exports.sendJobNotifications = functions
   .region("europe-west1")
   .firestore
   .document("scheduledJobs/{jobId}")
-  .onCreate((snap, context) => notifyNewJob(snap.data(), context.params.jobId, DEFAULT_SECTION));
+  .onCreate((snap, context) => onJobCreated(snap, context, DEFAULT_SECTION));
+
+exports.sendJobOpenedNotifications = functions
+  .region("europe-west1")
+  .firestore
+  .document("scheduledJobs/{jobId}")
+  .onUpdate((change, context) => onJobUpdated(change, context, DEFAULT_SECTION));
 
 // Garçons : saisons suivantes.
 exports.sendJobNotificationsSeason = functions
   .region("europe-west1")
   .firestore
   .document("seasons/{seasonId}/scheduledJobs/{jobId}")
-  .onCreate((snap, context) => notifyIfActiveSeason(snap, context, DEFAULT_SECTION));
+  .onCreate((snap, context) => onJobCreated(snap, context, DEFAULT_SECTION));
+
+exports.sendJobOpenedNotificationsSeason = functions
+  .region("europe-west1")
+  .firestore
+  .document("seasons/{seasonId}/scheduledJobs/{jobId}")
+  .onUpdate((change, context) => onJobUpdated(change, context, DEFAULT_SECTION));
 
 // Autres sections (filles).
 exports.sendJobNotificationsSection = functions
   .region("europe-west1")
   .firestore
   .document("sections/{sectionId}/seasons/{seasonId}/scheduledJobs/{jobId}")
-  .onCreate((snap, context) => notifyIfActiveSeason(snap, context, context.params.sectionId));
+  .onCreate((snap, context) => onJobCreated(snap, context, context.params.sectionId));
+
+exports.sendJobOpenedNotificationsSection = functions
+  .region("europe-west1")
+  .firestore
+  .document("sections/{sectionId}/seasons/{seasonId}/scheduledJobs/{jobId}")
+  .onUpdate((change, context) => onJobUpdated(change, context, context.params.sectionId));
