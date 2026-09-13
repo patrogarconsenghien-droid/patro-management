@@ -16,6 +16,11 @@ import HomeScreen from './Home';
 import SettingsScreen from './Settings';
 import BoulotsScreen from './Boulots';
 import { formatCurrency, formatDate, formatDateTime, openingBalanceOf } from './lib/format';
+import { computeMemberBalances } from './lib/seasonRollover';
+import { celebrate, toast } from './lib/feedback';
+import AnimatedAmount from './components/AnimatedAmount';
+import BalancePill from './components/BalancePill';
+import MemberAvatar from './components/MemberAvatar';
 import { createStockHelpers } from './lib/stock';
 import { useFirestoreData } from './hooks/useFirestoreData';
 
@@ -27,6 +32,15 @@ const PatroApp = () => {
   // Sans ce verrou, un réseau lent laissait « Valider » sans réaction, et
   // chaque nouvel appui créait une commande de plus.
   const orderInProgress = useRef(false);
+
+  // Chaque changement d'écran rejoue l'animation d'entrée (voir index.css).
+  useEffect(() => {
+    const root = document.getElementById('root');
+    if (!root) return;
+    root.classList.remove('screen-enter');
+    void root.offsetWidth;
+    root.classList.add('screen-enter');
+  }, [currentScreen]);
 
   // La saison consultée détermine sur quelles données toute l'app travaille.
   const {
@@ -54,12 +68,11 @@ const PatroApp = () => {
   } = useFirestoreData(viewedSeasonId);
   const { updateStock, getStockStatus } = createStockHelpers({ products, updateInFirebase, saveToFirebase });
   const Header = ({ title, onBack }) => (
-    <>
-      <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline} />
+    <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline}>
       {isViewingArchive && (
         <SeasonBanner seasonId={viewedSeasonId} onBackToActive={backToActiveSeason} />
       )}
-    </>
+    </HeaderBase>
   );
   const [memberSearch, setMemberSearch] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -726,9 +739,10 @@ if (Object.keys(exclusiveDrawn).length > 0) {
     setDirectPaymentMethod('');
     setSharedItems({});
     
-    alert(ordersToCreate.length > 1 
-      ? `✅ ${ordersToCreate.length} commandes validées avec succès !`
-      : '✅ Commande validée avec succès !');
+    toast(ordersToCreate.length > 1
+      ? `${ordersToCreate.length} commandes encaissées`
+      : `Commande encaissée pour ${member.name}`);
+    celebrate();
     
     setSelectedMember(null);
     navigateTo('bar-order');
@@ -1059,6 +1073,15 @@ const eligible = [
   const SETTINGS_SCREENS = ['settings-password', 'settings', 'settings-surprise', 'settings-bar-threshold', 'settings-products', 'settings-stock', 'settings-rate', 'settings-history', 'settings-goal', 'settings-popular', 'settings-report', 'settings-close-season', 'settings-repair-balances', 'settings-duplicates'];
 
   if (currentScreen === 'home') {
+    // Chiffres des tuiles d'accueil, calculés comme dans la section Bar.
+    const balances = computeMemberBalances({ members, orders });
+    const negatives = [...balances.values()].filter((b) => b < -0.005);
+    const homeStats = {
+      debtTotal: negatives.reduce((sum, b) => sum + b, 0),
+      openSlates: negatives.length,
+      unpaidJobs: jobs.filter((job) => !job.isPaid).length
+    };
+
     return (
       <HomeScreen
         navigateTo={navigateTo}
@@ -1071,13 +1094,17 @@ const eligible = [
         randomTripMessage={randomTripMessage}
         loading={loading}
         isOnline={isOnline}
+        stats={homeStats}
+        viewedSeasonId={viewedSeasonId}
+        isViewingArchive={isViewingArchive}
+        backToActiveSeason={backToActiveSeason}
       />
     );
   }
 
   if (currentScreen === 'bar') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100">
+      <div className="min-h-screen bg-gray-50">
         <Header title="Section Bar" onBack={() => navigateTo('home')} />
 
         <div className="p-6 space-y-4">
@@ -1086,7 +1113,7 @@ const eligible = [
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
           >
             <div className="flex items-center space-x-3">
-              <Users className="text-blue-500" size={24} />
+              <Users className="text-bar-500" size={24} />
               <div className="text-left">
                 <h3 className="font-semibold">Nouvelle commande</h3>
                 <p className="text-gray-600 text-sm">Liste, rechargements, suppressions</p>
@@ -1099,7 +1126,7 @@ const eligible = [
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
           >
             <div className="flex items-center space-x-3">
-              <ShoppingCart className="text-blue-500" size={24} />
+              <ShoppingCart className="text-bar-500" size={24} />
               <div className="text-left">
                 <h3 className="font-semibold">Gestion des membres</h3>
                 <p className="text-gray-600 text-sm">Ventes avec gestion stock</p>
@@ -1112,7 +1139,7 @@ const eligible = [
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
           >
             <div className="flex items-center space-x-3">
-              <Clock className="text-blue-500" size={24} />
+              <Clock className="text-bar-500" size={24} />
               <div className="text-left">
                 <h3 className="font-semibold">Historique</h3>
                 <p className="text-gray-600 text-sm">Toutes les transactions</p>
@@ -1140,74 +1167,70 @@ const eligible = [
               placeholder={`Rechercher parmi les ${members.length} membres`}
               value={memberSearch}
               onChange={(e) => setMemberSearch(e.target.value)}
-              className="flex-1 p-2 border rounded-lg bg-white shadow-sm"
+              className="flex-1 px-4 py-3 rounded-2xl bg-white ring-1 ring-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-bar-500"
             />
             <button
               onClick={() => { setModalType('add-member'); setShowModal(true); }}
-              className="p-2 bg-blue-500 text-white rounded-full active:scale-95 transition-transform"
+              aria-label="Ajouter un membre"
+              className="w-12 h-12 grid place-items-center bg-bar-500 text-white rounded-2xl shadow-md active:scale-90 transition-transform"
             >
-              <Plus size={20} />
+              <Plus size={22} />
             </button>
           </div>
 
-          <div className="space-y-3">
-            {filteredMembers.map(member => (
-              <div key={member.id} className="bg-white p-4 rounded-lg shadow-sm">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <h3 className="font-medium">
-                      {member.name}
+          <div className="stagger rounded-3xl bg-white shadow-sm ring-1 ring-gray-200 divide-y divide-gray-100 overflow-hidden">
+            {filteredMembers.map(member => {
+              // Calculer le solde réel à partir des transactions
+              const memberOrders = orders.filter(order => order.memberId === member.id);
+
+              const totalSpent = memberOrders
+                .filter(order => order.type === 'order')
+                .reduce((sum, order) => sum + (order.amount || 0), 0);
+
+              const totalRecharged = memberOrders
+                .filter(order => order.type === 'repayment' || order.type === 'recharge')
+                .reduce((sum, order) => sum + (order.amount || 0), 0);
+
+              const realBalance = openingBalanceOf(member) + totalRecharged - totalSpent;
+
+              return (
+                <div key={member.id} className="flex items-center gap-3 px-3 py-2.5">
+                  <MemberAvatar name={member.name} />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate">{member.name}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <BalancePill value={realBalance} />
                       {member.isExternal && (
-                        <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
-                          👤 Externe
+                        <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-orange-100 text-orange-800">
+                          Externe
                         </span>
                       )}
-                    </h3>
-                    {(() => {
-                      // Calculer le solde réel à partir des transactions
-                      const memberOrders = orders.filter(order => order.memberId === member.id);
-
-                      const totalSpent = memberOrders
-                        .filter(order => order.type === 'order')
-                        .reduce((sum, order) => sum + (order.amount || 0), 0);
-
-                      const totalRecharged = memberOrders
-                        .filter(order => order.type === 'repayment' || order.type === 'recharge')
-                        .reduce((sum, order) => sum + (order.amount || 0), 0);
-
-                      const realBalance = openingBalanceOf(member) + totalRecharged - totalSpent;
-
-                      return (
-                        <p className={`text-sm font-semibold ${realBalance < 0 ? 'text-red-500' : 'text-green-500'}`}>
-                          Solde: {formatCurrency(realBalance)}
-                        </p>
-                      );
-                    })()}
+                    </div>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => { setSelectedMember(member); setModalType('repay'); setShowModal(true); }}
-                      className={`px-3 py-1 text-white rounded text-sm active:scale-95 transition-transform ${member.balance < 0 ? 'bg-green-500' : 'bg-blue-500'}`}
-                    >
-                      {member.balance < 0 ? 'Rembourser' : 'Recharger'}
-                    </button>
-                    <button
-                      onClick={() => navigateTo('member-history', member)}
-                      className="px-3 py-1 bg-purple-500 text-white rounded text-sm active:scale-95 transition-transform"
-                      title="Voir l'historique"
-                    >
-                      📊
-                    </button>
-                    <button
-                      onClick={() => deleteMember(member.id)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
+                  <button
+                    onClick={() => { setSelectedMember(member); setModalType('repay'); setShowModal(true); }}
+                    className={`flex-none px-3 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-transform ${member.balance < 0 ? 'bg-green-500 text-white' : 'bg-bar-100 text-bar-800'}`}
+                  >
+                    {member.balance < 0 ? 'Rembourser' : 'Recharger'}
+                  </button>
+                  <button
+                    onClick={() => navigateTo('member-history', member)}
+                    aria-label={`Historique de ${member.name}`}
+                    title="Voir l'historique"
+                    className="flex-none w-9 h-9 grid place-items-center rounded-xl bg-purple-100 text-purple-700 active:scale-90 transition-transform"
+                  >
+                    <BarChart3 size={16} />
+                  </button>
+                  <button
+                    onClick={() => deleteMember(member.id)}
+                    aria-label={`Supprimer ${member.name}`}
+                    className="flex-none w-9 h-9 grid place-items-center rounded-xl text-red-500 hover:bg-red-50 active:scale-90 transition-transform"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -1242,7 +1265,7 @@ const eligible = [
               <button
                 onClick={addMember}
                 disabled={!newMemberName.trim() || loading}
-                className="w-full p-3 bg-blue-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
+                className="w-full p-3 bg-bar-500 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform"
               >
                 {loading ? 'Ajout en cours...' : 'Ajouter'}
               </button>
@@ -1297,7 +1320,7 @@ const eligible = [
                     type="button"
                     onClick={() => setPaymentMethod('account')}
                     className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${paymentMethod === 'account'
-                      ? 'bg-blue-100 border-blue-500 text-blue-700'
+                      ? 'bg-bar-100 border-bar-500 text-bar-700'
                       : 'bg-gray-50 border-gray-300 text-gray-600'
                       }`}
                   >
@@ -1312,7 +1335,7 @@ const eligible = [
               <button
                 onClick={repayMember}
                 disabled={!repaymentAmount || parseFloat(repaymentAmount) <= 0 || !paymentMethod || loading}
-                className={`w-full p-3 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform ${selectedMember?.balance < 0 ? 'bg-green-500' : 'bg-blue-500'
+                className={`w-full p-3 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform ${selectedMember?.balance < 0 ? 'bg-green-500' : 'bg-bar-500'
                   }`}
               >
                 {loading ? 'Traitement...' : (selectedMember?.balance < 0 ? 'Confirmer le remboursement' : 'Confirmer le rechargement')}
@@ -1406,15 +1429,15 @@ const eligible = [
                 placeholder="Rechercher un membre..."
                 value={memberSearch}
                 onChange={(e) => setMemberSearch(e.target.value)}
-                className="w-full p-1 border rounded-lg bg-white shadow-sm"
+                className="w-full px-4 py-3 rounded-2xl bg-white ring-1 ring-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-bar-500"
               />
             </div>
 
             {/* Liste des membres filtrés */}
-            <div className="space-y-3">
+            <div className="stagger rounded-3xl bg-white shadow-sm ring-1 ring-gray-200 divide-y divide-gray-100 overflow-hidden">
               {filteredMembers.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <Users size={48} className="mx-auto mb-2 opacity-50" />
+                <div className="text-center py-10 text-gray-500">
+                  <Users size={44} className="mx-auto mb-2 opacity-50" />
                   <p>{memberSearch ? 'Aucun membre trouvé' : 'Aucun membre disponible'}</p>
                 </div>
               ) : (
@@ -1430,28 +1453,22 @@ const eligible = [
                   const realBalance = openingBalanceOf(member) + totalRecharged - totalSpent;
 
                   return (
-                    <div key={member.id} className="bg-white rounded-lg shadow-sm">
+                    <div key={member.id} className="flex items-center gap-2 pr-2">
                       <button
                         onClick={() => {
                           setSelectedMember(member);
                           navigateTo('bar-products', member);
                           setMemberSearch('');
                         }}
-                        className="w-full p-4 text-left active:scale-95 transition-transform"
+                        className="flex-1 min-w-0 flex items-center gap-3 px-3 py-3 text-left active:bg-gray-50 transition-colors"
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <h3 className="font-medium">{member.name}</h3>
-                            <p className={`text-sm ${realBalance < 0 ? 'text-red-500' : 'text-green-500'}`}>
-                              Solde: {formatCurrency(realBalance)}
-                            </p>
-                          </div>
-                          <div className="text-gray-400">→</div>
-                        </div>
+                        <MemberAvatar name={member.name} />
+                        <span className="flex-1 min-w-0 font-semibold truncate">{member.name}</span>
+                        <BalancePill value={realBalance} />
                       </button>
 
                       {/* Bouton de rechargement rapide */}
-                      <div className="px-4 pb-3 flex justify-end border-t pt-2">
+                      <div className="flex-none">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1459,10 +1476,9 @@ const eligible = [
                             setModalType('repay');
                             setShowModal(true);
                           }}
-                          className={`px-3 py-1 text-white rounded text-sm active:scale-95 transition-transform ${realBalance < 0 ? 'bg-green-500' : 'bg-blue-500'
-                            }`}
+                          className={`px-3 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-transform ${realBalance < 0 ? 'bg-green-500 text-white' : 'bg-bar-100 text-bar-800'}`}
                         >
-                          💰 {realBalance < 0 ? 'Rembourser' : 'Recharger'}
+                          {realBalance < 0 ? 'Rembourser' : 'Recharger'}
                         </button>
                       </div>
                     </div>
@@ -1525,7 +1541,7 @@ const eligible = [
                     <button
                       onClick={() => setPaymentMethod('account')}
                       className={`p-3 rounded-lg border-2 transition-all ${paymentMethod === 'account'
-                        ? 'border-blue-500 bg-blue-50'
+                        ? 'border-bar-500 bg-bar-50'
                         : 'border-gray-200 bg-white'
                         }`}
                     >
@@ -1540,7 +1556,7 @@ const eligible = [
                     setShowModal(false);
                   }}
                   disabled={!repaymentAmount || parseFloat(repaymentAmount) <= 0 || !paymentMethod || loading}
-                  className={`w-full p-3 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform ${selectedMember?.balance < 0 ? 'bg-green-500' : 'bg-blue-500'
+                  className={`w-full p-3 text-white rounded-lg disabled:bg-gray-300 active:scale-95 transition-transform ${selectedMember?.balance < 0 ? 'bg-green-500' : 'bg-bar-500'
                     }`}
                 >
                   {loading ? 'Traitement...' : (selectedMember?.balance < 0 ? 'Confirmer le remboursement' : 'Confirmer le rechargement')}
@@ -1589,7 +1605,7 @@ const eligible = [
             }}
             className={`w-full p-3 rounded-lg active:scale-95 transition-transform ${selectedMember?.isExternal
               ? 'bg-orange-500 text-white'
-              : 'bg-blue-500 text-white'
+              : 'bg-bar-500 text-white'
               }`}
           >
             {selectedMember?.isExternal ? '👤 Membre Externe' : '👥 Membre Normal'}
@@ -1606,9 +1622,9 @@ const eligible = [
 
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="text-center">
-                <div className="bg-blue-100 p-3 rounded-lg">
-                  <p className="text-xl font-bold text-blue-600">{totalOrders}</p>
-                  <p className="text-sm text-blue-700">Commandes</p>
+                <div className="bg-bar-100 p-3 rounded-lg">
+                  <p className="text-xl font-bold text-bar-600">{totalOrders}</p>
+                  <p className="text-sm text-bar-700">Commandes</p>
                 </div>
               </div>
               <div className="text-center">
@@ -1669,7 +1685,7 @@ const eligible = [
                             ? 'bg-red-100 text-red-800'
                             : order.type === 'repayment'
                               ? 'bg-green-100 text-green-800'
-                              : 'bg-blue-100 text-blue-800'
+                              : 'bg-bar-100 text-bar-800'
                             }`}>
                             {order.type === 'order' ? '🛒 Commande' :
                               order.type === 'repayment' ? '💰 Remboursement' :
@@ -1680,7 +1696,7 @@ const eligible = [
                           {(order.type === 'repayment' || order.type === 'recharge') && order.paymentMethod && (
                             <span className={`text-xs px-2 py-1 rounded-full ${order.paymentMethod === 'cash'
                               ? 'bg-green-50 text-green-700'
-                              : 'bg-blue-50 text-blue-700'
+                              : 'bg-bar-50 text-bar-700'
                               }`}>
                               {order.paymentMethod === 'cash' ? '💵 Cash' : '🏦 Compte'}
                             </span>
@@ -1774,9 +1790,9 @@ const eligible = [
     }));
 
     return (
-      <div className="min-h-screen bg-gray-50 pb-20">
+      <div className="min-h-screen bg-gray-50 pb-28">
         <Header
-          title={`Commande - ${selectedMember?.name}`}
+          title={`Commande · ${selectedMember?.name}`}
           onBack={() => { setSelectedMember(null); navigateTo('bar-order'); }}
         />
 
@@ -1789,7 +1805,7 @@ const eligible = [
                 placeholder="🔍 Rechercher un produit..."
                 value={productSearch}
                 onChange={(e) => setProductSearch(e.target.value)}
-                className="w-full p-3 pl-4 pr-12 border rounded-lg bg-white shadow-sm"
+                className="w-full py-3 pl-4 pr-12 rounded-2xl bg-white ring-1 ring-gray-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-bar-500"
               />
               {productSearch && (
                 <button
@@ -1809,8 +1825,8 @@ const eligible = [
               <button
                 onClick={() => setActiveCategory('all')}
                 className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap active:scale-95 transition-transform ${activeCategory === 'all'
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                  ? 'bg-bar-500 text-white'
+                  : 'bg-white text-gray-700 ring-1 ring-gray-200'
                   }`}
               >
                 Tout ({products.filter(p => p.stock > 0).length})
@@ -1820,8 +1836,8 @@ const eligible = [
                   key={category.name}
                   onClick={() => setActiveCategory(category.name)}
                   className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap active:scale-95 transition-transform ${activeCategory === category.name
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    ? 'bg-bar-500 text-white'
+                    : 'bg-white text-gray-700 ring-1 ring-gray-200'
                     }`}
                 >
                   {category.name} ({category.count})
@@ -1877,10 +1893,10 @@ const eligible = [
                     const unitQuantity = cart[`${product.id}-unit`]?.quantity || 0;
 
                     return (
-                      <div key={product.id} className={`bg-white p-3 rounded-lg shadow-sm border-2 border-yellow-200 ${isOutOfStock ? 'opacity-50' : ''}`}>
+                      <div key={product.id} className={`bg-white p-3 rounded-2xl shadow-sm ring-2 ${unitQuantity > 0 ? 'ring-bar-500' : 'ring-bar-200'} transition-shadow ${isOutOfStock ? 'opacity-50' : ''}`}>
                         <div className="text-center">
                           <h4 className="font-medium text-sm mb-1">{product.name}</h4>
-                          <p className="text-blue-600 font-semibold text-sm">
+                          <p className="font-mono text-bar-700 font-medium text-sm">
                             {formatCurrency(selectedMember?.isExternal ? (product.externalPrice || product.price) : product.price)}
                             {selectedMember?.isExternal && product.externalPrice && product.externalPrice !== product.price && (
                               <span className="ml-1 text-xs text-orange-600">(externe)</span>
@@ -1890,8 +1906,8 @@ const eligible = [
                             {product.stock}
                           </div>
                           {unitQuantity > 0 && (
-                            <div className="text-xs text-orange-600 mt-1 font-bold">
-                              Panier: {unitQuantity}
+                            <div key={unitQuantity} className="inline-block ml-1 mt-1 px-2 py-0.5 rounded-full bg-bar-500 text-white text-xs font-bold animate-pop">
+                              × {unitQuantity}
                             </div>
                           )}
                           <div className="flex items-center justify-center space-x-2 mt-3">
@@ -1906,7 +1922,7 @@ const eligible = [
                             <button
                               onClick={() => addToCart(product.id, 'unit')}
                               disabled={isOutOfStock}
-                              className="w-12 h-12 bg-yellow-500 text-white rounded-lg text-xl font-bold disabled:bg-gray-300 active:scale-95 transition-transform shadow-md"
+                              className="w-12 h-12 bg-bar-500 text-white rounded-2xl text-2xl font-bold disabled:bg-gray-300 disabled:text-gray-500 active:scale-90 transition-transform shadow-md"
                             >
                               +
                             </button>
@@ -1929,7 +1945,7 @@ const eligible = [
                 {productSearch && (
                   <button
                     onClick={() => setProductSearch('')}
-                    className="mt-2 text-blue-500 hover:underline"
+                    className="mt-2 text-bar-500 hover:underline"
                   >
                     Effacer la recherche
                   </button>
@@ -1949,12 +1965,12 @@ const eligible = [
                   const availableStock = product.stock - totalRequested;
 
                   return (
-                    <div key={product.id} className={`bg-white p-3 rounded-lg shadow-sm ${isOutOfStock ? 'opacity-50' : ''}`}>
+                    <div key={product.id} className={`bg-white p-3 rounded-2xl shadow-sm ring-1 ${totalRequested > 0 ? 'ring-2 ring-bar-500' : 'ring-gray-200'} transition-shadow ${isOutOfStock ? 'opacity-50' : ''}`}>
                       {/* Header du produit */}
                       <div className="mb-3">
                         <h4 className="font-medium text-sm mb-1 leading-tight">{product.name}</h4>
                         <div className="flex items-center justify-between mb-1">
-                          <p className="text-blue-600 font-semibold text-sm">
+                          <p className="font-mono text-bar-700 font-medium text-sm">
                             {formatCurrency(selectedMember?.isExternal ? (product.externalPrice || product.price) : product.price)}
                             {selectedMember?.isExternal && product.externalPrice && product.externalPrice !== product.price && (
                               <span className="ml-1 text-xs text-orange-600">(ext)</span>
@@ -1970,8 +1986,8 @@ const eligible = [
                             Stock: {product.stock}
                           </div>
                           {totalRequested > 0 && (
-                            <div className="text-xs text-orange-600 font-medium">
-                              Panier: {totalRequested}
+                            <div key={totalRequested} className="px-2 py-0.5 rounded-full bg-bar-500 text-white text-xs font-bold animate-pop">
+                              × {totalRequested}
                             </div>
                           )}
                         </div>
@@ -1983,7 +1999,7 @@ const eligible = [
                           <div className="text-sm">
                             <span className="font-medium">Unité</span>
                             {unitQuantity > 0 && (
-                              <span className="ml-2 text-orange-600 font-bold">x{unitQuantity}</span>
+                              <span key={unitQuantity} className="ml-2 inline-block text-bar-600 font-bold animate-pop">×{unitQuantity}</span>
                             )}
                           </div>
                           <div className="flex items-center space-x-2">
@@ -2000,7 +2016,7 @@ const eligible = [
                             <button
                               onClick={() => addToCart(product.id, 'unit')}
                               disabled={isOutOfStock || availableStock <= 0}
-                              className="w-12 h-12 bg-green-500 text-white rounded-lg text-xl font-bold disabled:bg-gray-300 active:scale-95 transition-transform shadow-md"
+                              className="w-12 h-12 bg-bar-500 text-white rounded-2xl text-2xl font-bold disabled:bg-gray-300 disabled:text-gray-500 active:scale-90 transition-transform shadow-md"
                             >
                               +
                             </button>
@@ -2048,11 +2064,11 @@ const eligible = [
 
                           {/* Vente par bac */}
                           {product.stock >= product.packSize && (
-                            <div className="bg-blue-50 p-2 rounded">
+                            <div className="bg-bar-50 p-2 rounded">
                               <div className="flex items-center justify-between">
                                 <div className="text-xs">
                                   <div className="font-medium">Bac {product.packSize}</div>
-                                  <div className="text-blue-600 font-semibold">{formatCurrency(product.pricePerPack)}</div>
+                                  <div className="text-bar-600 font-semibold">{formatCurrency(product.pricePerPack)}</div>
                                 </div>
                                 <div className="flex items-center space-x-1">
                                   {Math.floor(packQuantity / product.packSize) > 0 && (
@@ -2064,13 +2080,13 @@ const eligible = [
                                     </button>
                                   )}
                                   {Math.floor(packQuantity / product.packSize) > 0 && (
-                                    <span className="text-xs font-bold text-blue-700 min-w-[15px] text-center">
+                                    <span className="text-xs font-bold text-bar-700 min-w-[15px] text-center">
                                       {Math.floor(packQuantity / product.packSize)}
                                     </span>
                                   )}
                                   <button
                                     onClick={() => addToCart(product.id, 'pack')}
-                                    className="w-8 h-8 bg-blue-500 text-white rounded text-sm font-bold active:scale-95 transition-transform"
+                                    className="w-8 h-8 bg-bar-500 text-white rounded text-sm font-bold active:scale-95 transition-transform"
                                   >
                                     +
                                   </button>
@@ -2088,20 +2104,28 @@ const eligible = [
           </div>
         </div>
 
-        {/* Panier fixe en bas */}
-        {Object.keys(cart).length > 0 && (
-          <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-semibold">Total: {formatCurrency(cartTotal)}</span>
-              <button
-                onClick={validateOrder}
-                className="px-6 py-2 bg-blue-500 text-white rounded-lg active:scale-95 transition-transform"
-              >
-                Valider ({Object.values(cart).reduce((sum, item) => sum + item.quantity, 0)} articles)
-              </button>
+        {/* Panier flottant en bas */}
+        {Object.keys(cart).length > 0 && (() => {
+          const itemCount = Object.values(cart).reduce((sum, item) => sum + item.quantity, 0);
+          return (
+            <div className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-40 animate-sheet">
+              <div className="flex items-center gap-3 rounded-3xl bg-gray-900 text-gray-50 p-2 pl-5 shadow-xl">
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs text-gray-400 truncate">
+                    {itemCount} {itemCount > 1 ? 'articles' : 'article'} pour {selectedMember?.name}
+                  </p>
+                  <AnimatedAmount value={cartTotal} className="block font-display text-xl font-extrabold tracking-tight" />
+                </div>
+                <button
+                  onClick={validateOrder}
+                  className="flex-none px-5 py-3 rounded-2xl bg-bar-500 text-white font-bold active:scale-95 transition-transform"
+                >
+                  Valider
+                </button>
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         <TonneauSurprise
           open={showRoulette}
@@ -2219,11 +2243,11 @@ const eligible = [
           <div className="space-y-4">
             {orderConfirmation.member && (
               <>
-                <div className="bg-blue-50 p-3 rounded-lg">
-                  <h3 className="font-semibold text-blue-800">
+                <div className="bg-bar-50 p-3 rounded-lg">
+                  <h3 className="font-semibold text-bar-800">
                     Commande de {orderConfirmation.member.name}
                   </h3>
-                  <p className="text-sm text-blue-600">
+                  <p className="text-sm text-bar-600">
                     Solde actuel: {formatCurrency(orderConfirmation.member.balance)}
                   </p>
                 </div>
@@ -2240,7 +2264,7 @@ const eligible = [
                           <div>
                             <span className="font-medium">{item.quantity}x {item.productName}</span>
                             {shared && (
-                              <div className="text-xs text-blue-600 mt-1">
+                              <div className="text-xs text-bar-600 mt-1">
                                 Partagé entre {shared.totalShares} personne{shared.totalShares > 1 ? 's' : ''}
                               </div>
                             )}
@@ -2270,7 +2294,7 @@ const eligible = [
                                     setModalType('add-person-to-share');
                                     setSelectedMember({ itemIndex: index });
                                   }}
-                                  className="px-3 py-1 bg-blue-500 text-white rounded text-sm active:scale-95 transition-transform"
+                                  className="px-3 py-1 bg-bar-500 text-white rounded text-sm active:scale-95 transition-transform"
                                 >
                                   + Ajouter
                                 </button>
@@ -2284,11 +2308,11 @@ const eligible = [
                                   return (
                                     <div key={member.id} className="flex items-center justify-between bg-white p-2 rounded">
                                       <div className="flex items-center space-x-2">
-                                        <User size={16} className="text-blue-500" />
+                                        <User size={16} className="text-bar-500" />
                                         <span className="text-sm font-medium">{member.name}</span>
                                       </div>
                                       <div className="flex items-center space-x-2">
-                                        <span className="text-sm font-semibold text-blue-600">
+                                        <span className="text-sm font-semibold text-bar-600">
                                           {formatCurrency(splitPrice)}
                                         </span>
                                         {mIndex > 0 && (
@@ -2310,7 +2334,7 @@ const eligible = [
                                     setModalType('add-person-to-share');
                                     setSelectedMember({ itemIndex: index });
                                   }}
-                                  className="w-full py-2 border-2 border-dashed border-blue-300 text-blue-600 rounded text-sm font-medium hover:bg-blue-50 active:scale-95 transition-transform"
+                                  className="w-full py-2 border-2 border-dashed border-bar-300 text-bar-600 rounded text-sm font-medium hover:bg-bar-50 active:scale-95 transition-transform"
                                 >
                                   + Ajouter une autre personne
                                 </button>
@@ -2370,7 +2394,7 @@ const eligible = [
                           type="button"
                           onClick={() => setDirectPaymentMethod('account')}
                           className={`p-3 border rounded-lg text-sm font-medium active:scale-95 transition-transform ${directPaymentMethod === 'account'
-                            ? 'bg-blue-100 border-blue-500 text-blue-700'
+                            ? 'bg-bar-100 border-bar-500 text-bar-700'
                             : 'bg-gray-50 border-gray-300 text-gray-600'
                             }`}
                         >
@@ -2378,11 +2402,11 @@ const eligible = [
                         </button>
                       </div>
 
-                      <div className="bg-blue-50 p-3 rounded-lg">
-                        <p className="text-sm text-blue-700">
+                      <div className="bg-bar-50 p-3 rounded-lg">
+                        <p className="text-sm text-bar-700">
                           ✅ Le compte sera rechargé de <strong>{formatCurrency(orderConfirmation.total)}</strong> puis débité du même montant
                         </p>
-                        <p className="text-xs text-blue-600 mt-1">
+                        <p className="text-xs text-bar-600 mt-1">
                           Solde final: {formatCurrency(orderConfirmation.member.balance)}
                         </p>
                       </div>
@@ -2461,7 +2485,7 @@ const eligible = [
                       setShowModal(false);
                       setMemberSearch('');
                     }}
-                    className="w-full p-3 bg-gray-50 hover:bg-blue-50 rounded-lg text-left active:scale-95 transition-transform"
+                    className="w-full p-3 bg-gray-50 hover:bg-bar-50 rounded-lg text-left active:scale-95 transition-transform"
                   >
                     <div className="flex items-center justify-between">
                       <div>
@@ -2470,7 +2494,7 @@ const eligible = [
                           Solde: {formatCurrency(member.balance)}
                         </p>
                       </div>
-                      <Plus className="text-blue-500" size={20} />
+                      <Plus className="text-bar-500" size={20} />
                     </div>
                   </button>
                 ))}
@@ -2511,7 +2535,7 @@ const eligible = [
                               +{formatCurrency(order.amount)}
                             </span>
                             {order.type === 'recharge' && (
-                              <span className="text-xs bg-blue-100 text-blue-600 px-1 rounded">
+                              <span className="text-xs bg-bar-100 text-bar-600 px-1 rounded">
                                 Rechargement
                               </span>
                             )}
@@ -2763,7 +2787,7 @@ const eligible = [
     };
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-50">
+      <div className="min-h-screen bg-gray-50">
         <Header title="Section Finance" onBack={() => navigateTo('home')} />
 
         <div className="p-6 space-y-6">
@@ -2796,7 +2820,7 @@ const eligible = [
                       : (grandTotal / financialGoal.amount) * 100 >= 75
                         ? 'text-blue-600'
                         : (grandTotal / financialGoal.amount) * 100 >= 50
-                          ? 'text-yellow-600'
+                          ? 'text-finance-600'
                           : 'text-red-600'
                       }`}>
                       {((grandTotal / financialGoal.amount) * 100).toFixed(1)}%
@@ -2838,7 +2862,7 @@ const eligible = [
                       );
                     } else if (percentage >= 50) {
                       return (
-                        <p className="text-yellow-700 font-semibold">
+                        <p className="text-finance-700 font-semibold">
                           💪 Bonne progression ! Il reste {formatCurrency(remaining)}.
                         </p>
                       );
@@ -2887,7 +2911,7 @@ const eligible = [
                   : (grandTotal / financialGoal.amount) * 100 >= 75
                     ? 'bg-blue-100 text-blue-800'
                     : (grandTotal / financialGoal.amount) * 100 >= 50
-                      ? 'bg-yellow-100 text-yellow-800'
+                      ? 'bg-finance-100 text-finance-800'
                       : 'bg-red-100 text-red-800'
                   }`}>
                   {((grandTotal / financialGoal.amount) * 100).toFixed(1)}% de l'objectif
@@ -2909,7 +2933,7 @@ const eligible = [
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`text-2xl font-bold ${cashTotal >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <p className={`text-2xl font-bold whitespace-nowrap ${cashTotal >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                       {formatCurrency(cashTotal)}
                     </p>
                   </div>
@@ -2929,7 +2953,7 @@ const eligible = [
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`text-2xl font-bold ${accountTotal >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                    <p className={`text-2xl font-bold whitespace-nowrap ${accountTotal >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
                       {formatCurrency(accountTotal)}
                     </p>
                   </div>
@@ -2939,13 +2963,13 @@ const eligible = [
               {/* Total */}
               <div className={`p-4 rounded-lg border ${financialGoal.isActive && grandTotal >= financialGoal.amount
                 ? 'bg-green-50 border-green-200'
-                : 'bg-yellow-50 border-yellow-200'
+                : 'bg-finance-50 border-finance-200'
                 }`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
                     <div className={`p-2 rounded-full ${financialGoal.isActive && grandTotal >= financialGoal.amount
                       ? 'bg-green-500'
-                      : 'bg-yellow-500'
+                      : 'bg-finance-500'
                       }`}>
                       <span className="text-white text-lg">
                         {financialGoal.isActive && grandTotal >= financialGoal.amount ? '🏆' : '💎'}
@@ -2954,14 +2978,14 @@ const eligible = [
                     <div>
                       <h3 className={`font-semibold ${financialGoal.isActive && grandTotal >= financialGoal.amount
                         ? 'text-green-800'
-                        : 'text-yellow-800'
+                        : 'text-finance-800'
                         }`}>
                         Total
                         {financialGoal.isActive && grandTotal >= financialGoal.amount && ' - Objectif Atteint !'}
                       </h3>
                       <p className={`text-sm ${financialGoal.isActive && grandTotal >= financialGoal.amount
                         ? 'text-green-600'
-                        : 'text-yellow-600'
+                        : 'text-finance-600'
                         }`}>
                         Trésorerie totale
                       </p>
@@ -2969,7 +2993,7 @@ const eligible = [
                   </div>
                   <div className="text-right">
                     <p className={`text-3xl font-bold ${grandTotal >= 0
-                      ? (financialGoal.isActive && grandTotal >= financialGoal.amount ? 'text-green-600' : 'text-yellow-600')
+                      ? (financialGoal.isActive && grandTotal >= financialGoal.amount ? 'text-green-600' : 'text-finance-600')
                       : 'text-red-600'
                       }`}>
                       {formatCurrency(grandTotal)}
@@ -2990,7 +3014,7 @@ const eligible = [
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-purple-600">
+                    <p className="text-2xl font-bold whitespace-nowrap text-purple-600">
                       {formatCurrency(stockValue)}
                     </p>
                     <p className="text-xs text-purple-500">
@@ -3012,7 +3036,7 @@ const eligible = [
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`text-2xl font-bold ${totalMemberBalances >= 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                    <p className={`text-2xl font-bold whitespace-nowrap ${totalMemberBalances >= 0 ? 'text-orange-600' : 'text-green-600'}`}>
                       {formatCurrency(-totalMemberBalances)}
                     </p>
                     <div className="text-xs text-orange-500 space-y-1">
@@ -3075,7 +3099,7 @@ const eligible = [
               className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
             >
               <div className="flex items-center space-x-3">
-                <BarChart3 className="text-yellow-500" size={24} />
+                <BarChart3 className="text-finance-500" size={24} />
                 <div className="text-left">
                   <h3 className="font-semibold">Évolution des Gains</h3>
                   <p className="text-gray-600 text-sm">Graphiques et tendances</p>
@@ -3088,7 +3112,7 @@ const eligible = [
               className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
             >
               <div className="flex items-center space-x-3">
-                <Beer className="text-yellow-500" size={24} />
+                <Beer className="text-finance-500" size={24} />
                 <div className="text-left">
                   <h3 className="font-semibold">Rapport Bar</h3>
                   <p className="text-gray-600 text-sm">Chiffre d'affaires par jour d'ouverture</p>
@@ -3101,7 +3125,7 @@ const eligible = [
               className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
             >
               <div className="flex items-center space-x-3">
-                <Clock className="text-yellow-500" size={24} />
+                <Clock className="text-finance-500" size={24} />
                 <div className="text-left">
                   <h3 className="font-semibold">Historique Complet</h3>
                   <p className="text-gray-600 text-sm">Toutes les transactions</p>
@@ -3113,7 +3137,7 @@ const eligible = [
               className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
             >
               <div className="flex items-center space-x-3">
-                <Wrench className="text-yellow-500" size={24} />
+                <Wrench className="text-finance-500" size={24} />
                 <div className="text-left">
                   <h3 className="font-semibold">Revenus Futurs Boulots</h3>
                   <p className="text-gray-600 text-sm">Argent des boulots programmés</p>
@@ -3125,7 +3149,7 @@ const eligible = [
               className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
             >
               <div className="flex items-center space-x-3">
-                <ShoppingCart className="text-yellow-500" size={24} />
+                <ShoppingCart className="text-finance-500" size={24} />
                 <div className="text-left">
                   <h3 className="font-semibold">Statistiques de Vente</h3>
                   <p className="text-gray-600 text-sm">Total vendu par produit</p>
@@ -3530,7 +3554,7 @@ const eligible = [
                     <div key={stat.name} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                       <div className="flex items-center space-x-4 flex-1">
                         {/* Position avec médailles */}
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${index === 0 ? 'bg-yellow-500' :
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${index === 0 ? 'bg-finance-500' :
                           index === 1 ? 'bg-gray-400' :
                             index === 2 ? 'bg-orange-600' : 'bg-gray-300'
                           }`}>
@@ -3595,7 +3619,7 @@ const eligible = [
 
           {/* Top 3 podium */}
           {productStats.length >= 3 && (
-            <div className="bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl shadow-lg p-6">
+            <div className="bg-gradient-to-r from-finance-50 to-orange-50 rounded-xl shadow-lg p-6">
               <h2 className="text-xl font-bold text-gray-800 mb-6 text-center">🏆 Podium des Ventes</h2>
 
               <div className="flex justify-center items-end space-x-4">
@@ -3612,7 +3636,7 @@ const eligible = [
 
                 {/* 1ère place */}
                 <div className="text-center">
-                  <div className="bg-yellow-500 text-white rounded-lg p-4 mb-2 h-24 flex items-center justify-center">
+                  <div className="bg-finance-500 text-white rounded-lg p-4 mb-2 h-24 flex items-center justify-center">
                     <div>
                       <div className="text-3xl">🥇</div>
                     </div>
@@ -3714,7 +3738,7 @@ const eligible = [
                     <p className="text-sm text-green-600">{totalJobs} boulots à quota plein</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-green-600">{formatCurrency(totalIncomeComplete)}</p>
+                    <p className="text-2xl font-bold whitespace-nowrap text-green-600">{formatCurrency(totalIncomeComplete)}</p>
                   </div>
                 </div>
               </div>
@@ -3727,7 +3751,7 @@ const eligible = [
                     <p className="text-sm text-orange-600">État actuel des inscriptions</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-orange-600">{formatCurrency(totalIncomePartial)}</p>
+                    <p className="text-2xl font-bold whitespace-nowrap text-orange-600">{formatCurrency(totalIncomePartial)}</p>
                   </div>
                 </div>
               </div>
@@ -3740,7 +3764,7 @@ const eligible = [
                     <p className="text-sm text-blue-600">Si tous les quotas sont atteints</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-2xl font-bold text-blue-600">
+                    <p className="text-2xl font-bold whitespace-nowrap text-blue-600">
                       +{formatCurrency(totalIncomeComplete - totalIncomePartial)}
                     </p>
                   </div>
@@ -3915,11 +3939,11 @@ const eligible = [
             {/* Statistiques principales */}
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-white bg-opacity-70 p-3 rounded-lg text-center">
-                <p className="text-2xl font-bold text-green-600">{stats.totalHours}h</p>
+                <p className="text-2xl font-bold whitespace-nowrap text-green-600">{stats.totalHours}h</p>
                 <p className="text-sm text-gray-700">Heures totales</p>
               </div>
               <div className="bg-white bg-opacity-70 p-3 rounded-lg text-center">
-                <p className="text-2xl font-bold text-blue-600">{formatCurrency(stats.totalEarnings)}</p>
+                <p className="text-2xl font-bold whitespace-nowrap text-blue-600">{formatCurrency(stats.totalEarnings)}</p>
                 <p className="text-sm text-gray-700">Gains totaux</p>
               </div>
             </div>
@@ -4017,7 +4041,7 @@ const eligible = [
                             {job.isPaid ? '✅ Payé' : '⏳ À payer'}
                           </span>
                           {job.isPartialCompletion && (
-                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-finance-100 text-finance-800">
                               ⚠️ Partiel
                             </span>
                           )}
@@ -4347,13 +4371,13 @@ const eligible = [
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="text-center">
                 <div className="bg-blue-100 p-3 rounded-lg">
-                  <p className="text-2xl font-bold text-blue-600">{openDays.length}</p>
+                  <p className="text-2xl font-bold whitespace-nowrap text-blue-600">{openDays.length}</p>
                   <p className="text-sm text-blue-700">Jours d'ouverture</p>
                 </div>
               </div>
               <div className="text-center">
                 <div className="bg-green-100 p-3 rounded-lg">
-                  <p className="text-2xl font-bold text-green-600">
+                  <p className="text-2xl font-bold whitespace-nowrap text-green-600">
                     {formatCurrency(openDays.reduce((sum, day) => sum + day.totalRevenue, 0))}
                   </p>
                   <p className="text-sm text-green-700">CA Total Bar</p>
@@ -4379,11 +4403,11 @@ const eligible = [
                 </div>
               </div>
               <div className="text-center">
-                <div className="bg-yellow-100 p-3 rounded-lg">
-                  <p className="text-xl font-bold text-yellow-600">
+                <div className="bg-finance-100 p-3 rounded-lg">
+                  <p className="text-xl font-bold text-finance-600">
                     {openDays.length > 0 ? formatCurrency(openDays.reduce((sum, day) => sum + day.totalRevenue, 0) / openDays.length) : '0€'}
                   </p>
-                  <p className="text-xs text-yellow-700">CA moyen/jour</p>
+                  <p className="text-xs text-finance-700">CA moyen/jour</p>
                 </div>
               </div>
             </div>
@@ -4657,7 +4681,7 @@ const eligible = [
     };
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-yellow-50 to-orange-50">
+      <div className="min-h-screen bg-gray-50">
         <Header title="Évolution des Revenus" onBack={() => navigateTo('finance')} />
 
         <div className="p-4 space-y-6">
@@ -4668,21 +4692,21 @@ const eligible = [
             <div className="grid grid-cols-3 gap-4">
               <div className="text-center">
                 <div className="bg-green-100 p-3 rounded-lg">
-                  <p className="text-2xl font-bold text-green-600">{formatCurrency(totalRevenue)}</p>
+                  <p className="text-2xl font-bold whitespace-nowrap text-green-600">{formatCurrency(totalRevenue)}</p>
                   <p className="text-sm text-green-700">Revenus Totaux</p>
                 </div>
               </div>
 
               <div className="text-center">
                 <div className="bg-red-100 p-3 rounded-lg">
-                  <p className="text-2xl font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
+                  <p className="text-2xl font-bold whitespace-nowrap text-red-600">{formatCurrency(totalExpenses)}</p>
                   <p className="text-sm text-red-700">Dépenses Totales</p>
                 </div>
               </div>
 
               <div className="text-center">
                 <div className={`p-3 rounded-lg ${totalNet >= 0 ? 'bg-blue-100' : 'bg-orange-100'}`}>
-                  <p className={`text-2xl font-bold ${totalNet >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                  <p className={`text-2xl font-bold whitespace-nowrap ${totalNet >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
                     {formatCurrency(totalNet)}
                   </p>
                   <p className={`text-sm ${totalNet >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>
@@ -4787,15 +4811,15 @@ const eligible = [
                         <defs>
                           {/* Gradient pour la zone sous la courbe */}
                           <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" stopColor="#10b981" stopOpacity="0.3" />
-                            <stop offset="100%" stopColor="#10b981" stopOpacity="0.05" />
+                            <stop offset="0%" style={{ stopColor: 'rgb(var(--c-green-500))' }} stopOpacity="0.3" />
+                            <stop offset="100%" style={{ stopColor: 'rgb(var(--c-green-500))' }} stopOpacity="0.05" />
                           </linearGradient>
 
                           {/* Gradient pour la courbe */}
                           <linearGradient id="lineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                            <stop offset="0%" stopColor="#10b981" />
-                            <stop offset="50%" stopColor="#3b82f6" />
-                            <stop offset="100%" stopColor="#8b5cf6" />
+                            <stop offset="0%" style={{ stopColor: 'rgb(var(--c-green-500))' }} />
+                            <stop offset="50%" style={{ stopColor: 'rgb(var(--c-blue-500))' }} />
+                            <stop offset="100%" style={{ stopColor: 'rgb(var(--c-purple-500))' }} />
                           </linearGradient>
                         </defs>
 
@@ -4808,7 +4832,7 @@ const eligible = [
                                 y1={line.y}
                                 x2={chartWidth}
                                 y2={line.y}
-                                stroke={line.isZero ? "#ef4444" : "#e5e7eb"}
+                                style={{ stroke: line.isZero ? 'rgb(var(--c-red-500))' : 'rgb(var(--c-gray-300))' }}
                                 strokeWidth={line.isZero ? "2" : "1"}
                                 strokeDasharray={line.isZero ? "0" : "2,2"}
                                 opacity={line.isZero ? "0.8" : "0.5"}
@@ -4832,7 +4856,7 @@ const eligible = [
                               y1="0"
                               x2={point.x}
                               y2={chartHeight}
-                              stroke="#f3f4f6"
+                              style={{ stroke: 'rgb(var(--c-gray-200))' }}
                               strokeWidth="1"
                               strokeDasharray="2,2"
                               opacity="0.5"
@@ -4879,8 +4903,7 @@ const eligible = [
                                 cx={point.x}
                                 cy={point.y}
                                 r="8"
-                                fill="white"
-                                stroke={point.data.net >= 0 ? "#10b981" : "#ef4444"}
+                                style={{ fill: 'rgb(var(--c-surface))', stroke: point.data.net >= 0 ? 'rgb(var(--c-green-500))' : 'rgb(var(--c-red-500))' }}
                                 strokeWidth="3"
                                 className="drop-shadow-sm"
                               />
@@ -4889,7 +4912,7 @@ const eligible = [
                                 cx={point.x}
                                 cy={point.y}
                                 r="4"
-                                fill={point.data.net >= 0 ? "#10b981" : "#ef4444"}
+                                style={{ fill: point.data.net >= 0 ? 'rgb(var(--c-green-500))' : 'rgb(var(--c-red-500))' }}
                               />
 
                               {/* Valeur au-dessus du point */}

@@ -441,7 +441,7 @@ ${job.registeredBros.map(reg => {
 
   if (screen === 'boulots') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-green-100">
+      <div className="min-h-screen bg-gray-50">
         <Header title="Section Boulots" onBack={() => navigateTo('home')} />
 
         <div className="p-6 space-y-4">
@@ -1985,7 +1985,7 @@ ${job.registeredBros.map(reg => {
                         sum + ((prevBro.earnings / totalEarnings) * 360), 0);
 
                       const colors = [
-                        '#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#eab308'
+                        '#0E8F5F', '#3D5AFE', '#6D4AFF', '#E85D12', '#E8435A', '#D99A06'
                       ];
                       const color = colors[index % colors.length];
 

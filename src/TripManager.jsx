@@ -730,9 +730,9 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
   const categoryInfo = (type) => getCategoryInfo(type);
   
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 pb-20">
+    <div className="min-h-screen bg-gray-50 pb-20">
       {/* Header avec navigation */}
-      <div className="bg-gradient-to-r from-blue-500 to-purple-500 text-white p-4 sticky top-0 z-10 shadow-lg">
+      <div className="app-header bg-voyage-500 text-white p-4 sticky top-0 z-30 shadow-md">
         <div className="flex items-center justify-between">
           <button onClick={onBack} className="p-2 hover:bg-white/20 rounded-lg">
             <ArrowLeft size={24} />
@@ -886,11 +886,11 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
 
   
   const Header = ({ title, onBack }) => (
-    <div className="bg-gradient-to-r from-orange-500 to-red-500 text-white p-4 flex items-center sticky top-0 z-10 shadow-lg">
-      <button onClick={onBack} className="mr-3 p-2 hover:bg-white/20 rounded-lg active:scale-95 transition-transform">
-        <ArrowLeft size={24} />
+    <div className="app-header bg-voyage-500 text-white px-4 py-3 flex items-center gap-3 sticky top-0 z-30 shadow-md">
+      <button onClick={onBack} aria-label="Retour" className="w-10 h-10 flex-none grid place-items-center rounded-2xl bg-black/10 active:scale-90 transition-transform">
+        <ArrowLeft size={20} />
       </button>
-      <h1 className="text-xl font-bold flex-1">{title}</h1>
+      <h1 className="font-display text-xl font-extrabold tracking-tight flex-1 truncate">{title}</h1>
     </div>
   );
   
@@ -900,13 +900,13 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
   
   if (currentScreen === 'password') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50">
+      <div className="min-h-screen bg-gray-50">
         <Header title="🔒 Accès Voyage" onBack={onBack} />
         
         <div className="p-4">
           <div className="bg-white rounded-xl shadow-lg p-6 max-w-md mx-auto mt-20">
             <div className="text-center mb-6">
-              <Plane size={48} className="mx-auto text-orange-500 mb-4" />
+              <Plane size={48} className="mx-auto text-voyage-500 mb-4" />
               <h2 className="text-xl font-bold text-gray-800">Section Voyage Protégée</h2>
               <p className="text-gray-600 mt-2">Entrez le mot de passe pour accéder</p>
             </div>
@@ -942,7 +942,7 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
                   setPasswordInput('');
                 }
               }}
-              className="w-full p-3 bg-orange-500 text-white rounded-lg active:scale-95 transition-transform font-semibold"
+              className="w-full p-3 bg-voyage-500 text-white rounded-lg active:scale-95 transition-transform font-semibold"
             >
               🔓 Déverrouiller
             </button>
@@ -970,7 +970,7 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
     const budget = calculateBudget();
     
     return (
-      <div className="min-h-screen bg-gradient-to-br from-orange-50 to-red-50 pb-20">
+      <div className="min-h-screen bg-gray-50 pb-20">
         <Header title="🗺️ Gestion Voyage" onBack={onBack} />
         
         <div className="p-4 space-y-4">
@@ -986,7 +986,7 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
               
               <div className="flex justify-between items-center">
                 <span className="text-gray-600">Dépenses préliminaires :</span>
-                <span className="text-lg font-bold text-orange-600">-{formatCurrency(budget.beforeExpenses)}</span>
+                <span className="text-lg font-bold text-voyage-600">-{formatCurrency(budget.beforeExpenses)}</span>
               </div>
               
               <div className="h-px bg-gray-200"></div>
@@ -1021,7 +1021,7 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
                     className={`h-full transition-all duration-500 ${
                       budget.percentUsed < 50 ? 'bg-green-500' :
                       budget.percentUsed < 80 ? 'bg-yellow-500' :
-                      budget.percentUsed < 100 ? 'bg-orange-500' : 'bg-red-500'
+                      budget.percentUsed < 100 ? 'bg-voyage-500' : 'bg-red-500'
                     }`}
                     style={{ width: `${Math.min(budget.percentUsed, 100)}%` }}
                   ></div>
@@ -1131,7 +1131,7 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
     const totalDuring = duringExpenses.reduce((sum, exp) => sum + (parseFloat(exp.amount) || 0), 0);
     
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-50 pb-20">
+      <div className="min-h-screen bg-gray-50 pb-20">
         <Header title="💰 Dépenses Voyage" onBack={() => setCurrentScreen('main')} />
         
         <div className="p-4 space-y-4">
@@ -1139,7 +1139,7 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-white rounded-xl p-4 shadow-lg">
               <p className="text-sm text-gray-600">Avant voyage</p>
-              <p className="text-2xl font-bold text-orange-600">{formatCurrency(totalBefore)}</p>
+              <p className="text-2xl font-bold text-voyage-600">{formatCurrency(totalBefore)}</p>
               <p className="text-xs text-gray-500">{beforeExpenses.length} dépense(s)</p>
             </div>
             <div className="bg-white rounded-xl p-4 shadow-lg">
@@ -1210,7 +1210,7 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
           
           {/* Liste des dépenses AVANT */}
           <div className="bg-white rounded-xl shadow-lg p-4">
-            <h3 className="font-bold text-orange-600 mb-3">📋 Dépenses Avant le Voyage</h3>
+            <h3 className="font-bold text-voyage-600 mb-3">📋 Dépenses Avant le Voyage</h3>
             
             {beforeExpenses.length === 0 ? (
               <p className="text-gray-500 text-center py-4">Aucune dépense préliminaire</p>
@@ -1222,7 +1222,7 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
                     : bros.find(b => b.id === expense.sharedWith)?.name || 'Inconnu';
                   
                   return (
-                    <div key={expense.id} className="flex items-start justify-between p-3 bg-orange-50 rounded-lg">
+                    <div key={expense.id} className="flex items-start justify-between p-3 bg-voyage-50 rounded-lg">
                       <div className="flex-1">
                         <h4 className="font-semibold text-gray-800">{expense.description}</h4>
                         <p className="text-sm text-gray-600">
@@ -1233,7 +1233,7 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
                         </p>
                       </div>
                       <div className="text-right ml-3">
-                        <p className="font-bold text-orange-600">{formatCurrency(expense.amount)}</p>
+                        <p className="font-bold text-voyage-600">{formatCurrency(expense.amount)}</p>
                         <button
                           onClick={() => deleteExpense(expense.id)}
                           className="mt-1 p-1 text-red-500 hover:bg-red-100 rounded active:scale-95 transition-transform"
@@ -1310,7 +1310,7 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
     const totalEventCost = tripEvents.reduce((sum, event) => sum + (parseFloat(event.price) || 0), 0);
     
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-50 pb-20">
+      <div className="min-h-screen bg-gray-50 pb-20">
         <Header title="📅 Calendrier Voyage" onBack={() => setCurrentScreen('main')} />
         
         <div className="p-4 space-y-4">
@@ -1467,7 +1467,7 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
   
   if (currentScreen === 'edit-dates') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-cyan-50">
+      <div className="min-h-screen bg-gray-50">
         <Header title="📆 Dates du Voyage" onBack={() => setCurrentScreen('calendar')} />
         
         <div className="p-4">
@@ -1556,7 +1556,7 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
     // Préparer les données pour le graphique
     const categories = [
       { name: 'Finances initiales', value: budget.totalFinance, color: 'bg-blue-500' },
-      { name: 'Dépenses avant', value: budget.beforeExpenses, color: 'bg-orange-500' },
+      { name: 'Dépenses avant', value: budget.beforeExpenses, color: 'bg-voyage-500' },
       { name: 'Budget disponible', value: budget.budgetAvailable, color: 'bg-green-500' },
       { name: 'Dépenses pendant', value: budget.duringExpenses, color: 'bg-purple-500' },
       { name: 'Reste', value: Math.max(0, budget.budgetRemaining), color: 'bg-teal-500' }
@@ -1565,7 +1565,7 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
     const maxValue = Math.max(...categories.map(c => c.value));
     
     return (
-      <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 pb-20">
+      <div className="min-h-screen bg-gray-50 pb-20">
         <Header title="📊 Graphique Budget" onBack={() => setCurrentScreen('main')} />
         
         <div className="p-4 space-y-4">
@@ -1579,9 +1579,9 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
                 <span className="text-xl font-bold text-blue-600">{formatCurrency(budget.totalFinance)}</span>
               </div>
               
-              <div className="flex justify-between items-center p-3 bg-orange-50 rounded-lg">
+              <div className="flex justify-between items-center p-3 bg-voyage-50 rounded-lg">
                 <span className="font-semibold text-gray-700">- Dépenses préliminaires</span>
-                <span className="text-xl font-bold text-orange-600">{formatCurrency(budget.beforeExpenses)}</span>
+                <span className="text-xl font-bold text-voyage-600">{formatCurrency(budget.beforeExpenses)}</span>
               </div>
               
               <div className="flex justify-between items-center p-3 bg-green-50 rounded-lg border-2 border-green-300">
@@ -1669,9 +1669,9 @@ const DayDetailScreen = ({ day, onBack, tripSettings }) => {
                 </p>
               </div>
               
-              <div className="text-center p-3 bg-orange-50 rounded-lg">
+              <div className="text-center p-3 bg-voyage-50 rounded-lg">
                 <p className="text-sm text-gray-600">Budget utilisé</p>
-                <p className="text-xl font-bold text-orange-600">{budget.percentUsed.toFixed(0)}%</p>
+                <p className="text-xl font-bold text-voyage-600">{budget.percentUsed.toFixed(0)}%</p>
               </div>
             </div>
           </div>

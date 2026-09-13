@@ -1,18 +1,178 @@
+@import './styles/theme.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 font-sans antialiased;
+    /* Les montants s'alignent en colonne partout dans l'app. */
+    font-variant-numeric: tabular-nums;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+
+  /* Titres en Bricolage Grotesque. Les h3 en graisse moyenne servent de noms
+     dans les listes (membres, produits) : ils restent dans la police du texte. */
+  h1,
+  h2,
+  h3:where(.font-semibold, .font-bold, .font-extrabold) {
+    @apply font-display tracking-tight;
+    text-wrap: balance;
+  }
+
+  /* Les gros chiffres (soldes, totaux) prennent aussi la police des titres. */
+  :where(.text-xl, .text-2xl, .text-3xl, .text-4xl):where(.font-bold, .font-extrabold) {
+    @apply font-display tracking-tight;
+  }
+
+  input,
+  select,
+  textarea {
+    background-color: rgb(var(--c-surface));
+    color: inherit;
+  }
+
+  ::placeholder {
+    color: rgb(var(--c-gray-400));
+    opacity: 1;
+  }
+
+  :focus-visible {
+    outline: 3px solid rgb(var(--c-blue-500) / 0.6);
+    outline-offset: 2px;
+  }
 }
 
-body {
-  font-family: system-ui, -apple-system, sans-serif;
-  background-color: #f8fafc;
+@layer components {
+  /* Écusson : couture en pointillés à l'intérieur des grandes tuiles colorées. */
+  .stitch,
+  button[class*='bg-gradient-to-r'][class*='rounded-xl'][class*='text-white'] {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .stitch::after,
+  button[class*='bg-gradient-to-r'][class*='rounded-xl'][class*='text-white']::after {
+    content: '';
+    position: absolute;
+    inset: 6px;
+    border: 1.5px dashed rgb(255 255 255 / 0.5);
+    border-radius: 16px;
+    pointer-events: none;
+    transition: inset 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .stitch:active::after,
+  button[class*='bg-gradient-to-r'][class*='rounded-xl'][class*='text-white']:active::after {
+    inset: 8px;
+  }
+
+  .stitch-quiet::after {
+    border-color: rgb(var(--c-purple-500) / 0.45);
+  }
+
+  .tile-press {
+    transition: transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .tile-press:active {
+    transform: scale(0.96) rotate(-0.8deg);
+  }
+
+  .tile-icon {
+    background: rgb(255 255 255 / 0.2);
+  }
+
+  /* Bandeau de saison archivée, rayé comme un ruban de chantier. */
+  .season-archive {
+    background:
+      repeating-linear-gradient(135deg, rgb(var(--c-orange-500) / 0.14) 0 10px, transparent 10px 20px),
+      rgb(var(--c-surface));
+  }
 }
 
-#root {
-  min-height: 100vh;
+/* ---------- Entrée d'écran ----------
+   Le contenu monte doucement à chaque changement d'écran. On anime les enfants
+   de l'écran, jamais l'écran lui-même : une transformation sur un ancêtre
+   décalerait le panier et les modales, qui sont en position fixe. */
+@keyframes foulard-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+
+#root.screen-enter > * > :not(.app-header):not(.fixed):not(.sticky) {
+  animation: foulard-rise 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+#root.screen-enter > * > :nth-child(3) { animation-delay: 50ms; }
+#root.screen-enter > * > :nth-child(4) { animation-delay: 100ms; }
+
+.stagger > * {
+  animation: foulard-rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger > :nth-child(2) { animation-delay: 60ms; }
+.stagger > :nth-child(3) { animation-delay: 120ms; }
+.stagger > :nth-child(4) { animation-delay: 180ms; }
+.stagger > :nth-child(5) { animation-delay: 240ms; }
+.stagger > :nth-child(6) { animation-delay: 300ms; }
+.stagger > :nth-child(n + 7) { animation-delay: 340ms; }
+
+/* ---------- Retours : toast et foulards ---------- */
+.foulard-toast {
+  position: fixed;
+  left: 50%;
+  top: max(12px, env(safe-area-inset-top));
+  z-index: 100;
+  max-width: calc(100vw - 24px);
+  padding: 12px 18px;
+  border-radius: 18px;
+  font-weight: 600;
+  font-size: 15px;
+  box-shadow: 0 12px 32px rgb(22 24 43 / 0.25);
+  transform: translate(-50%, -160%);
+  opacity: 0;
+  transition: transform 0.45s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.2s;
+  pointer-events: none;
+}
+.foulard-toast.is-visible { transform: translate(-50%, 0); opacity: 1; }
+.foulard-toast--success { background: rgb(var(--c-green-600)); color: #fff; }
+.foulard-toast--error { background: rgb(var(--c-red-600)); color: #fff; }
+.foulard-toast--info { background: rgb(var(--c-gray-900)); color: rgb(var(--c-gray-50)); }
+
+.foulard-burst {
+  position: fixed;
+  z-index: 99;
+  pointer-events: none;
+}
+.foulard-burst i {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 13px;
+  height: 13px;
+  background: rgb(var(--c));
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  animation: foulard-fly 0.85s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+@keyframes foulard-fly {
+  from { transform: translate(-50%, -50%) scale(0.4) rotate(0); opacity: 1; }
+  to { transform: translate(calc(-50% + var(--x)), calc(-50% + var(--y))) scale(1) rotate(var(--r)); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

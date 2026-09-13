@@ -12,6 +12,7 @@ import DuplicateOrders from './DuplicateOrders';
 import { formatCurrency, formatDate } from './lib/format';
 import { buildAnnualReport, getCurrentPatroYear } from './lib/annualReport';
 import { seasonLabel, startYearOf } from './lib/seasons';
+import { toast } from './lib/feedback';
 import { downloadReport } from './lib/reportExport';
 
 const SettingsDomain = ({
@@ -70,12 +71,11 @@ const SettingsDomain = ({
   backToActiveSeason,
 }) => {
   const Header = ({ title, onBack }) => (
-    <>
-      <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline} />
+    <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline}>
       {isViewingArchive && (
         <SeasonBanner seasonId={viewedSeasonId} onBackToActive={backToActiveSeason} />
       )}
-    </>
+    </HeaderBase>
   );
 
   // Génération en un clic : la saison actuellement consultée, sans rien
@@ -392,6 +392,7 @@ const SettingsDomain = ({
         moneyFlow: 'none', amount: '', paymentMethod: ''
       });
       setShowModal(false);
+      toast(`Stock de ${product?.name || 'produit'} ${change > 0 ? '+' : ''}${change}`);
     }
   };
 
@@ -414,7 +415,7 @@ const SettingsDomain = ({
     };
 
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-purple-100">
+      <div className="min-h-screen bg-gray-50">
         <Header title="Accès Paramètres" onBack={() => navigateTo('home')} />
 
         <div className="p-6 flex items-center justify-center min-h-[60vh]">
@@ -477,7 +478,7 @@ const SettingsDomain = ({
       return null;
     }
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-purple-100">
+      <div className="min-h-screen bg-gray-50">
         <Header title="Paramètres" onBack={() => navigateTo('home')} />
 
         <div className="p-6 space-y-4">

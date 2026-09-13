@@ -1,7 +1,13 @@
+// Montants à la belge : virgule décimale, espace pour les milliers.
+const currencyFormat = new Intl.NumberFormat('fr-BE', {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2
+});
+
 export const formatCurrency = (amount) => {
   const value = Number(amount);
-  if (isNaN(value)) return "0.00 €"; // sécurité si undefined, null, ou NaN
-  return `${value.toFixed(2)} €`;
+  if (isNaN(value)) return "0,00 €"; // sécurité si undefined, null, ou NaN
+  return `${currencyFormat.format(value)} €`;
 };
 
 export const formatDate = (date) => new Date(date).toLocaleDateString('fr-FR');
