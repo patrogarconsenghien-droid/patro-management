@@ -1,5 +1,6 @@
 import React from 'react';
-import { Beer, Wrench, Coins, Plane, Settings, WifiOff } from 'lucide-react';
+import { Beer, Wrench, Coins, Plane, Settings, WifiOff, LogOut } from 'lucide-react';
+import { canManage, firstNameOf } from './auth/account';
 import Modal from './components/Modal';
 import SeasonBanner from './components/SeasonBanner';
 import NotificationPrompt from './components/NotificationPrompt';
@@ -45,8 +46,13 @@ const Home = ({
   backToActiveSeason,
   isSupported,
   permission,
-  requestPermission
+  requestPermission,
+  account
 }) => {
+  const profile = account?.profile;
+  const manager = canManage(profile);
+  const firstName = firstNameOf(profile);
+
   const openTrip = () => {
     if (tripPasswordProtected && !settingsAuthenticated) {
       setModalType('trip-locked');
@@ -79,7 +85,7 @@ const Home = ({
       <div className="px-5 pt-3 pb-5">
         <p className="text-sm text-gray-600">Gestion Patro</p>
         <h1 className="font-display text-4xl font-extrabold tracking-tight leading-none mt-1">
-          {greeting()}
+          {greeting()}{firstName ? `, ${firstName}` : ''}
         </h1>
       </div>
 
@@ -91,6 +97,7 @@ const Home = ({
         />
       </div>
 
+      {manager ? (
       <div className="px-4 grid grid-cols-2 gap-3">
         <Tile
           index={0}
@@ -142,6 +149,35 @@ const Home = ({
         >
           <span className="block text-sm text-gray-600 mt-1.5">Carte, stock, saison</span>
         </Tile>
+      </div>
+      ) : (
+      <div className="px-4 space-y-3">
+        <Tile
+          index={0}
+          onClick={() => navigateTo('boulots-scheduled')}
+          icon={Wrench}
+          title="Mes boulots"
+          className="w-full bg-boulots-500 text-white"
+        >
+          <span className="block text-sm text-white/90 mt-1.5">Voir les boulots et répondre</span>
+        </Tile>
+        {!profile?.broId && (
+          <p className="text-sm text-orange-800 bg-orange-50 rounded-2xl p-3">
+            Ton compte n'est pas encore relié à ton nom : demande à un animateur de le faire.
+          </p>
+        )}
+      </div>
+      )}
+
+      <div className="px-5 mt-8 flex items-center justify-between gap-3 text-sm text-gray-500">
+        <span className="truncate">{profile?.email}</span>
+        <button
+          onClick={() => { if (confirm("Te déconnecter de l'app ?")) account?.signOut(); }}
+          className="flex-none flex items-center gap-1.5 font-semibold text-gray-700 active:scale-95 transition-transform"
+        >
+          <LogOut size={16} />
+          Se déconnecter
+        </button>
       </div>
 
       <Modal

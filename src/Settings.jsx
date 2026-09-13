@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Beer, BarChart3, Bell, Clock, Download, FileText, History, Plane, Plus, Settings, Trash2
+  Beer, BarChart3, Bell, Clock, Download, FileText, History, Plane, Plus, Settings, Trash2, Users
 } from 'lucide-react';
 import Modal from './components/Modal';
 import HeaderBase from './components/Header';
@@ -8,6 +8,8 @@ import SeasonBanner from './components/SeasonBanner';
 import AnnualReport from './AnnualReport';
 import CloseSeason from './CloseSeason';
 import RepairBalances from './RepairBalances';
+import Accounts from './Accounts';
+import { isAdmin as isAdminAccount } from './auth/account';
 import DuplicateOrders from './DuplicateOrders';
 import { formatCurrency, formatDate } from './lib/format';
 import { buildAnnualReport, getCurrentPatroYear } from './lib/annualReport';
@@ -69,6 +71,7 @@ const SettingsDomain = ({
   isViewingArchive = false,
   selectSeason,
   backToActiveSeason,
+  account,
 }) => {
   const Header = ({ title, onBack }) => (
     <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline}>
@@ -483,6 +486,19 @@ const SettingsDomain = ({
 
         <div className="p-6 space-y-4">
           <button
+            onClick={() => navigateTo('settings-accounts')}
+            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center space-x-3">
+              <Users className="text-purple-500" size={24} />
+              <div className="text-left">
+                <h3 className="font-semibold">Comptes</h3>
+                <p className="text-gray-600 text-sm">Valider les accès, rôles et liens avec les Bro</p>
+              </div>
+            </div>
+          </button>
+
+          <button
             onClick={() => navigateTo('settings-products')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
           >
@@ -763,15 +779,13 @@ const SettingsDomain = ({
         <div className="mt-6">
           <button
             onClick={() => {
-              setSettingsAuthenticated(false);
-              alert('🔒 Session fermée ! Vous devrez ressaisir le mot de passe.');
-              navigateTo('home');
+              if (confirm("Te déconnecter de l'app ?")) account?.signOut();
             }}
             className="w-full p-4 bg-red-500 text-white rounded-lg shadow-md active:scale-95 transition-transform"
           >
             <div className="flex items-center justify-center space-x-2">
               <span>🔒</span>
-              <span>Fermer la session</span>
+              <span>Se déconnecter</span>
             </div>
           </button>
         </div>
@@ -781,6 +795,30 @@ const SettingsDomain = ({
     );
   }
 
+
+  if (screen === 'settings-accounts') {
+    return (
+      <Accounts
+        Header={Header}
+        navigateTo={navigateTo}
+        account={account}
+        bros={bros}
+        saveToFirebase={saveToFirebase}
+      />
+    );
+  }
+
+  // Clôturer une saison touche toute la section : réservé aux admins.
+  if (screen === 'settings-close-season' && !isAdminAccount(account?.profile)) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header title="Clôturer la saison" onBack={() => navigateTo('settings')} />
+        <p className="m-4 text-sm text-gray-700 bg-white rounded-2xl p-4">
+          Seul un admin peut clôturer la saison.
+        </p>
+      </div>
+    );
+  }
 
   if (screen === 'settings-duplicates') {
     return (

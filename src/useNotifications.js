@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { doc, setDoc } from 'firebase/firestore';
-import { app, db, VAPID_KEY } from './firebase';
+import { app, auth, db, VAPID_KEY } from './firebase';
 
 // Instance Messaging partagée, résolue à la demande. Firebase Messaging est
 // importé dynamiquement : il n'est pas supporté partout (iPhone hors app
@@ -64,6 +64,8 @@ async function registerDevice({ firstTime = false } = {}) {
       userAgent: navigator.userAgent.substring(0, 200),
       platform: platformLabel(),
       standalone: isStandalone(),
+      // Compte connecté : servira à cibler les notifications par section.
+      uid: auth.currentUser?.uid || null,
       lastSeenAt: now,
       ...(firstTime ? { createdAt: now } : {})
     },

@@ -6,6 +6,7 @@ import {
 import Modal from './components/Modal';
 import HeaderBase from './components/Header';
 import { formatCurrency, formatDate } from './lib/format';
+import { canManage as canManageAccount } from './auth/account';
 
 const BoulotsDomain = ({
   screen,
@@ -26,6 +27,7 @@ const BoulotsDomain = ({
   isSupported,
   permission,
   requestPermission,
+  account,
   newJob,
   setNewJob,
   paymentMethod,
@@ -37,6 +39,11 @@ const BoulotsDomain = ({
   const Header = ({ title, onBack }) => (
     <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline} />
   );
+
+  // Un animé ne voit que les boulots programmés, et ne répond que pour lui-même,
+  // à travers le Bro auquel son compte est relié.
+  const canManage = canManageAccount(account?.profile);
+  const myBroId = account?.profile?.broId || null;
 
   // ===== ÉTAT LOCAL AUX ÉCRANS BOULOTS =====
   const [showBroDropdown, setShowBroDropdown] = useState(false);
@@ -522,6 +529,7 @@ ${job.registeredBros.map(reg => {
             </div>
           </button>
 
+          {canManage && (<>
           <button
             onClick={() => navigateTo('boulots-new')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
@@ -588,6 +596,7 @@ ${job.registeredBros.map(reg => {
               </div>
             </div>
           </button>
+          </>)}
         </div>
       </div>
     );
@@ -603,6 +612,7 @@ ${job.registeredBros.map(reg => {
 
         <div className="p-4">
           {/* Bouton pour programmer un nouveau boulot */}
+          {canManage && (
           <div className="mb-4">
             <button
               onClick={() => { setModalType('schedule-job'); setShowModal(true); }}
@@ -615,6 +625,7 @@ ${job.registeredBros.map(reg => {
             </button>
 
           </div>
+          )}
 
           {/* Liste des boulots programmés */}
           {scheduledJobs.length === 0 ? (
@@ -739,6 +750,7 @@ ${job.registeredBros.map(reg => {
                                     >
                                       <span className="text-sm">📅</span>
                                     </button>
+                                    {canManage && (<>
                                     <button
                                       onClick={() => {
                                         // Pré-remplir le formulaire avec les données existantes
@@ -775,6 +787,7 @@ ${job.registeredBros.map(reg => {
                                     >
                                       <Trash2 size={14} />
                                     </button>
+                                    </>)}
                                   </div>
                                 </div>
                               </div>
@@ -803,12 +816,15 @@ ${job.registeredBros.map(reg => {
                                           <span className="mr-1">
                                             {hasOtherJobsSameDay && '⚠️ '}{bro?.name || 'Inconnu'}
                                           </span>
+                                          {canManage && (
                                           <button
                                             onClick={() => removeBroFromScheduled(job.id, registration.broId)}
                                             className="text-red-500 hover:text-red-700"
+                                            aria-label="Retirer ce Bro"
                                           >
                                             <Minus size={12} />
                                           </button>
+                                          )}
                                         </div>
                                       );
                                     })}
@@ -849,7 +865,7 @@ ${job.registeredBros.map(reg => {
                                           </div>
                                         </div>
                                       )}
-                                      {job.registeredBros.length < job.brosNeeded && toAsk.length > 0 && (
+                                      {canManage && job.registeredBros.length < job.brosNeeded && toAsk.length > 0 && (
                                         <div>
                                           <p className="text-xs font-medium text-gray-600 mb-1">
                                             À relancer ({toAsk.length}) :
@@ -868,7 +884,7 @@ ${job.registeredBros.map(reg => {
                                 })()}
 
                                 {/* Bouton inscription */}
-                                {job.registeredBros.length < job.brosNeeded && (
+                                {canManage && job.registeredBros.length < job.brosNeeded && (
                                   <button
                                     onClick={() => { setSelectedJob(job); setModalType('register-bro'); setShowModal(true); }}
                                     className="w-full p-2 bg-blue-500 text-white rounded text-sm active:scale-95 transition-transform"
@@ -877,8 +893,57 @@ ${job.registeredBros.map(reg => {
                                   </button>
                                 )}
 
+                                {/* Réponse de l'animé connecté, pour lui-même */}
+                                {!canManage && (() => {
+                                  if (!myBroId) {
+                                    return (
+                                      <p className="text-xs text-orange-800 bg-orange-50 rounded-lg p-2">
+                                        Ton compte n'est pas relié à ton nom : un animateur doit le faire.
+                                      </p>
+                                    );
+                                  }
+                                  const mine = job.registeredBros.some(reg => reg.broId === myBroId);
+                                  const cannot = (job.unavailableBros || []).some(u => u.broId === myBroId);
+                                  const full = job.registeredBros.length >= job.brosNeeded;
+
+                                  return (
+                                    <div className="space-y-2">
+                                      <p className="text-sm font-medium text-gray-700">
+                                        {mine
+                                          ? '✅ Tu es inscrit'
+                                          : cannot
+                                            ? "✗ Tu as dit que tu ne pouvais pas venir"
+                                            : full
+                                              ? "L'équipe est complète"
+                                              : 'Tu viens ?'}
+                                      </p>
+                                      <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                          onClick={() => (mine ? removeBroFromScheduled(job.id, myBroId) : registerBroToJob(job.id, myBroId))}
+                                          disabled={!mine && full}
+                                          className={`p-2.5 rounded-lg text-sm font-semibold active:scale-95 transition-transform disabled:opacity-50 ${mine
+                                            ? 'bg-white border-2 border-green-500 text-green-700'
+                                            : 'bg-green-500 text-white'
+                                            }`}
+                                        >
+                                          {mine ? 'Me désinscrire' : 'Je viens'}
+                                        </button>
+                                        <button
+                                          onClick={() => (cannot ? clearBroUnavailable(job.id, myBroId) : markBroUnavailable(job.id, myBroId))}
+                                          className={`p-2.5 rounded-lg text-sm font-semibold active:scale-95 transition-transform ${cannot
+                                            ? 'bg-white border-2 border-gray-400 text-gray-700'
+                                            : 'bg-gray-100 text-gray-700'
+                                            }`}
+                                        >
+                                          {cannot ? 'Annuler' : 'Je ne peux pas'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+
                                 {/* Message si équipe complète */}
-                                {hasEnoughBros && (
+                                {canManage && hasEnoughBros && (
                                   <div className="p-2 bg-green-100 border border-green-300 rounded text-center">
                                     <p className="text-sm text-green-800 font-medium">
                                       ✅ Équipe complète ! Allez dans "Valider les boulots" pour finaliser

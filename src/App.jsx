@@ -23,6 +23,10 @@ import BalancePill from './components/BalancePill';
 import MemberAvatar from './components/MemberAvatar';
 import { createStockHelpers } from './lib/stock';
 import { useFirestoreData } from './hooks/useFirestoreData';
+import { canManage as canManageAccount, useCurrentAccount } from './auth/account';
+
+// Écrans accessibles à un animé : l'accueil et les boulots programmés.
+const ANIME_SCREENS = ['home', 'boulots', 'boulots-scheduled'];
 
 const PatroApp = () => {
 
@@ -88,7 +92,17 @@ const PatroApp = () => {
   const [activeCategory, setActiveCategory] = useState('all');
   const [showOnlyInStock, setShowOnlyInStock] = useState(false);
   const [sortBy, setSortBy] = useState('name'); // 'name', 'price', 'stock'
-  const [settingsAuthenticated, setSettingsAuthenticated] = useState(false);
+  // L'accès aux réglages dépend du rôle du compte connecté : plus de mot de
+  // passe partagé, lisible par n'importe qui dans le code de l'app.
+  const account = useCurrentAccount();
+  const canManage = canManageAccount(account?.profile);
+  const settingsAuthenticated = canManage;
+  const setSettingsAuthenticated = () => {};
+
+  // Un animé qui arrive sur un autre écran (bouton retour, lien) repart à l'accueil.
+  useEffect(() => {
+    if (!canManage && !ANIME_SCREENS.includes(currentScreen)) navigateTo('home');
+  }, [canManage, currentScreen]);
   const [selectedBro, setSelectedBro] = useState(null);
   const [newMemberIsExternal, setNewMemberIsExternal] = useState(false);
   const [directPayment, setDirectPayment] = useState(false);
@@ -1070,7 +1084,9 @@ const eligible = [
 
 
 
-  const SETTINGS_SCREENS = ['settings-password', 'settings', 'settings-surprise', 'settings-bar-threshold', 'settings-products', 'settings-stock', 'settings-rate', 'settings-history', 'settings-goal', 'settings-popular', 'settings-report', 'settings-close-season', 'settings-repair-balances', 'settings-duplicates'];
+  const SETTINGS_SCREENS = ['settings-password', 'settings', 'settings-surprise', 'settings-bar-threshold', 'settings-products', 'settings-stock', 'settings-rate', 'settings-history', 'settings-goal', 'settings-popular', 'settings-report', 'settings-close-season', 'settings-repair-balances', 'settings-duplicates', 'settings-accounts'];
+
+  if (!canManage && !ANIME_SCREENS.includes(currentScreen)) return null;
 
   if (currentScreen === 'home') {
     // Chiffres des tuiles d'accueil, calculés comme dans la section Bar.
@@ -1101,6 +1117,7 @@ const eligible = [
         isSupported={isSupported}
         permission={permission}
         requestPermission={requestPermission}
+        account={account}
       />
     );
   }
@@ -1406,6 +1423,7 @@ const eligible = [
         isViewingArchive={isViewingArchive}
         selectSeason={selectSeason}
         backToActiveSeason={backToActiveSeason}
+        account={account}
       />
     );
   }
@@ -2600,6 +2618,7 @@ const eligible = [
         isSupported={isSupported}
         permission={permission}
         requestPermission={requestPermission}
+        account={account}
       />
     );
   }
