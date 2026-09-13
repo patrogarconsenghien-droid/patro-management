@@ -26,7 +26,7 @@ import { useFirestoreData } from './hooks/useFirestoreData';
 import { canManage as canManageAccount, useCurrentAccount } from './auth/account';
 
 // Écrans accessibles à un animé : l'accueil et les boulots programmés.
-const ANIME_SCREENS = ['home', 'boulots', 'boulots-scheduled'];
+const ANIME_SCREENS = ['home', 'boulots', 'boulots-scheduled', 'boulots-stats', 'boulots-validate', 'boulots-history'];
 
 const PatroApp = () => {
 
@@ -1111,6 +1111,9 @@ const eligible = [
         loading={loading}
         isOnline={isOnline}
         stats={homeStats}
+        scheduledJobs={scheduledJobs}
+        jobs={jobs}
+        bros={bros}
         viewedSeasonId={viewedSeasonId}
         isViewingArchive={isViewingArchive}
         backToActiveSeason={backToActiveSeason}

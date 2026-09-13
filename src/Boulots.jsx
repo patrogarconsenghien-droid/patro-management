@@ -44,6 +44,9 @@ const BoulotsDomain = ({
   // à travers le Bro auquel son compte est relié.
   const canManage = canManageAccount(account?.profile);
   const myBroId = account?.profile?.broId || null;
+  const myUid = account?.user?.uid || null;
+  // Modifier ou supprimer : les animateurs, et l'auteur pour ses propres boulots.
+  const canEditJob = (job) => canManage || (myUid && job.createdBy === myUid);
 
   // ===== ÉTAT LOCAL AUX ÉCRANS BOULOTS =====
   const [showBroDropdown, setShowBroDropdown] = useState(false);
@@ -244,7 +247,9 @@ ${job.registeredBros.map(reg => {
         brosNeeded: newScheduledJob.brosNeeded,
         registeredBros: [],
         unavailableBros: [],
-        status: 'planned'
+        status: 'planned',
+        createdBy: myUid,
+        createdByName: account?.profile?.displayName || null
       };
 
       try {
@@ -515,7 +520,6 @@ ${job.registeredBros.map(reg => {
             requestPermission={requestPermission}
           />
 
-          {/* NOUVEAU BOUTON - Boulots programmés */}
           <button
             onClick={() => navigateTo('boulots-scheduled')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
@@ -524,21 +528,7 @@ ${job.registeredBros.map(reg => {
               <Clock className="text-green-500" size={24} />
               <div className="text-left">
                 <h3 className="font-semibold">Boulots programmés</h3>
-                <p className="text-gray-600 text-sm">Planning et inscriptions</p>
-              </div>
-            </div>
-          </button>
-
-          {canManage && (<>
-          <button
-            onClick={() => navigateTo('boulots-new')}
-            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
-          >
-            <div className="flex items-center space-x-3">
-              <Plus className="text-green-500" size={24} />
-              <div className="text-left">
-                <h3 className="font-semibold">Nouveau boulot</h3>
-                <p className="text-gray-600 text-sm">Multi-Bro avec paiement</p>
+                <p className="text-gray-600 text-sm">Planning, inscriptions, proposer un boulot</p>
               </div>
             </div>
           </button>
@@ -551,12 +541,11 @@ ${job.registeredBros.map(reg => {
               <BarChart3 className="text-green-500" size={24} />
               <div className="text-left">
                 <h3 className="font-semibold">Statistiques</h3>
-                <p className="text-gray-600 text-sm">Graphiques et classements</p>
+                <p className="text-gray-600 text-sm">Heures, gains et classement</p>
               </div>
             </div>
           </button>
 
-          {/* NOUVEAU BOUTON - Valider les boulots */}
           <button
             onClick={() => navigateTo('boulots-validate')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
@@ -565,12 +554,11 @@ ${job.registeredBros.map(reg => {
               <CheckCircle className="text-green-500" size={24} />
               <div className="text-left">
                 <h3 className="font-semibold">Valider les boulots</h3>
-                <p className="text-gray-600 text-sm">Zone responsables - Finaliser les tâches</p>
+                <p className="text-gray-600 text-sm">Finaliser les boulots faits</p>
               </div>
             </div>
           </button>
 
-          {/* RENOMMÉ : Historique → Boulots terminés */}
           <button
             onClick={() => navigateTo('boulots-history')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
@@ -579,7 +567,21 @@ ${job.registeredBros.map(reg => {
               <CheckCircle className="text-green-500" size={24} />
               <div className="text-left">
                 <h3 className="font-semibold">Boulots terminés</h3>
-                <p className="text-gray-600 text-sm">Avec statut paiements</p>
+                <p className="text-gray-600 text-sm">Avec statut des paiements</p>
+              </div>
+            </div>
+          </button>
+
+          {canManage && (<>
+          <button
+            onClick={() => navigateTo('boulots-new')}
+            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center space-x-3">
+              <Plus className="text-green-500" size={24} />
+              <div className="text-left">
+                <h3 className="font-semibold">Enregistrer un boulot fait</h3>
+                <p className="text-gray-600 text-sm">Heures de chacun et paiement</p>
               </div>
             </div>
           </button>
@@ -611,21 +613,6 @@ ${job.registeredBros.map(reg => {
         <Header title="Boulots programmés" onBack={() => navigateTo('boulots')} />
 
         <div className="p-4">
-          {/* Bouton pour programmer un nouveau boulot */}
-          {canManage && (
-          <div className="mb-4">
-            <button
-              onClick={() => { setModalType('schedule-job'); setShowModal(true); }}
-              className="w-full p-3 bg-green-500 text-white rounded-lg active:scale-95 transition-transform"
-            >
-              <div className="flex items-center justify-center space-x-2">
-                <Plus size={20} />
-                <span>Programmer un boulot</span>
-              </div>
-            </button>
-
-          </div>
-          )}
 
           {/* Liste des boulots programmés */}
           {scheduledJobs.length === 0 ? (
@@ -720,6 +707,9 @@ ${job.registeredBros.map(reg => {
                                     ) : (
                                       <p className="text-xs text-gray-400">📍 Lieu à préciser</p>
                                     )}
+                                    {job.createdByName && (
+                                      <p className="text-xs text-gray-400">Proposé par {job.createdByName}</p>
+                                    )}
                                     {(job.contactName || job.contactPhone) && (
                                       <p className="text-xs text-gray-500">
                                         📞 {job.contactName}
@@ -750,7 +740,7 @@ ${job.registeredBros.map(reg => {
                                     >
                                       <span className="text-sm">📅</span>
                                     </button>
-                                    {canManage && (<>
+                                    {canEditJob(job) && (<>
                                     <button
                                       onClick={() => {
                                         // Pré-remplir le formulaire avec les données existantes
@@ -883,22 +873,12 @@ ${job.registeredBros.map(reg => {
                                   );
                                 })()}
 
-                                {/* Bouton inscription */}
-                                {canManage && job.registeredBros.length < job.brosNeeded && (
-                                  <button
-                                    onClick={() => { setSelectedJob(job); setModalType('register-bro'); setShowModal(true); }}
-                                    className="w-full p-2 bg-blue-500 text-white rounded text-sm active:scale-95 transition-transform"
-                                  >
-                                    ✅ Inscrire un Bro
-                                  </button>
-                                )}
-
-                                {/* Réponse de l'animé connecté, pour lui-même */}
-                                {!canManage && (() => {
+                                {/* Ma réponse, en grand : pour tout le monde, animateurs compris */}
+                                {(() => {
                                   if (!myBroId) {
                                     return (
-                                      <p className="text-xs text-orange-800 bg-orange-50 rounded-lg p-2">
-                                        Ton compte n'est pas relié à ton nom : un animateur doit le faire.
+                                      <p className="text-xs text-orange-800 bg-orange-50 rounded-lg p-2 mb-2">
+                                        Ton compte n'est pas relié à ton nom : fais-le dans Réglages → Comptes, ou demande à un animateur.
                                       </p>
                                     );
                                   }
@@ -907,7 +887,7 @@ ${job.registeredBros.map(reg => {
                                   const full = job.registeredBros.length >= job.brosNeeded;
 
                                   return (
-                                    <div className="space-y-2">
+                                    <div className="space-y-2 mb-3">
                                       <p className="text-sm font-medium text-gray-700">
                                         {mine
                                           ? '✅ Tu es inscrit'
@@ -921,16 +901,16 @@ ${job.registeredBros.map(reg => {
                                         <button
                                           onClick={() => (mine ? removeBroFromScheduled(job.id, myBroId) : registerBroToJob(job.id, myBroId))}
                                           disabled={!mine && full}
-                                          className={`p-2.5 rounded-lg text-sm font-semibold active:scale-95 transition-transform disabled:opacity-50 ${mine
+                                          className={`p-3 rounded-xl text-base font-bold active:scale-95 transition-transform disabled:opacity-50 ${mine
                                             ? 'bg-white border-2 border-green-500 text-green-700'
-                                            : 'bg-green-500 text-white'
+                                            : 'bg-green-500 text-white shadow-md'
                                             }`}
                                         >
                                           {mine ? 'Me désinscrire' : 'Je viens'}
                                         </button>
                                         <button
                                           onClick={() => (cannot ? clearBroUnavailable(job.id, myBroId) : markBroUnavailable(job.id, myBroId))}
-                                          className={`p-2.5 rounded-lg text-sm font-semibold active:scale-95 transition-transform ${cannot
+                                          className={`p-3 rounded-xl text-base font-bold active:scale-95 transition-transform ${cannot
                                             ? 'bg-white border-2 border-gray-400 text-gray-700'
                                             : 'bg-gray-100 text-gray-700'
                                             }`}
@@ -942,13 +922,19 @@ ${job.registeredBros.map(reg => {
                                   );
                                 })()}
 
-                                {/* Message si équipe complète */}
-                                {canManage && hasEnoughBros && (
+                                {/* Inscrire quelqu'un d'autre, en petit */}
+                                {hasEnoughBros ? (
                                   <div className="p-2 bg-green-100 border border-green-300 rounded text-center">
-                                    <p className="text-sm text-green-800 font-medium">
-                                      ✅ Équipe complète ! Allez dans "Valider les boulots" pour finaliser
-                                    </p>
+                                    <p className="text-sm text-green-800 font-medium">✅ Équipe complète</p>
+                                    <p className="text-xs text-green-700">Passe par « Valider les boulots » une fois le boulot fait</p>
                                   </div>
+                                ) : (
+                                  <button
+                                    onClick={() => { setSelectedJob(job); setModalType('register-bro'); setShowModal(true); }}
+                                    className="w-full py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 rounded-lg active:scale-95 transition-transform"
+                                  >
+                                    + Inscrire quelqu'un d'autre
+                                  </button>
                                 )}
                               </div>
                             </div>
@@ -960,6 +946,24 @@ ${job.registeredBros.map(reg => {
               })()}
             </div>
           )}
+
+          {/* Proposer un boulot : ouvert à tous, en bas de la liste */}
+          <div className="mt-6">
+            <button
+              onClick={() => { setModalType('schedule-job'); setShowModal(true); }}
+              className="w-full p-3 bg-green-500 text-white rounded-lg font-semibold active:scale-95 transition-transform"
+            >
+              <div className="flex items-center justify-center space-x-2">
+                <Plus size={20} />
+                <span>Programmer un boulot</span>
+              </div>
+            </button>
+            {!canManage && (
+              <p className="text-xs text-gray-500 text-center mt-2">
+                Tu pourras modifier ou supprimer les boulots que tu as programmés.
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Modal pour programmer un boulot */}
@@ -1709,6 +1713,15 @@ ${job.registeredBros.map(reg => {
             </button>
           </div>
         </Modal>
+      </div>
+    );
+  }
+
+  if ((screen === 'boulots-new' || screen === 'boulots-bros') && !canManage) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Header title="Boulots" onBack={() => navigateTo('boulots')} />
+        <p className="m-4 text-sm text-gray-700 bg-white rounded-2xl p-4">Réservé aux animateurs.</p>
       </div>
     );
   }
