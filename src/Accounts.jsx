@@ -129,7 +129,10 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase }) =>
         {visibleUsers.map((target) => {
           const isSelf = target.id === me?.id;
           const targetIsAdmin = target.role === ROLES.ADMIN;
+          // Verrou sur le rôle, la section et le statut : on ne se retire pas
+          // l'accès soi-même. Le lien avec son propre Bro reste modifiable.
           const locked = isSelf || busyId === target.id || (!meIsAdmin && targetIsAdmin);
+          const broLocked = busyId === target.id || (!meIsAdmin && targetIsAdmin && !isSelf);
           const hasMatchingBro = bros.some(
             (bro) => bro.name?.trim().toLowerCase() === String(target.displayName || '').trim().toLowerCase()
           );
@@ -200,7 +203,7 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase }) =>
                 Relié au Bro
                 <select
                   value={target.broId || ''}
-                  disabled={locked}
+                  disabled={broLocked}
                   onChange={(e) => update(target, { broId: e.target.value || null })}
                   className="mt-1 w-full p-2 border rounded-lg text-sm disabled:opacity-60"
                 >
@@ -219,7 +222,7 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase }) =>
                 </select>
               </label>
 
-              {!target.broId && !hasMatchingBro && !locked && target.displayName && (
+              {!target.broId && !hasMatchingBro && !broLocked && target.displayName && (
                 <button
                   onClick={() => createBroFor(target)}
                   className="text-xs text-blue-600 underline"
@@ -254,7 +257,7 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase }) =>
               )}
 
               {isSelf && (
-                <p className="text-xs text-gray-500">Tu ne peux pas modifier ton propre compte.</p>
+                <p className="text-xs text-gray-500">Tu ne peux pas changer ton propre rôle ni ton statut, seulement ton Bro.</p>
               )}
             </div>
           );
