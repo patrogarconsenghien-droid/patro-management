@@ -1098,6 +1098,9 @@ const eligible = [
         viewedSeasonId={viewedSeasonId}
         isViewingArchive={isViewingArchive}
         backToActiveSeason={backToActiveSeason}
+        isSupported={isSupported}
+        permission={permission}
+        requestPermission={requestPermission}
       />
     );
   }
@@ -2594,6 +2597,9 @@ const eligible = [
         saveToFirebase={saveToFirebase}
         updateInFirebase={updateInFirebase}
         deleteFromFirebase={deleteFromFirebase}
+        isSupported={isSupported}
+        permission={permission}
+        requestPermission={requestPermission}
       />
     );
   }

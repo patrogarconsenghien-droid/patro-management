@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import NotificationPrompt from './components/NotificationPrompt';
 import {
   BarChart3, CheckCircle, Clock, Minus, Plus, Settings, Trash2, User, Wrench
 } from 'lucide-react';
@@ -22,6 +23,9 @@ const BoulotsDomain = ({
   scheduledJobs,
   setScheduledJobs,
   hourlyRate,
+  isSupported,
+  permission,
+  requestPermission,
   newJob,
   setNewJob,
   paymentMethod,
@@ -39,13 +43,17 @@ const BoulotsDomain = ({
   const [newBroName, setNewBroName] = useState('');
   const [newScheduledJob, setNewScheduledJob] = useState({
     description: '', date: new Date().toISOString().split('T')[0],
-    timeStart: '09:00', estimatedHours: 1, location: '', customRate: 10.00, brosNeeded: 1,
+    timeStart: '09:00', estimatedHours: 1, location: '', contactName: '', contactPhone: '', customRate: 10.00, brosNeeded: 1,
     registeredBros: [], status: 'planned'
   });
   const [editingScheduledJob, setEditingScheduledJob] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
 
   // ===== HELPER LOCAL =====
+  // Contact du boulot : « Nom · 0470 12 34 56 », ou vide s'il n'y en a pas.
+  const contactLine = (job) => [job.contactName, job.contactPhone].filter(Boolean).join(' · ');
+  const telHref = (phone) => `tel:${String(phone).replace(/[^\d+]/g, '')}`;
+
   const calculateEndTime = (startTime, durationHours) => {
     if (!startTime || !durationHours) return '';
 
@@ -103,7 +111,7 @@ Boulot Patro:
 💰 Tarif: ${formatCurrency(job.customRate)}/h
 ⏱️ Durée estimée: ${job.estimatedHours}h
 👥 Bro requis: ${job.brosNeeded}
-📍 Lieu: ${job.location || 'À préciser'}
+📍 Lieu: ${job.location || 'À préciser'}${contactLine(job) ? `\n📞 Contact: ${contactLine(job)}` : ''}
 
 Bro inscrits (${job.registeredBros.length}/${job.brosNeeded}):
 ${job.registeredBros.map(reg => {
@@ -223,9 +231,12 @@ ${job.registeredBros.map(reg => {
         timeStart: newScheduledJob.timeStart,
         estimatedHours: newScheduledJob.estimatedHours,
         location: newScheduledJob.location.trim(),
+        contactName: (newScheduledJob.contactName || '').trim(),
+        contactPhone: (newScheduledJob.contactPhone || '').trim(),
         customRate: newScheduledJob.customRate,
         brosNeeded: newScheduledJob.brosNeeded,
         registeredBros: [],
+        unavailableBros: [],
         status: 'planned'
       };
 
@@ -237,6 +248,8 @@ ${job.registeredBros.map(reg => {
           timeStart: '09:00',
           estimatedHours: 1,
           location: '',
+          contactName: '',
+          contactPhone: '',
           customRate: hourlyRate,
           brosNeeded: 1,
           registeredBros: [],
@@ -262,10 +275,13 @@ ${job.registeredBros.map(reg => {
         timeStart: newScheduledJob.timeStart,
         estimatedHours: newScheduledJob.estimatedHours,
         location: newScheduledJob.location.trim(),
+        contactName: (newScheduledJob.contactName || '').trim(),
+        contactPhone: (newScheduledJob.contactPhone || '').trim(),
         customRate: newScheduledJob.customRate,
         brosNeeded: newScheduledJob.brosNeeded,
         // Garder les Bro déjà inscrits
         registeredBros: editingScheduledJob.registeredBros,
+        unavailableBros: editingScheduledJob.unavailableBros || [],
         status: editingScheduledJob.status
       };
 
@@ -277,6 +293,8 @@ ${job.registeredBros.map(reg => {
           timeStart: '09:00',
           estimatedHours: 1,
           location: '',
+          contactName: '',
+          contactPhone: '',
           customRate: hourlyRate,
           brosNeeded: 1,
           registeredBros: [],
@@ -327,11 +345,50 @@ ${job.registeredBros.map(reg => {
 
     try {
       await updateInFirebase('scheduledJobs', jobId, {
-        registeredBros: updatedRegisteredBros
+        registeredBros: updatedRegisteredBros,
+        // S'inscrire annule un « ne peut pas » donné plus tôt.
+        unavailableBros: (job.unavailableBros || []).filter(u => u.broId !== broId)
       });
 
     } catch (error) {
       alert('Erreur lors de l\'inscription');
+    }
+  };
+
+  /**
+   * « Ne peut pas venir » : le Bro a répondu non. Il sort de la liste des
+   * inscrits s'il y était, et n'apparaît plus dans « À relancer ».
+   */
+  const markBroUnavailable = async (jobId, broId) => {
+    const job = scheduledJobs.find(j => j.id === jobId);
+    if (!job) return;
+
+    const unavailable = job.unavailableBros || [];
+    if (unavailable.some(u => u.broId === broId)) return;
+
+    try {
+      await updateInFirebase('scheduledJobs', jobId, {
+        registeredBros: job.registeredBros.filter(reg => reg.broId !== broId),
+        unavailableBros: [...unavailable, { broId, markedAt: new Date().toISOString() }]
+      });
+    } catch (error) {
+      console.error('Erreur lors de l\'enregistrement de l\'indisponibilité:', error);
+      alert('Erreur lors de l\'enregistrement de la réponse');
+    }
+  };
+
+  /** Annule un « ne peut pas » : le Bro repasse dans « À relancer ». */
+  const clearBroUnavailable = async (jobId, broId) => {
+    const job = scheduledJobs.find(j => j.id === jobId);
+    if (!job) return;
+
+    try {
+      await updateInFirebase('scheduledJobs', jobId, {
+        unavailableBros: (job.unavailableBros || []).filter(u => u.broId !== broId)
+      });
+    } catch (error) {
+      console.error('Erreur lors de l\'annulation de la réponse:', error);
+      alert('Erreur lors de l\'annulation de la réponse');
     }
   };
 
@@ -445,6 +502,12 @@ ${job.registeredBros.map(reg => {
         <Header title="Section Boulots" onBack={() => navigateTo('home')} />
 
         <div className="p-6 space-y-4">
+          <NotificationPrompt
+            isSupported={isSupported}
+            permission={permission}
+            requestPermission={requestPermission}
+          />
+
           {/* NOUVEAU BOUTON - Boulots programmés */}
           <button
             onClick={() => navigateTo('boulots-scheduled')}
@@ -646,6 +709,19 @@ ${job.registeredBros.map(reg => {
                                     ) : (
                                       <p className="text-xs text-gray-400">📍 Lieu à préciser</p>
                                     )}
+                                    {(job.contactName || job.contactPhone) && (
+                                      <p className="text-xs text-gray-500">
+                                        📞 {job.contactName}
+                                        {job.contactPhone && (
+                                          <a
+                                            href={telHref(job.contactPhone)}
+                                            className={`text-blue-600 underline ${job.contactName ? 'ml-1' : ''}`}
+                                          >
+                                            {job.contactPhone}
+                                          </a>
+                                        )}
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="text-right flex items-center space-x-2">
@@ -672,6 +748,8 @@ ${job.registeredBros.map(reg => {
                                           timeStart: job.timeStart || '09:00',
                                           estimatedHours: job.estimatedHours || 1,
                                           location: job.location || '',
+                                          contactName: job.contactName || '',
+                                          contactPhone: job.contactPhone || '',
                                           customRate: job.customRate,
                                           brosNeeded: job.brosNeeded,
                                           registeredBros: job.registeredBros,
@@ -739,6 +817,56 @@ ${job.registeredBros.map(reg => {
                                   <p className="text-xs text-gray-500 mb-3">Aucun Bro inscrit</p>
                                 )}
 
+                                {/* Réponses : qui ne peut pas, à qui demander */}
+                                {(() => {
+                                  const unavailableIds = new Set((job.unavailableBros || []).map(u => u.broId));
+                                  const registeredIds = new Set(job.registeredBros.map(reg => reg.broId));
+                                  const unavailable = bros.filter(bro => unavailableIds.has(bro.id));
+                                  // À relancer : ni inscrit, ni « ne peut pas », ni déjà pris ce jour-là.
+                                  const toAsk = bros.filter(bro =>
+                                    !registeredIds.has(bro.id) &&
+                                    !unavailableIds.has(bro.id) &&
+                                    !scheduledJobs.some(otherJob =>
+                                      otherJob.id !== job.id &&
+                                      otherJob.date === job.date &&
+                                      otherJob.registeredBros.some(reg => reg.broId === bro.id)
+                                    )
+                                  );
+
+                                  return (
+                                    <div className="space-y-2 mb-3">
+                                      {unavailable.length > 0 && (
+                                        <div>
+                                          <p className="text-xs font-medium text-gray-600 mb-1">
+                                            Ne peuvent pas ({unavailable.length}) :
+                                          </p>
+                                          <div className="flex flex-wrap gap-1.5">
+                                            {unavailable.map(bro => (
+                                              <span key={bro.id} className="px-2 py-0.5 rounded-full text-xs bg-gray-200 text-gray-600 line-through">
+                                                {bro.name}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {job.registeredBros.length < job.brosNeeded && toAsk.length > 0 && (
+                                        <div>
+                                          <p className="text-xs font-medium text-gray-600 mb-1">
+                                            À relancer ({toAsk.length}) :
+                                          </p>
+                                          <div className="flex flex-wrap gap-1.5">
+                                            {toAsk.map(bro => (
+                                              <span key={bro.id} className="px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-800">
+                                                {bro.name}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+
                                 {/* Bouton inscription */}
                                 {job.registeredBros.length < job.brosNeeded && (
                                   <button
@@ -781,6 +909,8 @@ ${job.registeredBros.map(reg => {
               timeStart: '09:00',
               estimatedHours: 1,
               location: '',
+              contactName: '',
+              contactPhone: '',
               customRate: hourlyRate,
               brosNeeded: 1,
               registeredBros: [],
@@ -841,6 +971,32 @@ ${job.registeredBros.map(reg => {
                 className="w-full p-3 border rounded-lg"
                 placeholder="Ex: Salle principale, Local technique, Extérieur..."
               />
+            </div>
+
+            {/* Contact sur place */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📞 Contact
+              </label>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={newScheduledJob.contactName || ''}
+                  onChange={(e) => setNewScheduledJob({ ...newScheduledJob, contactName: e.target.value })}
+                  className="w-full p-3 border rounded-lg"
+                  placeholder="Nom de la personne à contacter"
+                  autoComplete="off"
+                />
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  value={newScheduledJob.contactPhone || ''}
+                  onChange={(e) => setNewScheduledJob({ ...newScheduledJob, contactPhone: e.target.value })}
+                  className="w-full p-3 border rounded-lg"
+                  placeholder="Téléphone, ex : 0470 12 34 56"
+                  autoComplete="off"
+                />
+              </div>
             </div>
 
             {/* Durée estimée AVEC BOUTONS +/- */}
@@ -996,6 +1152,9 @@ ${job.registeredBros.map(reg => {
                 {newScheduledJob.location && (
                   <p>📍 Lieu: {newScheduledJob.location}</p>
                 )}
+                {contactLine(newScheduledJob) && (
+                  <p>📞 Contact: {contactLine(newScheduledJob)}</p>
+                )}
                 <p>⏱️ Durée: {newScheduledJob.estimatedHours}h par personne</p>
                 <p>💰 Tarif: {formatCurrency(newScheduledJob.customRate)}/heure</p>
                 <p>👥 Bro requis: {newScheduledJob.brosNeeded} personne(s)</p>
@@ -1062,6 +1221,7 @@ ${job.registeredBros.map(reg => {
                 return bros.map(bro => {
                   // Vérifier si le Bro est déjà inscrit
                   const isRegistered = currentJob?.registeredBros.some(reg => reg.broId === bro.id);
+                  const isUnavailable = (currentJob?.unavailableBros || []).some(u => u.broId === bro.id);
 
                   // Vérifier si le Bro a un conflit d'horaire
                   const hasConflict = scheduledJobs.some(otherJob =>
@@ -1077,8 +1237,8 @@ ${job.registeredBros.map(reg => {
                   ) : null;
 
                   return (
+                    <div key={bro.id} className="flex items-stretch gap-2">
                     <button
-                      key={bro.id}
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
@@ -1099,9 +1259,11 @@ ${job.registeredBros.map(reg => {
                           }
                         }
                       }}
-                      className={`w-full border-2 rounded-lg p-3 text-left active:scale-95 transition-transform ${isRegistered
+                      className={`flex-1 min-w-0 border-2 rounded-lg p-3 text-left active:scale-95 transition-transform ${isRegistered
                         ? 'border-green-500 bg-green-50'
-                        : hasConflict
+                        : isUnavailable
+                          ? 'border-gray-200 bg-gray-100 opacity-70'
+                          : hasConflict
                           ? 'border-orange-300 bg-orange-50'
                           : 'border-gray-200 bg-white hover:bg-gray-50'
                         }`}
@@ -1115,6 +1277,11 @@ ${job.registeredBros.map(reg => {
                             {isRegistered && (
                               <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-semibold">
                                 ✓ Inscrit
+                              </span>
+                            )}
+                            {isUnavailable && (
+                              <span className="px-2 py-1 bg-gray-300 text-gray-700 text-xs rounded-full font-semibold">
+                                ✗ Ne peut pas
                               </span>
                             )}
                             {!isRegistered && hasConflict && (
@@ -1137,6 +1304,22 @@ ${job.registeredBros.map(reg => {
                         </div>
                       </div>
                     </button>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (isUnavailable) clearBroUnavailable(currentJob?.id, bro.id);
+                        else markBroUnavailable(currentJob?.id, bro.id);
+                      }}
+                      className={`flex-none w-20 rounded-lg text-xs font-semibold border-2 active:scale-95 transition-transform ${isUnavailable
+                        ? 'border-gray-400 bg-white text-gray-700'
+                        : 'border-gray-200 bg-gray-50 text-gray-600'
+                        }`}
+                      title={isUnavailable ? 'Annuler : il peut peut-être venir' : 'Il ne peut pas venir'}
+                    >
+                      {isUnavailable ? 'Annuler' : 'Ne peut pas'}
+                    </button>
+                    </div>
                   );
                 });
               })()}
@@ -1148,6 +1331,7 @@ ${job.registeredBros.map(reg => {
               <div className="text-sm text-gray-600 space-y-1">
                 <p>• <span className="font-medium text-green-600">✓ Inscrit</span> : Bro déjà inscrit (clic pour retirer)</p>
                 <p>• <span className="font-medium">Normal</span> : Bro disponible (clic pour inscrire)</p>
+                <p>• <span className="font-medium text-gray-700">✗ Ne peut pas</span> : a répondu qu'il ne pouvait pas venir (« Annuler » pour revenir en arrière)</p>
                 <p>• <span className="font-medium text-orange-600">⚠️ Conflit</span> : Déjà inscrit ce jour-là (clic possible avec confirmation)</p>
               </div>
             </div>

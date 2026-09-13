@@ -2,6 +2,7 @@ import React from 'react';
 import { Beer, Wrench, Coins, Plane, Settings, WifiOff } from 'lucide-react';
 import Modal from './components/Modal';
 import SeasonBanner from './components/SeasonBanner';
+import NotificationPrompt from './components/NotificationPrompt';
 import AnimatedAmount from './components/AnimatedAmount';
 import { plural } from './lib/format';
 import { seasonLabel } from './lib/seasons';
@@ -41,7 +42,10 @@ const Home = ({
   stats = { debtTotal: 0, openSlates: 0, unpaidJobs: 0 },
   viewedSeasonId,
   isViewingArchive,
-  backToActiveSeason
+  backToActiveSeason,
+  isSupported,
+  permission,
+  requestPermission
 }) => {
   const openTrip = () => {
     if (tripPasswordProtected && !settingsAuthenticated) {
@@ -77,6 +81,14 @@ const Home = ({
         <h1 className="font-display text-4xl font-extrabold tracking-tight leading-none mt-1">
           {greeting()}
         </h1>
+      </div>
+
+      <div className="px-4 mb-3 empty:hidden">
+        <NotificationPrompt
+          isSupported={isSupported}
+          permission={permission}
+          requestPermission={requestPermission}
+        />
       </div>
 
       <div className="px-4 grid grid-cols-2 gap-3">
