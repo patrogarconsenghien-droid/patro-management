@@ -1071,6 +1071,9 @@ const eligible = [
         randomTripMessage={randomTripMessage}
         loading={loading}
         isOnline={isOnline}
+        isSupported={isSupported}
+        permission={permission}
+        requestPermission={requestPermission}
       />
     );
   }
@@ -2570,6 +2573,9 @@ const eligible = [
         saveToFirebase={saveToFirebase}
         updateInFirebase={updateInFirebase}
         deleteFromFirebase={deleteFromFirebase}
+        isSupported={isSupported}
+        permission={permission}
+        requestPermission={requestPermission}
       />
     );
   }

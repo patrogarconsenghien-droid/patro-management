@@ -2,6 +2,7 @@ import React from 'react';
 import { Beer, Wrench, DollarSign, Plane, Settings } from 'lucide-react';
 import Modal from './components/Modal';
 import HeaderBase from './components/Header';
+import NotificationPrompt from './components/NotificationPrompt';
 
 const Home = ({
   navigateTo,
@@ -14,6 +15,9 @@ const Home = ({
   randomTripMessage,
   loading,
   isOnline,
+  isSupported,
+  permission,
+  requestPermission,
 }) => {
   const Header = ({ title, onBack }) => (
     <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline} />
@@ -27,6 +31,12 @@ const Home = ({
         <h2 className="text-2xl font-bold text-center text-gray-800 mb-8">
           Sélectionnez une section
         </h2>
+
+        <NotificationPrompt
+          isSupported={isSupported}
+          permission={permission}
+          requestPermission={requestPermission}
+        />
 
         <button
           onClick={() => navigateTo('bar')}
