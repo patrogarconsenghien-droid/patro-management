@@ -39,13 +39,17 @@ const BoulotsDomain = ({
   const [newBroName, setNewBroName] = useState('');
   const [newScheduledJob, setNewScheduledJob] = useState({
     description: '', date: new Date().toISOString().split('T')[0],
-    timeStart: '09:00', estimatedHours: 1, location: '', customRate: 10.00, brosNeeded: 1,
+    timeStart: '09:00', estimatedHours: 1, location: '', contactName: '', contactPhone: '', customRate: 10.00, brosNeeded: 1,
     registeredBros: [], status: 'planned'
   });
   const [editingScheduledJob, setEditingScheduledJob] = useState(null);
   const [selectedJob, setSelectedJob] = useState(null);
 
   // ===== HELPER LOCAL =====
+  // Contact du boulot : « Nom · 0470 12 34 56 », ou vide s'il n'y en a pas.
+  const contactLine = (job) => [job.contactName, job.contactPhone].filter(Boolean).join(' · ');
+  const telHref = (phone) => `tel:${String(phone).replace(/[^\d+]/g, '')}`;
+
   const calculateEndTime = (startTime, durationHours) => {
     if (!startTime || !durationHours) return '';
 
@@ -103,7 +107,7 @@ Boulot Patro:
 💰 Tarif: ${formatCurrency(job.customRate)}/h
 ⏱️ Durée estimée: ${job.estimatedHours}h
 👥 Bro requis: ${job.brosNeeded}
-📍 Lieu: ${job.location || 'À préciser'}
+📍 Lieu: ${job.location || 'À préciser'}${contactLine(job) ? `\n📞 Contact: ${contactLine(job)}` : ''}
 
 Bro inscrits (${job.registeredBros.length}/${job.brosNeeded}):
 ${job.registeredBros.map(reg => {
@@ -223,6 +227,8 @@ ${job.registeredBros.map(reg => {
         timeStart: newScheduledJob.timeStart,
         estimatedHours: newScheduledJob.estimatedHours,
         location: newScheduledJob.location.trim(),
+        contactName: (newScheduledJob.contactName || '').trim(),
+        contactPhone: (newScheduledJob.contactPhone || '').trim(),
         customRate: newScheduledJob.customRate,
         brosNeeded: newScheduledJob.brosNeeded,
         registeredBros: [],
@@ -237,6 +243,8 @@ ${job.registeredBros.map(reg => {
           timeStart: '09:00',
           estimatedHours: 1,
           location: '',
+          contactName: '',
+          contactPhone: '',
           customRate: hourlyRate,
           brosNeeded: 1,
           registeredBros: [],
@@ -262,6 +270,8 @@ ${job.registeredBros.map(reg => {
         timeStart: newScheduledJob.timeStart,
         estimatedHours: newScheduledJob.estimatedHours,
         location: newScheduledJob.location.trim(),
+        contactName: (newScheduledJob.contactName || '').trim(),
+        contactPhone: (newScheduledJob.contactPhone || '').trim(),
         customRate: newScheduledJob.customRate,
         brosNeeded: newScheduledJob.brosNeeded,
         // Garder les Bro déjà inscrits
@@ -277,6 +287,8 @@ ${job.registeredBros.map(reg => {
           timeStart: '09:00',
           estimatedHours: 1,
           location: '',
+          contactName: '',
+          contactPhone: '',
           customRate: hourlyRate,
           brosNeeded: 1,
           registeredBros: [],
@@ -646,6 +658,19 @@ ${job.registeredBros.map(reg => {
                                     ) : (
                                       <p className="text-xs text-gray-400">📍 Lieu à préciser</p>
                                     )}
+                                    {(job.contactName || job.contactPhone) && (
+                                      <p className="text-xs text-gray-500">
+                                        📞 {job.contactName}
+                                        {job.contactPhone && (
+                                          <a
+                                            href={telHref(job.contactPhone)}
+                                            className={`text-blue-600 underline ${job.contactName ? 'ml-1' : ''}`}
+                                          >
+                                            {job.contactPhone}
+                                          </a>
+                                        )}
+                                      </p>
+                                    )}
                                   </div>
                                 </div>
                                 <div className="text-right flex items-center space-x-2">
@@ -672,6 +697,8 @@ ${job.registeredBros.map(reg => {
                                           timeStart: job.timeStart || '09:00',
                                           estimatedHours: job.estimatedHours || 1,
                                           location: job.location || '',
+                                          contactName: job.contactName || '',
+                                          contactPhone: job.contactPhone || '',
                                           customRate: job.customRate,
                                           brosNeeded: job.brosNeeded,
                                           registeredBros: job.registeredBros,
@@ -781,6 +808,8 @@ ${job.registeredBros.map(reg => {
               timeStart: '09:00',
               estimatedHours: 1,
               location: '',
+              contactName: '',
+              contactPhone: '',
               customRate: hourlyRate,
               brosNeeded: 1,
               registeredBros: [],
@@ -841,6 +870,32 @@ ${job.registeredBros.map(reg => {
                 className="w-full p-3 border rounded-lg"
                 placeholder="Ex: Salle principale, Local technique, Extérieur..."
               />
+            </div>
+
+            {/* Contact sur place */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                📞 Contact
+              </label>
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={newScheduledJob.contactName || ''}
+                  onChange={(e) => setNewScheduledJob({ ...newScheduledJob, contactName: e.target.value })}
+                  className="w-full p-3 border rounded-lg"
+                  placeholder="Nom de la personne à contacter"
+                  autoComplete="off"
+                />
+                <input
+                  type="tel"
+                  inputMode="tel"
+                  value={newScheduledJob.contactPhone || ''}
+                  onChange={(e) => setNewScheduledJob({ ...newScheduledJob, contactPhone: e.target.value })}
+                  className="w-full p-3 border rounded-lg"
+                  placeholder="Téléphone, ex : 0470 12 34 56"
+                  autoComplete="off"
+                />
+              </div>
             </div>
 
             {/* Durée estimée AVEC BOUTONS +/- */}
@@ -995,6 +1050,9 @@ ${job.registeredBros.map(reg => {
                 <p>📅 {formatDate(newScheduledJob.date)} de {newScheduledJob.timeStart} à {calculateEndTime(newScheduledJob.timeStart, newScheduledJob.estimatedHours)}</p>
                 {newScheduledJob.location && (
                   <p>📍 Lieu: {newScheduledJob.location}</p>
+                )}
+                {contactLine(newScheduledJob) && (
+                  <p>📞 Contact: {contactLine(newScheduledJob)}</p>
                 )}
                 <p>⏱️ Durée: {newScheduledJob.estimatedHours}h par personne</p>
                 <p>💰 Tarif: {formatCurrency(newScheduledJob.customRate)}/heure</p>
