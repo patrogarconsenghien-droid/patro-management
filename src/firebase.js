@@ -9,20 +9,23 @@ import {
   signOut
 } from 'firebase/auth';
 
-// Sur le site en production, la connexion Google passe par l'adresse de l'app
-// elle-même : vercel.json relaie /__/auth vers Firebase. Sans ça, Safari sur
-// iPhone bloque le retour de connexion, faute de cookies partagés entre deux
-// domaines. En local et sur les prévisualisations, domaine Firebase habituel.
-const PRODUCTION_HOST = 'patro-management.vercel.app';
-const authDomain = typeof window !== 'undefined' && window.location.hostname === PRODUCTION_HOST
-  ? PRODUCTION_HOST
-  : 'patro-management-2024.firebaseapp.com';
+// La connexion Google revient sur le domaine Firebase : c'est la seule adresse
+// de retour enregistrée auprès de Google (vérifié : patro-management.vercel.app
+// est refusée avec « redirect_uri_mismatch »).
+//
+// Pour fiabiliser la connexion dans l'app installée sur iPhone, on pourra
+// passer authDomain à 'patro-management.vercel.app' (vercel.json relaie déjà
+// /__/auth vers Firebase), mais SEULEMENT après avoir ajouté
+// https://patro-management.vercel.app/__/auth/handler aux URI de redirection
+// autorisées du client OAuth, dans Google Cloud Console. Sans ce réglage,
+// plus personne ne pourrait se connecter.
+const AUTH_DOMAIN = 'patro-management-2024.firebaseapp.com';
 
 // Config Firebase web : ces clés sont publiques par nature (elles partent dans le
 // bundle). La sécurité repose sur les règles Firestore, pas sur ces valeurs.
 export const firebaseConfig = {
   apiKey: "AIzaSyBPLArT81P6fAyXFuvAZrEUM1KG-wYcRT0",
-  authDomain,
+  authDomain: AUTH_DOMAIN,
   projectId: "patro-management-2024",
   storageBucket: "patro-management-2024.firebasestorage.app",
   messagingSenderId: "371769454761",
@@ -50,24 +53,22 @@ export const authReady = new Promise((resolve) => {
   });
 });
 
-const isIosStandalone = () =>
-  (/iPhone|iPad|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) &&
-  (window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true);
-
 // Erreurs de pop-up pour lesquelles on retente par redirection.
 const POPUP_UNAVAILABLE = new Set([
   'auth/popup-blocked',
   'auth/operation-not-supported-in-this-environment'
 ]);
 
-/** Ouvre la connexion Google. */
+/**
+ * Ouvre la connexion Google, en fenêtre pop-up d'abord, partout.
+ *
+ * La redirection n'est qu'un repli : avec le domaine Firebase, Safari sur
+ * iPhone bloque souvent le retour d'une redirection (stockage cloisonné entre
+ * domaines), alors que la pop-up passe.
+ */
 export async function signInWithGoogle() {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
-
-  // App installée sur iPhone : les fenêtres pop-up n'y fonctionnent pas.
-  if (isIosStandalone()) return signInWithRedirect(auth, provider);
 
   try {
     return await signInWithPopup(auth, provider);
