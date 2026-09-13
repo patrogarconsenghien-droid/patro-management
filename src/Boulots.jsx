@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import NotificationPrompt from './components/NotificationPrompt';
 import {
-  BarChart3, CheckCircle, Clock, Minus, Plus, Settings, Trash2, User, Wrench
+  BarChart3, Calendar, CheckCircle, Clock, Euro, MapPin, Minus, Pencil, Phone, Plus, Settings, Trash2, User, Wrench
 } from 'lucide-react';
+import MemberAvatar from './components/MemberAvatar';
 import Modal from './components/Modal';
 import HeaderBase from './components/Header';
 import { formatCurrency, formatDate } from './lib/format';
@@ -647,345 +648,308 @@ ${job.registeredBros.map(reg => {
   }
 
   if (screen === 'boulots-scheduled') {
+    const today = new Date().toISOString().split('T')[0];
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const relativeDay = (date) => {
+      if (date === today) return "Aujourd'hui";
+      if (date === tomorrow) return 'Demain';
+      const days = Math.ceil((new Date(date) - new Date()) / (1000 * 60 * 60 * 24));
+      if (days < 0) return `Il y a ${Math.abs(days)} j`;
+      if (days <= 7) return `Dans ${days} j`;
+      return null;
+    };
+    const fr = (date, options) => new Date(date).toLocaleDateString('fr-BE', options).replace('.', '');
+
+    // Grouper les boulots par date
+    const jobsByDate = [...allScheduledJobs]
+      .sort((a, b) => a.date.localeCompare(b.date) || String(a.timeStart).localeCompare(String(b.timeStart)))
+      .reduce((groups, job) => {
+        (groups[job.date] ||= []).push(job);
+        return groups;
+      }, {});
+
     return (
-      <div className="min-h-screen bg-gray-50">
-
-
-
+      <div className="min-h-screen bg-gray-50 pb-8">
         <Header title="Boulots programmés" onBack={() => navigateTo('boulots')} />
 
-        <div className="p-4">
-
-          {/* Liste des boulots programmés */}
+        <div className="px-4 pt-2">
           {allScheduledJobs.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <Clock size={48} className="mx-auto mb-2 opacity-50" />
-              <p>Aucun boulot programmé pour le moment</p>
+            <div className="text-center py-12 text-gray-500">
+              <Clock size={44} className="mx-auto mb-3 opacity-40" />
+              <p className="font-semibold">Aucun boulot programmé</p>
+              <p className="text-sm mt-1">Propose-en un avec le bouton ci-dessous.</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {(() => {
-                // Grouper les boulots par date
-                const jobsByDate = [...allScheduledJobs]
-                  .sort((a, b) => new Date(a.date) - new Date(b.date))
-                  .reduce((groups, job) => {
-                    const dateKey = job.date;
-                    if (!groups[dateKey]) {
-                      groups[dateKey] = [];
-                    }
-                    groups[dateKey].push(job);
-                    return groups;
-                  }, {});
-
-                return Object.entries(jobsByDate).map(([date, jobs]) => (
-                  <div key={date}>
-                    {/* Séparateur de date */}
-                    <div className="flex items-center my-4">
-                      <div className="flex-1 border-t border-gray-300"></div>
-                      <div className="px-4 py-2 bg-gray-100 rounded-full">
-                        <span className="text-sm font-semibold text-gray-700">
-                          📅 {formatDate(date)}
-                          {(() => {
-                            const today = new Date().toISOString().split('T')[0];
-                            const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-
-                            if (date === today) return ' (Aujourd\'hui)';
-                            if (date === tomorrow) return ' (Demain)';
-
-                            const daysDiff = Math.ceil((new Date(date) - new Date()) / (1000 * 60 * 60 * 24));
-                            if (daysDiff < 0) return ` (Il y a ${Math.abs(daysDiff)} jour${Math.abs(daysDiff) > 1 ? 's' : ''})`;
-                            if (daysDiff <= 7) return ` (Dans ${daysDiff} jour${daysDiff > 1 ? 's' : ''})`;
-
-                            return '';
-                          })()}
+            <div className="space-y-6">
+              {Object.entries(jobsByDate).map(([date, jobsOfDay]) => {
+                const relative = relativeDay(date);
+                const past = date < today;
+                return (
+                  <section key={date}>
+                    {/* En-tête de date */}
+                    <div className={`flex items-baseline gap-2 px-1 mb-2 ${past ? 'opacity-60' : ''}`}>
+                      <span className="font-display text-3xl font-extrabold tracking-tight leading-none">{date.slice(8, 10)}</span>
+                      <span className="font-display text-lg font-bold">{fr(date, { month: 'long' })}</span>
+                      <span className="text-sm text-gray-500 capitalize">{fr(date, { weekday: 'long' })}</span>
+                      {relative && (
+                        <span className={`ml-auto text-xs font-bold px-2.5 py-1 rounded-full ${past ? 'bg-gray-200 text-gray-600' : 'bg-gray-900 text-gray-50'}`}>
+                          {relative}
                         </span>
-                      </div>
-                      <div className="flex-1 border-t border-gray-300"></div>
+                      )}
                     </div>
 
-                    {/* Boulots de cette date */}
                     <div className="space-y-3">
-                      {jobs
-                        .sort((a, b) => new Date(b.date) - new Date(a.date))
-                        .map(job => {
-                          const hasEnoughBros = job.registeredBros.length >= job.brosNeeded;
-                          const hasAtLeastOneBro = job.registeredBros.length > 0;
+                      {jobsOfDay.map(job => {
+                        const registered = job.registeredBros || [];
+                        const full = registered.length >= job.brosNeeded;
+                        const missing = Math.max(0, job.brosNeeded - registered.length);
+                        const stripe = full ? 'bg-green-500' : registered.length > 0 ? 'bg-orange-400' : 'bg-red-400';
+                        const statusTone = full
+                          ? 'bg-green-100 text-green-800'
+                          : registered.length > 0 ? 'bg-orange-100 text-orange-800' : 'bg-red-100 text-red-800';
+                        const statusText = full ? 'Complet' : `Manque ${missing}`;
 
-                          // Code couleur plus nuancé
-                          let statusColor, statusText, statusTextColor;
+                        const unavailableIds = new Set((job.unavailableBros || []).map(u => u.broId));
+                        const registeredIds = new Set(registered.map(reg => reg.broId));
+                        // À relancer : ceux de MA section (bros ne contient que les nôtres)
+                        // qui n'ont pas répondu : ni inscrits, ni « ne peut pas », ni déjà
+                        // pris ce jour-là. Ceux qui ont dit non ne sont pas affichés.
+                        const toAsk = bros.filter(bro =>
+                          !registeredIds.has(bro.id) &&
+                          !unavailableIds.has(bro.id) &&
+                          !scheduledJobs.some(otherJob =>
+                            otherJob.id !== job.id &&
+                            otherJob.date === job.date &&
+                            otherJob.registeredBros.some(reg => reg.broId === bro.id)
+                          )
+                        );
 
-                          if (hasEnoughBros) {
-                            statusColor = 'border-green-200 bg-green-50';
-                            statusText = 'Prêt';
-                            statusTextColor = 'text-green-700';
-                          } else if (hasAtLeastOneBro) {
-                            statusColor = 'border-orange-200 bg-orange-50';
-                            statusText = `Partiel (${job.registeredBros.length}/${job.brosNeeded})`;
-                            statusTextColor = 'text-orange-700';
-                          } else {
-                            statusColor = 'border-red-200 bg-red-50';
-                            statusText = `${job.brosNeeded} Bro manquant(s)`;
-                            statusTextColor = 'text-red-700';
-                          }
+                        const mine = myBroId ? registered.some(reg => reg.broId === myBroId) : false;
+                        const cannot = myBroId ? (job.unavailableBros || []).some(u => u.broId === myBroId) : false;
 
-                          return (
-                            <div key={job.id} className={`bg-white border rounded-lg shadow-sm ${statusColor} p-4`}>
-                              <div className="flex items-start justify-between mb-2">
-                                <div className="flex-1">
-                                  <h3 className="font-medium">{job.description}</h3>
-                                  <div className="space-y-1 mt-1">
-                                    <p className="text-xs text-gray-500">
-                                      💰 Tarif: {formatCurrency(job.customRate)}/h
-                                    </p>
-                                    {job.timeStart ? (
-                                      <p className="text-xs text-gray-500">
-                                        🕐 {job.timeStart} à {calculateEndTime(job.timeStart, job.estimatedHours || 1)}
-                                      </p>
-                                    ) : (
-                                      <p className="text-xs text-gray-400">🕐 Horaires à définir</p>
-                                    )}
-                                    {job.location ? (
-                                      <p className="text-xs text-gray-500">📍 {job.location}</p>
-                                    ) : (
-                                      <p className="text-xs text-gray-400">📍 Lieu à préciser</p>
-                                    )}
-                                    {job._shared && (
-                                      <p className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
-                                        Boulot des {otherLabel}
-                                      </p>
-                                    )}
-                                    {!job._shared && job.openToOtherSection && (
-                                      <p className="inline-block text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
-                                        Ouvert aux {otherLabel}
-                                      </p>
-                                    )}
-                                    {job.createdByName && (
-                                      <p className="text-xs text-gray-400">Proposé par {job.createdByName}</p>
-                                    )}
-                                    {(job.contactName || job.contactPhone) && (
-                                      <p className="text-xs text-gray-500">
-                                        📞 {job.contactName}
-                                        {job.contactPhone && (
-                                          <a
-                                            href={telHref(job.contactPhone)}
-                                            className={`text-blue-600 underline ${job.contactName ? 'ml-1' : ''}`}
-                                          >
-                                            {job.contactPhone}
-                                          </a>
-                                        )}
-                                      </p>
-                                    )}
-                                  </div>
+                        return (
+                          <article key={job.id} className="bg-white rounded-2xl shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                            <div className={`h-1.5 ${stripe}`} aria-hidden="true" />
+                            <div className="p-4 space-y-3">
+
+                              {/* Titre et état */}
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  {(job._shared || job.openToOtherSection) && (
+                                    <span className="inline-block mb-1 text-xs font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800">
+                                      {job._shared ? `Boulot des ${otherLabel}` : `Ouvert aux ${otherLabel}`}
+                                    </span>
+                                  )}
+                                  <h3 className="font-display text-lg font-bold leading-tight">{job.description}</h3>
+                                  {job.createdByName && (
+                                    <p className="text-xs text-gray-500 mt-0.5">Proposé par {job.createdByName}</p>
+                                  )}
                                 </div>
-                                <div className="text-right flex items-center space-x-2">
-                                  <div className={`px-2 py-1 rounded-full text-xs font-medium ${statusTextColor} ${hasEnoughBros ? 'bg-green-100' : hasAtLeastOneBro ? 'bg-orange-100' : 'bg-red-100'}`}>
-                                    {statusText}
-                                  </div>
-                                  <div className="flex items-center space-x-1">
-                                    <button
-                                      onClick={() => {
-                                        const calendarUrl = createGoogleCalendarLink(job);
-                                        window.open(calendarUrl, '_blank');
-                                      }}
-                                      className="p-1 text-blue-500 hover:bg-blue-50 rounded active:scale-95 transition-transform"
-                                      title="Ajouter à Google Calendar"
-                                    >
-                                      <span className="text-sm">📅</span>
-                                    </button>
-                                    {canEditJob(job) && (<>
-                                    <button
-                                      onClick={() => {
-                                        // Pré-remplir le formulaire avec les données existantes
-                                        setNewScheduledJob({
-                                          description: job.description,
-                                          date: job.date,
-                                          timeStart: job.timeStart || '09:00',
-                                          estimatedHours: job.estimatedHours || 1,
-                                          location: job.location || '',
-                                          contactName: job.contactName || '',
-                                          contactPhone: job.contactPhone || '',
-                                          openToOtherSection: Boolean(job.openToOtherSection),
-                                          customRate: job.customRate,
-                                          brosNeeded: job.brosNeeded,
-                                          registeredBros: job.registeredBros,
-                                          status: job.status
-                                        });
-                                        setEditingScheduledJob(job);
-                                        setModalType('edit-scheduled-job');
-                                        setShowModal(true);
-                                      }}
-                                      className="p-1 text-blue-500 hover:bg-blue-50 rounded active:scale-95 transition-transform"
-                                      title="Modifier ce boulot"
-                                    >
-                                      <Settings size={14} />
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        if (confirm(`Supprimer le boulot "${job.description}" ?`)) {
-                                          deleteScheduledJob(job.id);
-                                        }
-                                      }}
-                                      className="p-1 text-red-500 hover:bg-red-50 rounded active:scale-95 transition-transform"
-                                      title="Supprimer ce boulot"
-                                    >
-                                      <Trash2 size={14} />
-                                    </button>
-                                    </>)}
-                                  </div>
-                                </div>
+                                <span className={`flex-none px-2.5 py-1 rounded-full text-xs font-bold ${statusTone}`}>
+                                  {statusText}
+                                </span>
                               </div>
 
-                              {/* Affichage des Bro inscrits */}
-                              <div className="mt-3">
-                                <p className="text-sm font-medium text-gray-700 mb-2">
-                                  Bro inscrits ({job.registeredBros.length}/{job.brosNeeded}) :
+                              {/* Horaire, lieu, tarif */}
+                              <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-gray-700">
+                                <span className="inline-flex items-center gap-1.5">
+                                  <Clock size={15} className="text-gray-400 flex-none" />
+                                  {job.timeStart
+                                    ? `${job.timeStart} – ${calculateEndTime(job.timeStart, job.estimatedHours || 1)}`
+                                    : 'Horaire à définir'}
+                                </span>
+                                <span className="inline-flex items-center gap-1.5">
+                                  <MapPin size={15} className="text-gray-400 flex-none" />
+                                  {job.location || <span className="text-gray-400">Lieu à préciser</span>}
+                                </span>
+                                <span className="inline-flex items-center gap-1.5 font-mono">
+                                  <Euro size={15} className="text-gray-400 flex-none" />
+                                  {formatCurrency(job.customRate)}/h · {job.estimatedHours || 1} h
+                                </span>
+                              </div>
+
+                              {/* Contact, cliquable pour appeler */}
+                              {(job.contactName || job.contactPhone) && (
+                                <a
+                                  href={job.contactPhone ? telHref(job.contactPhone) : undefined}
+                                  className="flex items-center gap-2.5 p-2.5 rounded-xl bg-gray-50 text-sm"
+                                >
+                                  <Phone size={15} className="text-gray-500 flex-none" />
+                                  <span className="font-medium truncate">{job.contactName || 'Contact'}</span>
+                                  {job.contactPhone && <span className="ml-auto font-mono text-blue-700">{job.contactPhone}</span>}
+                                </a>
+                              )}
+
+                              {/* Inscrits */}
+                              <div>
+                                <p className="text-sm font-semibold mb-1.5">
+                                  Inscrits <span className="font-mono font-medium text-gray-500">{registered.length}/{job.brosNeeded}</span>
                                 </p>
-
-                                {job.registeredBros.length > 0 ? (
-                                  <div className="flex flex-wrap gap-2 mb-3">
-                                    {job.registeredBros.map((registration, index) => {
+                                {registered.length > 0 ? (
+                                  <div className="flex flex-wrap gap-2">
+                                    {registered.map((registration, index) => {
                                       const bro = bros.find(b => b.id === registration.broId);
-
-                                      // Vérifier si ce Bro a d'autres boulots le même jour
-                                      const hasOtherJobsSameDay = scheduledJobs.some(otherJob =>
+                                      const name = registration.name || bro?.name || 'Inconnu';
+                                      // Ce Bro a-t-il un autre boulot le même jour ?
+                                      const busy = scheduledJobs.some(otherJob =>
                                         otherJob.id !== job.id &&
                                         otherJob.date === job.date &&
                                         otherJob.registeredBros.some(reg => reg.broId === registration.broId)
                                       );
-
                                       return (
-                                        <div key={index} className={`flex items-center px-2 py-1 rounded-full text-xs ${hasOtherJobsSameDay ? 'bg-orange-100 border border-orange-300' : 'bg-blue-100'
-                                          }`}>
-                                          <span className="mr-1">
-                                            {hasOtherJobsSameDay && '⚠️ '}{registration.name || bro?.name || 'Inconnu'}
-                                          </span>
+                                        <span
+                                          key={index}
+                                          title={busy ? 'Déjà inscrit sur un autre boulot ce jour-là' : undefined}
+                                          className={`inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full text-sm ${busy ? 'bg-orange-50 ring-1 ring-orange-300' : 'bg-gray-100'}`}
+                                        >
+                                          <MemberAvatar name={name} size="sm" />
+                                          <span className="font-medium">{busy && '⚠️ '}{name}</span>
                                           {canManage && (
-                                          <button
-                                            onClick={() => removeBroFromScheduled(job.id, registration.broId)}
-                                            className="text-red-500 hover:text-red-700"
-                                            aria-label="Retirer ce Bro"
-                                          >
-                                            <Minus size={12} />
-                                          </button>
+                                            <button
+                                              onClick={() => removeBroFromScheduled(job.id, registration.broId)}
+                                              className="ml-0.5 w-5 h-5 grid place-items-center rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600"
+                                              aria-label={`Retirer ${name}`}
+                                            >
+                                              <Minus size={12} />
+                                            </button>
                                           )}
-                                        </div>
+                                        </span>
                                       );
                                     })}
                                   </div>
                                 ) : (
-                                  <p className="text-xs text-gray-500 mb-3">Aucun Bro inscrit</p>
+                                  <p className="text-sm text-gray-500">Personne pour l'instant.</p>
                                 )}
+                              </div>
 
-                                {/* Réponses : qui ne peut pas, à qui demander */}
-                                {(() => {
-                                  const unavailableIds = new Set((job.unavailableBros || []).map(u => u.broId));
-                                  const registeredIds = new Set(job.registeredBros.map(reg => reg.broId));
-                                  // À relancer : ceux de MA section (bros ne contient que les nôtres)
-                                  // qui n'ont pas répondu : ni inscrits, ni « ne peut pas », ni déjà
-                                  // pris ce jour-là. Ceux qui ont dit non ne sont pas affichés.
-                                  const toAsk = bros.filter(bro =>
-                                    !registeredIds.has(bro.id) &&
-                                    !unavailableIds.has(bro.id) &&
-                                    !scheduledJobs.some(otherJob =>
-                                      otherJob.id !== job.id &&
-                                      otherJob.date === job.date &&
-                                      otherJob.registeredBros.some(reg => reg.broId === bro.id)
-                                    )
-                                  );
-
-                                  return (
-                                    <div className="space-y-2 mb-3">
-                                      {canManage && job.registeredBros.length < job.brosNeeded && toAsk.length > 0 && (
-                                        <div>
-                                          <p className="text-xs font-medium text-gray-600 mb-1">
-                                            À relancer ({toAsk.length}) :
-                                          </p>
-                                          <div className="flex flex-wrap gap-1.5">
-                                            {toAsk.map(bro => (
-                                              <span key={bro.id} className="px-2 py-0.5 rounded-full text-xs bg-yellow-100 text-yellow-800">
-                                                {bro.name}
-                                              </span>
-                                            ))}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })()}
-
-                                {/* Ma réponse, en grand : pour tout le monde, animateurs compris */}
-                                {(() => {
-                                  if (!myBroId) {
-                                    return (
-                                      <p className="text-xs text-orange-800 bg-orange-50 rounded-lg p-2 mb-2">
-                                        Ton compte n'est pas relié à ton nom : fais-le dans Réglages → Comptes, ou demande à un animateur.
-                                      </p>
-                                    );
-                                  }
-                                  const mine = job.registeredBros.some(reg => reg.broId === myBroId);
-                                  const cannot = (job.unavailableBros || []).some(u => u.broId === myBroId);
-                                  const full = job.registeredBros.length >= job.brosNeeded;
-
-                                  return (
-                                    <div className="space-y-2 mb-3">
-                                      <p className="text-sm font-medium text-gray-700">
-                                        {mine
-                                          ? '✅ Tu es inscrit'
-                                          : cannot
-                                            ? "✗ Tu as dit que tu ne pouvais pas venir"
-                                            : full
-                                              ? "L'équipe est complète"
-                                              : 'Tu viens ?'}
-                                      </p>
-                                      <div className="grid grid-cols-2 gap-2">
-                                        <button
-                                          onClick={() => (mine ? removeBroFromScheduled(job.id, myBroId) : registerBroToJob(job.id, myBroId))}
-                                          disabled={!mine && full}
-                                          className={`p-3 rounded-xl text-base font-bold active:scale-95 transition-transform disabled:opacity-50 ${mine
-                                            ? 'bg-white border-2 border-green-500 text-green-700'
-                                            : 'bg-green-500 text-white shadow-md'
-                                            }`}
-                                        >
-                                          {mine ? 'Me désinscrire' : 'Je viens'}
-                                        </button>
-                                        <button
-                                          onClick={() => (cannot ? clearBroUnavailable(job.id, myBroId) : markBroUnavailable(job.id, myBroId))}
-                                          className={`p-3 rounded-xl text-base font-bold active:scale-95 transition-transform ${cannot
-                                            ? 'bg-white border-2 border-gray-400 text-gray-700'
-                                            : 'bg-gray-100 text-gray-700'
-                                            }`}
-                                        >
-                                          {cannot ? 'Annuler' : 'Je ne peux pas'}
-                                        </button>
-                                      </div>
-                                    </div>
-                                  );
-                                })()}
-
-                                {/* Inscrire quelqu'un d'autre, en petit */}
-                                {hasEnoughBros ? (
-                                  <div className="p-2 bg-green-100 border border-green-300 rounded text-center">
-                                    <p className="text-sm text-green-800 font-medium">✅ Équipe complète</p>
-                                    <p className="text-xs text-green-700">
-                                      {canManage ? 'Passe par « Valider les boulots » une fois le boulot fait' : "Un animateur validera le boulot une fois fait"}
-                                    </p>
+                              {/* À relancer : animateurs */}
+                              {canManage && !full && toAsk.length > 0 && (
+                                <div>
+                                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1.5">
+                                    À relancer · {toAsk.length}
+                                  </p>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {toAsk.map(bro => (
+                                      <span key={bro.id} className="px-2.5 py-1 rounded-full text-sm bg-yellow-100 text-yellow-900">
+                                        {bro.name}
+                                      </span>
+                                    ))}
                                   </div>
+                                </div>
+                              )}
+
+                              {/* Ma réponse, en grand : pour tout le monde, animateurs compris */}
+                              {!myBroId ? (
+                                <p className="text-sm text-orange-800 bg-orange-50 rounded-xl p-3">
+                                  Ton compte n'est pas relié à ton nom : fais-le dans Réglages → Comptes, ou demande à un animateur.
+                                </p>
+                              ) : (
+                                <div>
+                                  <p className="text-sm font-semibold mb-2">
+                                    {mine
+                                      ? '✅ Tu es inscrit'
+                                      : cannot
+                                        ? '✗ Tu as dit que tu ne pouvais pas venir'
+                                        : full
+                                          ? "L'équipe est complète"
+                                          : 'Tu viens ?'}
+                                  </p>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                      onClick={() => (mine ? removeBroFromScheduled(job.id, myBroId) : registerBroToJob(job.id, myBroId))}
+                                      disabled={!mine && full}
+                                      className={`p-3 rounded-xl text-base font-bold active:scale-95 transition-transform disabled:opacity-40 ${mine
+                                        ? 'bg-white ring-2 ring-green-500 text-green-700'
+                                        : 'bg-green-500 text-white shadow-md'
+                                        }`}
+                                    >
+                                      {mine ? 'Me désinscrire' : 'Je viens'}
+                                    </button>
+                                    <button
+                                      onClick={() => (cannot ? clearBroUnavailable(job.id, myBroId) : markBroUnavailable(job.id, myBroId))}
+                                      className={`p-3 rounded-xl text-base font-bold active:scale-95 transition-transform ${cannot
+                                        ? 'bg-white ring-2 ring-gray-400 text-gray-700'
+                                        : 'bg-gray-100 text-gray-700'
+                                        }`}
+                                    >
+                                      {cannot ? 'Annuler' : 'Je ne peux pas'}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Actions secondaires */}
+                              <div className="flex items-center gap-2 pt-1 border-t border-gray-100">
+                                {full ? (
+                                  <p className="flex-1 text-xs text-green-700 py-2">
+                                    ✅ Équipe complète · {canManage ? 'à valider dans « Valider les boulots » une fois fait' : 'un animateur validera une fois fait'}
+                                  </p>
                                 ) : (
                                   <button
                                     onClick={() => { setSelectedJob(job); setModalType('register-bro'); setShowModal(true); }}
-                                    className="w-full py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 rounded-lg active:scale-95 transition-transform"
+                                    className="flex-1 py-2 text-sm font-semibold text-blue-700 text-left active:scale-95 transition-transform"
                                   >
                                     + Inscrire quelqu'un d'autre
                                   </button>
                                 )}
+                                <button
+                                  onClick={() => window.open(createGoogleCalendarLink(job), '_blank')}
+                                  className="w-9 h-9 grid place-items-center rounded-xl bg-gray-100 text-gray-700 active:scale-90 transition-transform"
+                                  title="Ajouter à Google Agenda"
+                                  aria-label="Ajouter à Google Agenda"
+                                >
+                                  <Calendar size={16} />
+                                </button>
+                                {canEditJob(job) && (<>
+                                  <button
+                                    onClick={() => {
+                                      // Pré-remplir le formulaire avec les données existantes
+                                      setNewScheduledJob({
+                                        description: job.description,
+                                        date: job.date,
+                                        timeStart: job.timeStart || '09:00',
+                                        estimatedHours: job.estimatedHours || 1,
+                                        location: job.location || '',
+                                        contactName: job.contactName || '',
+                                        contactPhone: job.contactPhone || '',
+                                        openToOtherSection: Boolean(job.openToOtherSection),
+                                        customRate: job.customRate,
+                                        brosNeeded: job.brosNeeded,
+                                        registeredBros: job.registeredBros,
+                                        status: job.status
+                                      });
+                                      setEditingScheduledJob(job);
+                                      setModalType('edit-scheduled-job');
+                                      setShowModal(true);
+                                    }}
+                                    className="w-9 h-9 grid place-items-center rounded-xl bg-gray-100 text-gray-700 active:scale-90 transition-transform"
+                                    title="Modifier ce boulot"
+                                    aria-label="Modifier ce boulot"
+                                  >
+                                    <Pencil size={16} />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (confirm(`Supprimer le boulot "${job.description}" ?`)) {
+                                        deleteScheduledJob(job.id);
+                                      }
+                                    }}
+                                    className="w-9 h-9 grid place-items-center rounded-xl bg-red-50 text-red-600 active:scale-90 transition-transform"
+                                    title="Supprimer ce boulot"
+                                    aria-label="Supprimer ce boulot"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </>)}
                               </div>
                             </div>
-                          );
-                        })}
+                          </article>
+                        );
+                      })}
                     </div>
-                  </div>
-                ));
-              })()}
+                  </section>
+                );
+              })}
             </div>
           )}
 
