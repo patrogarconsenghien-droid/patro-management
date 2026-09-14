@@ -138,12 +138,15 @@ export default function AuthGate({ children }) {
   if (status === 'rejected') {
     return (
       <Screen>
-        <Brand subtitle="Accès non autorisé" />
-        <div className="bg-white rounded-3xl shadow-sm ring-1 ring-gray-200 p-5">
+        <Brand subtitle="Brothers only" />
+        <div className="bg-white rounded-3xl shadow-sm ring-1 ring-gray-200 p-5 space-y-3">
+          <p className="text-5xl text-center" aria-hidden="true">🚪🚫</p>
           <p className="text-sm text-gray-700">
-            Le compte <strong>{profile?.email}</strong> n'est pas autorisé à utiliser cette app,
-            réservée aux animés et animateurs du patro. Si tu penses que c'est une erreur,
-            parles-en à un animateur.
+            Désolé <strong>{profile?.displayName || profile?.email}</strong>, ici c'est réservé aux Brothers.
+            T'as pas le foulard, t'as pas le tonneau, t'as pas l'app.
+          </p>
+          <p className="text-sm text-gray-500">
+            Si tu es sûr d'être un Bro et qu'on t'a oublié, viens râler auprès d'un animateur. Avec une bière, ça passe mieux.
           </p>
         </div>
         <SignOutButton />
