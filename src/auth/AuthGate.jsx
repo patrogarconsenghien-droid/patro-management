@@ -135,6 +135,22 @@ export default function AuthGate({ children }) {
     );
   }
 
+  if (status === 'rejected') {
+    return (
+      <Screen>
+        <Brand subtitle="Accès non autorisé" />
+        <div className="bg-white rounded-3xl shadow-sm ring-1 ring-gray-200 p-5">
+          <p className="text-sm text-gray-700">
+            Le compte <strong>{profile?.email}</strong> n'est pas autorisé à utiliser cette app,
+            réservée aux animés et animateurs du patro. Si tu penses que c'est une erreur,
+            parles-en à un animateur.
+          </p>
+        </div>
+        <SignOutButton />
+      </Screen>
+    );
+  }
+
   if (status === 'disabled') {
     return (
       <Screen>

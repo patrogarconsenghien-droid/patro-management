@@ -6,13 +6,15 @@ import { ROLE_LABELS, ROLES, SECTIONS, isAdmin } from './auth/account';
 const STATUS_LABELS = {
   pending: 'En attente',
   active: 'Actif',
-  disabled: 'Désactivé'
+  disabled: 'Désactivé',
+  rejected: 'Non autorisé'
 };
 
 const STATUS_TONES = {
   pending: 'bg-orange-100 text-orange-800',
   active: 'bg-green-100 text-green-800',
-  disabled: 'bg-gray-200 text-gray-600'
+  disabled: 'bg-gray-200 text-gray-600',
+  rejected: 'bg-red-100 text-red-800'
 };
 
 const initialsOf = (name) =>
@@ -248,10 +250,24 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase, sect
                       onClick={() => validate(target)}
                       className="flex-1 p-2.5 rounded-xl bg-green-500 text-white text-sm font-semibold active:scale-95 transition-transform"
                     >
-                      {target.status === 'disabled' ? 'Réactiver' : 'Valider'}
+                      {target.status === 'pending' ? 'Valider' : 'Autoriser'}
                     </button>
                   )}
-                  {target.status !== 'disabled' && (
+                  {/* Un compte en attente qui n'a rien à faire ici : refusé, il
+                      voit « non autorisé ». Un compte qui a eu accès : désactivé. */}
+                  {(target.status === 'pending' || !target.status) && (
+                    <button
+                      onClick={() => {
+                        if (confirm(`Refuser l'accès à ${target.displayName} ? Il verra que son compte n'est pas autorisé.`)) {
+                          update(target, { status: 'rejected' });
+                        }
+                      }}
+                      className="flex-1 p-2.5 rounded-xl bg-red-50 text-red-700 text-sm font-semibold active:scale-95 transition-transform"
+                    >
+                      Refuser
+                    </button>
+                  )}
+                  {target.status === 'active' && (
                     <button
                       onClick={() => {
                         if (confirm(`Désactiver le compte de ${target.displayName} ? Il n'aura plus accès à l'app.`)) {

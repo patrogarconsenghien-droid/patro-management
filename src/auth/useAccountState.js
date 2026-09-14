@@ -109,6 +109,7 @@ export function useAccountState() {
   else if (user && profile) {
     if (profile.status === 'active') status = 'active';
     else if (profile.status === 'disabled') status = 'disabled';
+    else if (profile.status === 'rejected') status = 'rejected';
     else status = 'pending';
   }
 
