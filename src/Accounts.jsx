@@ -53,10 +53,15 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase, sect
       );
   }, [users, meIsAdmin, me?.sectionId]);
 
-  const linkedBroIds = useMemo(
-    () => new Map(users.filter((u) => u.broId).map((u) => [u.broId, u.id])),
-    [users]
-  );
+  // Plusieurs comptes peuvent viser le même Bro (un animé et un parent, par
+  // exemple) : on affiche qui d'autre y est relié, sans l'interdire.
+  const linkedNames = useMemo(() => {
+    const map = new Map();
+    users.filter((u) => u.broId).forEach((u) => {
+      map.set(u.broId, [...(map.get(u.broId) || []), { id: u.id, name: u.displayName }]);
+    });
+    return map;
+  }, [users]);
 
   const pendingCount = visibleUsers.filter((u) => u.status === 'pending').length;
 
@@ -216,11 +221,10 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase, sect
                   {[...bros]
                     .sort((a, b) => String(a.name).localeCompare(String(b.name)))
                     .map((bro) => {
-                      const takenBy = linkedBroIds.get(bro.id);
-                      const takenByOther = takenBy && takenBy !== target.id;
+                      const others = (linkedNames.get(bro.id) || []).filter((u) => u.id !== target.id);
                       return (
-                        <option key={bro.id} value={bro.id} disabled={takenByOther}>
-                          {bro.name}{takenByOther ? ' (déjà relié)' : ''}
+                        <option key={bro.id} value={bro.id}>
+                          {bro.name}{others.length ? ` (aussi : ${others.map((u) => u.name).join(', ')})` : ''}
                         </option>
                       );
                     })}
