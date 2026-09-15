@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { LogOut } from 'lucide-react';
+import { Check, Copy, ExternalLink, LogOut } from 'lucide-react';
 import { signInWithGoogle, signOutUser } from '../firebase';
+import { androidBrowserIntent, detectInAppBrowser } from '../lib/inAppBrowser';
 import { AccountContext } from './account';
 import { useAccountState } from './useAccountState';
 
@@ -13,6 +14,12 @@ const AUTH_ERRORS = {
     "Cette adresse n'est pas autorisée pour la connexion. Un admin doit l'ajouter dans Firebase.",
   'auth/network-request-failed':
     'Pas de connexion internet. Réessaie dès que le réseau revient.',
+  // Retour d'une redirection dont le navigateur a perdu l'état (webview
+  // Messenger, Facebook…) : la page Firebase affiche « missing initial state ».
+  'auth/missing-initial-state':
+    "La connexion a été interrompue par ce navigateur. Ouvre l'app dans Chrome ou Safari, puis réessaie.",
+  'auth/web-storage-unsupported':
+    "Ce navigateur bloque le stockage nécessaire à la connexion. Ouvre l'app dans Chrome ou Safari.",
   'auth/popup-closed-by-user': null,
   'auth/cancelled-popup-request': null,
   'auth/user-cancelled': null
@@ -32,6 +39,66 @@ const GoogleMark = () => (
     <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
   </svg>
 );
+
+/**
+ * Panneau affiché quand l'app tourne dans le navigateur intégré d'une autre app
+ * (Messenger, Facebook, Instagram…). La connexion Google n'y fonctionne pas :
+ * on guide vers un vrai navigateur au lieu de laisser échouer.
+ */
+const OpenInBrowser = ({ browser, onTryAnyway }) => {
+  const [copied, setCopied] = useState(false);
+  const url = window.location.href;
+  const intent = browser.os === 'android' ? androidBrowserIntent(url) : null;
+  const appName = browser.name || 'cette app';
+  const ios = browser.os === 'ios';
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Pas de presse-papiers : on affiche l'adresse pour la copie manuelle.
+      window.prompt('Copie cette adresse :', url);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-3xl shadow-sm ring-1 ring-gray-200 p-5 space-y-4">
+      <p className="text-sm text-gray-700">
+        Tu es dans le navigateur intégré de <strong>{appName}</strong>. La connexion Google n'y
+        fonctionne pas : ouvre l'app dans {ios ? 'Safari' : 'Chrome'} pour continuer.
+      </p>
+      <ol className="text-sm text-gray-600 list-decimal pl-5 space-y-1">
+        <li>
+          Touche le menu <strong>⋯</strong> {ios ? 'en bas' : 'en haut'} à droite.
+        </li>
+        <li>
+          Choisis <strong>{ios ? 'Ouvrir dans Safari' : 'Ouvrir dans le navigateur'}</strong>.
+        </li>
+      </ol>
+      {intent && (
+        <a
+          href={intent}
+          className="w-full p-3.5 rounded-2xl bg-gray-900 text-gray-50 font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+        >
+          <ExternalLink size={18} />
+          Ouvrir dans Chrome
+        </a>
+      )}
+      <button
+        onClick={copyLink}
+        className="w-full p-3 rounded-2xl bg-white ring-1 ring-gray-200 text-gray-700 font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform"
+      >
+        {copied ? <Check size={18} /> : <Copy size={18} />}
+        {copied ? 'Lien copié' : 'Copier le lien'}
+      </button>
+      <button onClick={onTryAnyway} className="w-full text-xs text-gray-500 underline underline-offset-2">
+        Essayer quand même de se connecter ici
+      </button>
+    </div>
+  );
+};
 
 /** Écran plein, centré, aux couleurs de l'app. */
 const Screen = ({ children }) => (
@@ -65,6 +132,8 @@ export default function AuthGate({ children }) {
   const { status, user, profile, error } = useAccountState();
   const [signingIn, setSigningIn] = useState(false);
   const [signInError, setSignInError] = useState(null);
+  const [browser] = useState(detectInAppBrowser);
+  const [forceSignIn, setForceSignIn] = useState(false);
 
   const signIn = async () => {
     setSigningIn(true);
@@ -91,6 +160,14 @@ export default function AuthGate({ children }) {
 
   if (status === 'signed-out') {
     const message = messageFor(signInError || error);
+    if (browser.inApp && !forceSignIn) {
+      return (
+        <Screen>
+          <Brand subtitle="Connexion" />
+          <OpenInBrowser browser={browser} onTryAnyway={() => setForceSignIn(true)} />
+        </Screen>
+      );
+    }
     return (
       <Screen>
         <Brand subtitle="Connexion" />
