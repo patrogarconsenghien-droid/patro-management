@@ -1,8 +1,11 @@
 // API v1 explicite : depuis firebase-functions 6, l'import racine renvoie la v2.
 const functions = require("firebase-functions/v1");
-const admin = require("firebase-admin");
+// API modulaire : firebase-admin 14 a supprimé l'ancienne écriture « admin.xxx() ».
+const { initializeApp } = require("firebase-admin/app");
+const { getFirestore } = require("firebase-admin/firestore");
+const { getMessaging } = require("firebase-admin/messaging");
 
-admin.initializeApp();
+initializeApp();
 
 const APP_URL = "https://patro-management.vercel.app";
 const DEFAULT_SECTION = "garcons";
@@ -23,7 +26,7 @@ const sectionPrefix = (sectionId) =>
  * notifier les Bro quand on corrige un vieux boulot dans une saison archivée.
  */
 async function getActiveSeasonId(sectionId) {
-  const snap = await admin.firestore().doc(`${sectionPrefix(sectionId)}appState/current`).get();
+  const snap = await getFirestore().doc(`${sectionPrefix(sectionId)}appState/current`).get();
   return snap.exists ? snap.data().seasonId : null;
 }
 
@@ -44,7 +47,7 @@ function formatDateFr(dateString) {
  * avant les comptes, qui n'ont pas d'identifiant.
  */
 async function tokensForSection(sectionId) {
-  const db = admin.firestore();
+  const db = getFirestore();
   const [tokensSnap, usersSnap] = await Promise.all([
     db.collection("fcmTokens").get(),
     db.collection("users").where("status", "==", "active").get(),
@@ -100,7 +103,7 @@ async function notifyNewJob(newJob, jobId, sectionId) {
     const deadTokens = [];
     for (let i = 0; i < messages.length; i += 500) {
       const batch = messages.slice(i, i + 500);
-      const response = await admin.messaging().sendEach(batch);
+      const response = await getMessaging().sendEach(batch);
       sent += response.successCount;
       response.responses.forEach((result, index) => {
         if (!result.success) {
@@ -112,7 +115,7 @@ async function notifyNewJob(newJob, jobId, sectionId) {
     }
 
     await Promise.all(
-      deadTokens.map((token) => admin.firestore().collection("fcmTokens").doc(token).delete())
+      deadTokens.map((token) => getFirestore().collection("fcmTokens").doc(token).delete())
     );
 
     console.log(
@@ -198,3 +201,9 @@ exports.sendJobOpenedNotificationsSection = functions
   .firestore
   .document("sections/{sectionId}/seasons/{seasonId}/scheduledJobs/{jobId}")
   .onUpdate((change, context) => onJobUpdated(change, context, context.params.sectionId));
+
+// Paiements : compte de réception verrouillé, double authentification, journal.
+Object.assign(exports, require("./payments"));
+
+// Rappel d'un boulot : notification et mail à ceux qui n'ont pas répondu.
+Object.assign(exports, require("./reminders"));
