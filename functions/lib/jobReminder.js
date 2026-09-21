@@ -110,6 +110,8 @@ function buildMessage(job, { appUrl, senderName }) {
  * Renvoie de quoi envoyer les notifications : { uids, message, counts }.
  */
 async function prepareReminder(db, auth, { jobPath, brosPath } = {}, { nowMs = Date.now(), appUrl } = {}) {
+  // La connexion d'abord : un inconnu n'apprend rien, pas même si un chemin est valide.
+  if (!auth || !auth.uid) throw new ReminderError("unauthenticated", "signed-out", "Connexion requise.");
   const jobRefInfo = parsePath(jobPath, JOB_PATHS);
   const brosInfo = parsePath(brosPath, BROS_PATHS);
   // On relance les membres de SA section, y compris pour un boulot que
