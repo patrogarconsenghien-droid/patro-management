@@ -1,10 +1,12 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
+import { getFunctions } from 'firebase/functions';
 import {
   GoogleAuthProvider,
   getAuth,
   onAuthStateChanged,
+  reauthenticateWithPopup,
   signInWithPopup,
   signInWithRedirect,
   signOut
@@ -81,3 +83,21 @@ export async function signInWithGoogle() {
 }
 
 export const signOutUser = () => signOut(auth);
+
+// Les Cloud Functions tournent en Belgique (europe-west1), comme la base.
+export const functions = getFunctions(app, 'europe-west1');
+
+/**
+ * Redemande le compte Google, puis renouvelle le jeton. Les gestes sensibles
+ * (compte de paiement) exigent côté serveur une connexion de moins de
+ * 5 minutes : une session restée ouverte sur un téléphone ne suffit pas.
+ */
+export async function reauthenticate() {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Personne n\'est connecté.');
+  const provider = new GoogleAuthProvider();
+  // Le même compte, sans le laisser en choisir un autre.
+  provider.setCustomParameters({ login_hint: user.email || '', prompt: 'login' });
+  await reauthenticateWithPopup(user, provider);
+  await user.getIdToken(true);
+}

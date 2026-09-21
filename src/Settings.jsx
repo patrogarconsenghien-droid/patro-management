@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Beer, BarChart3, Bell, Clock, Download, FileText, History, Plane, Plus, Settings, Trash2, Users
+  Beer, BarChart3, Bell, Clock, Download, FileText, History, Landmark, Plane, Plus, Settings, Trash2, Users
 } from 'lucide-react';
 import Modal from './components/Modal';
 import HeaderBase from './components/Header';
@@ -9,6 +9,7 @@ import AnnualReport from './AnnualReport';
 import CloseSeason from './CloseSeason';
 import RepairBalances from './RepairBalances';
 import Accounts from './Accounts';
+import PaymentAccount from './PaymentAccount';
 import { isAdmin as isAdminAccount } from './auth/account';
 import DuplicateOrders from './DuplicateOrders';
 import { formatCurrency, formatDate } from './lib/format';
@@ -528,6 +529,19 @@ const SettingsDomain = ({
             </div>
           </button>
 
+          <button
+            onClick={() => navigateTo('settings-payment')}
+            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center space-x-3">
+              <Landmark className="text-purple-500" size={24} />
+              <div className="text-left">
+                <h3 className="font-semibold">Compte de paiement</h3>
+                <p className="text-gray-600 text-sm">Compte bancaire des {SECTIONS[sectionId] || sectionId}, protégé par double authentification</p>
+              </div>
+            </div>
+          </button>
+
           {/* Onglet Bar : chaque section choisit de l'afficher ou non. */}
           <button
             onClick={toggleBar}
@@ -880,6 +894,17 @@ const SettingsDomain = ({
     );
   }
 
+
+  if (screen === 'settings-payment') {
+    return (
+      <PaymentAccount
+        Header={Header}
+        navigateTo={navigateTo}
+        account={account}
+        sectionId={sectionId}
+      />
+    );
+  }
 
   if (screen === 'settings-accounts') {
     return (

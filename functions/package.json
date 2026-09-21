@@ -3,7 +3,8 @@
   "description": "Cloud Functions for Firebase",
   "scripts": {
     "serve": "firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions"
+    "deploy": "firebase deploy --only functions",
+    "test": "node --test test/totp.test.js test/iban.test.js"
   },
   "engines": {
     "node": "22"
