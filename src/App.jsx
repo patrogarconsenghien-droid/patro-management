@@ -25,10 +25,21 @@ import { createStockHelpers } from './lib/stock';
 import { useFirestoreData } from './hooks/useFirestoreData';
 import { canManage as canManageAccount, isAdmin as isAdminAccount, useCurrentAccount } from './auth/account';
 import { DEFAULT_SECTION_ID } from './lib/seasons';
+import { vocabFor } from './lib/vocab';
 import { useBroPhotos } from './hooks/useBroPhotos';
 
 // Écrans accessibles à un animé : l'accueil et les boulots programmés.
-const ANIME_SCREENS = ['home', 'boulots', 'boulots-scheduled', 'boulots-stats', 'boulots-history'];
+// Le bar sert à passer commande et à consulter ; la finance est en lecture
+// seule. La gestion des membres du bar et les réglages restent aux animateurs.
+const ANIME_SCREENS = [
+  'home', 'boulots', 'boulots-scheduled', 'boulots-stats', 'boulots-history',
+  'bar', 'bar-order', 'bar-products', 'bar-history',
+  'finance', 'finance-graph', 'finance-bar-report', 'finance-history',
+  'finance-scheduled-income', 'finance-sales-stats'
+];
+
+// Écrans de l'onglet Bar : inaccessibles quand la section a masqué le bar.
+const BAR_SCREENS = ['bar', 'bar-history', 'bar-members', 'bar-order', 'bar-products', 'member-history'];
 
 const PatroApp = () => {
 
@@ -57,6 +68,7 @@ const PatroApp = () => {
   const ownSectionId = account?.profile?.sectionId || DEFAULT_SECTION_ID;
   const [adminSectionId, setAdminSectionId] = useState(ownSectionId);
   const sectionId = isAdminAccount(account?.profile) ? adminSectionId : ownSectionId;
+  const v = vocabFor(sectionId);
   const selectSection = (id) => { if (isAdminAccount(account?.profile)) setAdminSectionId(id); };
 
   // La saison consultée détermine sur quelles données toute l'app travaille.
@@ -79,6 +91,7 @@ const PatroApp = () => {
     financialGoal, setFinancialGoal,
     popularProducts, setPopularProducts,
     barOpenThreshold, setBarOpenThreshold,
+    barEnabled, setBarEnabled,
     hourlyRate, setHourlyRate,
     surpriseSettings, setSurpriseSettings,
     tripPasswordProtected, setTripPasswordProtected,
@@ -115,6 +128,11 @@ const PatroApp = () => {
   useEffect(() => {
     if (!canManage && !ANIME_SCREENS.includes(currentScreen)) navigateTo('home');
   }, [canManage, currentScreen]);
+
+  // Onglet Bar masqué pour la section : ses écrans renvoient à l'accueil.
+  useEffect(() => {
+    if (!barEnabled && BAR_SCREENS.includes(currentScreen)) navigateTo('home');
+  }, [barEnabled, currentScreen]);
   const [selectedBro, setSelectedBro] = useState(null);
   const [newMemberIsExternal, setNewMemberIsExternal] = useState(false);
   const [directPayment, setDirectPayment] = useState(false);
@@ -369,6 +387,7 @@ const PatroApp = () => {
   };
 
   const addMember = async () => {
+    if (!canManage) return; // réservé aux animateurs
     if (newMemberName.trim()) {
       const newMember = {
         name: newMemberName.trim(),
@@ -459,12 +478,14 @@ const PatroApp = () => {
 
 
   const deleteMember = async (memberId) => {
+    if (!canManage) return; // réservé aux animateurs
     await deleteFromFirebase('members', memberId);
     setMembers(members.filter(m => m.id !== memberId));
     setOrders(orders.filter(o => o.memberId !== memberId));
   };
 
   const repayMember = async () => {
+    if (!canManage) return; // réservé aux animateurs
     const amount = parseFloat(repaymentAmount);
     if (amount > 0 && selectedMember && paymentMethod) {
       const updatedBalance = selectedMember.balance + amount;
@@ -621,6 +642,7 @@ const confirmOrder = async () => {
     const { member, items, total } = orderConfirmation;
 
     if (!member) return;
+    if (directPayment && !canManage) return; // encaisser est réservé aux animateurs
     if (directPayment && !directPaymentMethod) {
       alert('Veuillez sélectionner un mode de paiement');
       return;
@@ -966,6 +988,7 @@ const eligible = [
 
 
   const processBankDeposit = async () => {
+    if (!canManage) return; // réservé aux animateurs
     const amount = parseFloat(bankDeposit.amount);
 
     // Calculer cashTotal dans la fonction
@@ -1053,6 +1076,7 @@ const eligible = [
   };
   // Fonction pour les transactions financières manuelles
   const addFinancialTransaction = async (type) => {
+    if (!canManage) return; // réservé aux animateurs
     const amount = parseFloat(newTransaction.amount);
 
     if (amount > 0 && newTransaction.description.trim()) {
@@ -1099,6 +1123,7 @@ const eligible = [
   const SETTINGS_SCREENS = ['settings-password', 'settings', 'settings-surprise', 'settings-bar-threshold', 'settings-products', 'settings-stock', 'settings-rate', 'settings-history', 'settings-goal', 'settings-popular', 'settings-report', 'settings-close-season', 'settings-repair-balances', 'settings-duplicates', 'settings-accounts'];
 
   if (!canManage && !ANIME_SCREENS.includes(currentScreen)) return null;
+  if (!barEnabled && BAR_SCREENS.includes(currentScreen)) return null;
 
   if (currentScreen === 'home') {
     // Chiffres des tuiles d'accueil, calculés comme dans la section Bar.
@@ -1127,6 +1152,7 @@ const eligible = [
         jobs={jobs}
         bros={bros}
         sectionId={sectionId}
+        barEnabled={barEnabled}
         broPhotos={broPhotos}
         updateInFirebase={updateInFirebase}
         viewedSeasonId={viewedSeasonId}
@@ -1159,9 +1185,10 @@ const eligible = [
             </div>
           </button>
 
+          {/* Ajouter, recharger ou supprimer un membre : réservé aux animateurs. */}
           <button
             onClick={() => navigateTo('bar-members')}
-            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+            className={`w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform ${canManage ? '' : 'hidden'}`}
           >
             <div className="flex items-center space-x-3">
               <ShoppingCart className="text-bar-500" size={24} />
@@ -1407,6 +1434,8 @@ const eligible = [
         saveSurpriseSettings={saveSurpriseSettings}
         barOpenThreshold={barOpenThreshold}
         setBarOpenThreshold={setBarOpenThreshold}
+        barEnabled={barEnabled}
+        setBarEnabled={setBarEnabled}
         popularProducts={popularProducts}
         setPopularProducts={setPopularProducts}
         financialGoal={financialGoal}
@@ -1511,8 +1540,8 @@ const eligible = [
                         <BalancePill value={realBalance} />
                       </button>
 
-                      {/* Bouton de rechargement rapide */}
-                      <div className="flex-none">
+                      {/* Bouton de rechargement rapide, réservé aux animateurs */}
+                      <div className={`flex-none ${canManage ? '' : 'hidden'}`}>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -2400,8 +2429,9 @@ const eligible = [
                   </div>
                 </div>
 
-                {/* Option de paiement direct */}
-                <div className="border-t pt-4">
+                {/* Option de paiement direct : encaisser de l'argent est réservé
+                    aux animateurs. Un animé note la consommation sur l'ardoise. */}
+                <div className={`border-t pt-4 ${canManage ? '' : 'hidden'}`}>
                   <div className="flex items-center space-x-2 mb-3">
                     <input
                       type="checkbox"
@@ -2752,6 +2782,7 @@ const eligible = [
     };
 
     const processBankDeposit = async () => {
+    if (!canManage) return; // réservé aux animateurs
       const amount = parseFloat(bankDeposit.amount);
 
       // Calculer cashTotal dans la fonction
@@ -2938,7 +2969,7 @@ const eligible = [
           )}
 
           {/* Bouton définir objectif si pas actif */}
-          {!financialGoal.isActive && (
+          {!financialGoal.isActive && canManage && (
             <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl shadow-lg p-6 mb-6 text-center">
               <h2 className="text-xl font-bold text-purple-800 mb-4">🎯 Définir un Objectif</h2>
               <p className="text-purple-600 mb-4">
@@ -3106,8 +3137,14 @@ const eligible = [
             </div>
           </div>
 
-          {/* Boutons d'actions */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* Boutons d'actions : encoder une entrée, une sortie ou un dépôt
+              est réservé aux animateurs. Un animé consulte seulement. */}
+          {!canManage && (
+            <p className="text-sm text-gray-600 bg-white rounded-lg ring-1 ring-gray-200 p-3">
+              Consultation seule : les rentrées, frais et dépôts sont encodés par les animateurs.
+            </p>
+          )}
+          <div className={`grid grid-cols-3 gap-3 ${canManage ? '' : 'hidden'}`}>
             <button
               onClick={() => { setModalType('add-income'); setShowModal(true); }}
               className="p-3 bg-green-500 text-white rounded-lg shadow-md active:scale-95 transition-transform"
@@ -3856,7 +3893,7 @@ const eligible = [
                           job.registeredBros.length > 0 ? 'bg-orange-100 text-orange-800' :
                             'bg-red-100 text-red-800'
                           }`}>
-                          {job.registeredBros.length}/{job.brosNeeded} Bro
+                          {job.registeredBros.length}/{job.brosNeeded} {v.many}
                         </div>
                       </div>
 
@@ -3876,7 +3913,7 @@ const eligible = [
 
                       {/* Bro inscrits */}
                       <div className="mt-3">
-                        <p className="text-sm font-medium text-gray-700 mb-2">Bro inscrits:</p>
+                        <p className="text-sm font-medium text-gray-700 mb-2">{v.many} inscrit{v.e}s:</p>
                         {job.registeredBros.length > 0 ? (
                           <div className="flex flex-wrap gap-1">
                             {job.registeredBros.map((registration, index) => {
@@ -3984,7 +4021,7 @@ const eligible = [
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-gray-800">{selectedBro.name}</h2>
-                <p className="text-gray-600">Membre de l'équipe Bro</p>
+                <p className="text-gray-600">Membre de l'équipe {v.many}</p>
               </div>
             </div>
 

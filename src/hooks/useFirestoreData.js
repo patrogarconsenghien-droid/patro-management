@@ -26,6 +26,8 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
   const [stockMovements, setStockMovements] = useState([]);
   const [financialTransactions, setFinancialTransactions] = useState([]);
   const [barOpenThreshold, setBarOpenThreshold] = useState(8); // Seuil par défaut : 8 bouteilles
+  // Onglet Bar affiché ou non : chaque section décide. Absent des réglages = affiché.
+  const [barEnabled, setBarEnabled] = useState(true);
   const [hourlyRate, setHourlyRate] = useState(10.00); // Tarif horaire des boulots
   const [surpriseSettings, setSurpriseSettings] = useState({
     price: 200,
@@ -141,6 +143,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
     setFinancialGoal({ amount: 0, description: '', deadline: '', isActive: false });
     setSurpriseSettings({ price: 200, eligibleProducts: [], weights: {}, exclusiveProducts: [] });
     setBarOpenThreshold(8);
+    setBarEnabled(true);
     setHourlyRate(10.00);
     setPopularProducts([]);
     setTripPasswordProtected(false);
@@ -202,9 +205,10 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
         (error) => console.error("Lecture de la saison de l'autre section impossible:", error)
       ));
 
-      // Le reste est réservé aux animateurs par les règles Firestore : un
-      // animé n'y est pas abonné, sinon chaque lecture serait refusée.
-      if (!manager) return;
+      // Bar et finances : lisibles par tout compte actif de la section. Les
+      // animés les consultent et passent des commandes, sans toucher à l'argent.
+      // Voyage et tarif des boulots restent réservés aux animateurs : un animé
+      // n'y est pas abonné, sinon chaque lecture serait refusée.
 
       unsubscribeMembers = track(await loadFromFirebase('members', setMembers));
       unsubscribeProducts = track(await loadFromFirebase('products', setProducts));
@@ -217,7 +221,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
         }
       });
 
-      unsubscribeTripSettings = await loadFromFirebase('tripSettings', (settings) => {
+      if (manager) unsubscribeTripSettings = await loadFromFirebase('tripSettings', (settings) => {
         if (settings && settings.length > 0) {
           const latestSettings = settings.sort((a, b) =>
             new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
@@ -255,7 +259,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
           setPopularProducts(['Jupiler', 'Coca', 'Stella', 'Fanta']);
         }
       });
-      unsubscribeJobSettings = await loadFromFirebase('jobSettings', (settings) => {
+      if (manager) unsubscribeJobSettings = await loadFromFirebase('jobSettings', (settings) => {
         if (settings && settings.length > 0) {
           const latest = settings.sort((a, b) =>
             new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
@@ -271,6 +275,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
             new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
           )[0];
           setBarOpenThreshold(latestSettings.openThreshold || 8);
+          setBarEnabled(latestSettings.barEnabled !== false);
         }
       });
     };
@@ -315,6 +320,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
     financialGoal, setFinancialGoal,
     popularProducts, setPopularProducts,
     barOpenThreshold, setBarOpenThreshold,
+    barEnabled, setBarEnabled,
     hourlyRate, setHourlyRate,
     surpriseSettings, setSurpriseSettings,
     tripPasswordProtected, setTripPasswordProtected,

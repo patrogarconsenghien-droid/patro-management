@@ -17,6 +17,7 @@ import { seasonLabel, startYearOf } from './lib/seasons';
 import { SECTIONS, isAdmin as isAdminAccount2 } from './auth/account';
 import { toast } from './lib/feedback';
 import { downloadReport } from './lib/reportExport';
+import { vocabFor } from './lib/vocab';
 
 const SettingsDomain = ({
   screen,
@@ -38,6 +39,8 @@ const SettingsDomain = ({
   saveSurpriseSettings,
   barOpenThreshold,
   setBarOpenThreshold,
+  barEnabled = true,
+  setBarEnabled = () => {},
   popularProducts,
   setPopularProducts,
   financialGoal,
@@ -76,6 +79,7 @@ const SettingsDomain = ({
   sectionId,
   selectSection,
 }) => {
+  const v = vocabFor(sectionId);
   const Header = ({ title, onBack }) => (
     <HeaderBase title={title} onBack={onBack} loading={loading} isOnline={isOnline}>
       {isViewingArchive && (
@@ -90,6 +94,28 @@ const SettingsDomain = ({
   // L'écran dédié reste là pour choisir une autre période.
   const patroYear = viewedSeasonId ? startYearOf(viewedSeasonId) : getCurrentPatroYear();
 
+  // Affiche ou masque l'onglet Bar pour toute la section. Le dernier document
+  // de barSettings fait foi : on y reporte aussi le seuil d'ouverture.
+  const toggleBar = async () => {
+    const next = !barEnabled;
+    if (!next && !confirm(
+      "Masquer l'onglet Bar pour toute la section ?\n\nLa carte, le stock et les ardoises ne seront plus visibles. Rien n'est supprimé : tu peux le réafficher ici à tout moment."
+    )) return;
+
+    try {
+      await saveToFirebase('barSettings', {
+        openThreshold: barOpenThreshold,
+        barEnabled: next,
+        updatedAt: new Date().toISOString()
+      });
+      setBarEnabled(next);
+      toast(next ? 'Onglet Bar affiché' : 'Onglet Bar masqué');
+    } catch (error) {
+      console.error("Erreur sauvegarde de l'onglet Bar:", error);
+      alert('Erreur lors de la sauvegarde');
+    }
+  };
+
   const generateCurrentReport = () => {
     const report = buildAnnualReport({
       year: patroYear,
@@ -100,7 +126,8 @@ const SettingsDomain = ({
       members,
       bros,
       products,
-      stockMovements
+      stockMovements,
+      sectionId
     });
 
     if (report.meta.isEmpty) {
@@ -496,11 +523,40 @@ const SettingsDomain = ({
               <Users className="text-purple-500" size={24} />
               <div className="text-left">
                 <h3 className="font-semibold">Comptes</h3>
-                <p className="text-gray-600 text-sm">Valider les accès, rôles et liens avec les Bro</p>
+                <p className="text-gray-600 text-sm">Valider les accès, rôles et liens avec les {v.many}</p>
               </div>
             </div>
           </button>
 
+          {/* Onglet Bar : chaque section choisit de l'afficher ou non. */}
+          <button
+            onClick={toggleBar}
+            role="switch"
+            aria-checked={barEnabled}
+            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center space-x-3">
+                <Beer className={barEnabled ? 'text-purple-500' : 'text-gray-400'} size={24} />
+                <div className="text-left">
+                  <h3 className="font-semibold">Onglet Bar</h3>
+                  <p className="text-gray-600 text-sm">
+                    {barEnabled
+                      ? `Affiché pour la section ${SECTIONS[sectionId] || sectionId}`
+                      : `Masqué pour la section ${SECTIONS[sectionId] || sectionId} : carte, stock et ardoises sont cachés`}
+                  </p>
+                </div>
+              </div>
+              <span
+                aria-hidden="true"
+                className={`flex-none w-12 h-7 rounded-full p-0.5 transition-colors ${barEnabled ? 'bg-purple-500' : 'bg-gray-300'}`}
+              >
+                <span className={`block w-6 h-6 rounded-full bg-white shadow transition-transform ${barEnabled ? 'translate-x-5' : ''}`} />
+              </span>
+            </div>
+          </button>
+
+          {barEnabled && (<>
           <button
             onClick={() => navigateTo('settings-products')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
@@ -540,6 +596,7 @@ const SettingsDomain = ({
               </div>
             </div>
           </button>
+          </>)}
 
           <button
             onClick={() => navigateTo('settings-goal')}
@@ -605,6 +662,7 @@ const SettingsDomain = ({
             </button>
           </div>
           {/* --- NOUVEAU BOUTON VERRE SURPRISE --- */}
+          {barEnabled && (
           <button
             onClick={() => navigateTo('settings-surprise')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform flex items-center space-x-3"
@@ -620,6 +678,7 @@ const SettingsDomain = ({
               <span className="text-gray-400">→</span>
             </div>
           </button>
+          )}
 
           {/* Protection Voyage */}
           <button
@@ -695,6 +754,7 @@ const SettingsDomain = ({
             </div>
           </button>
 
+          {barEnabled && (
           <button
             onClick={() => navigateTo('settings-bar-threshold')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
@@ -709,6 +769,7 @@ const SettingsDomain = ({
               </div>
             </div>
           </button>
+          )}
 
           {/* Bloc saison, volontairement tout en bas : on ne consulte une
               archive et on ne clôture qu'exceptionnellement. */}
@@ -763,6 +824,8 @@ const SettingsDomain = ({
               </p>
             )}
 
+            {/* Outils de correction du bar : soldes et commandes. */}
+            {barEnabled && (<>
             <button
               onClick={() => navigateTo('settings-repair-balances')}
               className="w-full mt-3 p-2 text-sm text-purple-600 border border-purple-200 rounded-lg active:scale-95 transition-transform"
@@ -776,6 +839,7 @@ const SettingsDomain = ({
             >
               Vérifier les commandes en double
             </button>
+            </>)}
           </div>
 
           <button
@@ -884,6 +948,7 @@ const SettingsDomain = ({
         orders={orders}
         financialTransactions={financialTransactions}
         barOpenThreshold={barOpenThreshold}
+        barEnabled={barEnabled}
         hourlyRate={hourlyRate}
         surpriseSettings={surpriseSettings}
         popularProducts={popularProducts}
@@ -905,6 +970,7 @@ const SettingsDomain = ({
         bros={bros}
         products={products}
         stockMovements={stockMovements}
+        sectionId={sectionId}
       />
     );
   }
@@ -1191,8 +1257,10 @@ const SettingsDomain = ({
       const threshold = parseInt(newThreshold);
       if (threshold > 0) {
         try {
+          // Le dernier document fait foi : il doit porter tous les réglages du bar.
           await saveToFirebase('barSettings', {
             openThreshold: threshold,
+            barEnabled,
             updatedAt: new Date().toISOString()
           });
           setBarOpenThreshold(threshold);

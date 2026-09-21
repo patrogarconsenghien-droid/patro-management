@@ -8,6 +8,7 @@ import AnimatedAmount from './components/AnimatedAmount';
 import PhotoPicker from './components/PhotoPicker';
 import { formatDate, plural, roundHours } from './lib/format';
 import { seasonLabel } from './lib/seasons';
+import { vocabFor } from './lib/vocab';
 
 const greeting = () => {
   const hour = new Date().getHours();
@@ -55,10 +56,12 @@ const Home = ({
   jobs = [],
   bros = [],
   sectionId,
+  barEnabled = true,
   broPhotos = {},
   updateInFirebase
 }) => {
   const profile = account?.profile;
+  const v = vocabFor(sectionId);
   const manager = canManage(profile);
   const firstName = firstNameOf(profile);
   const myBroId = profile?.broId || null;
@@ -149,7 +152,7 @@ const Home = ({
       {!myBroId && (
         <div className="px-4 mb-3">
           <p className="text-sm text-orange-800 bg-orange-50 rounded-2xl p-3">
-            Ton compte n'est pas relié à ton nom de Bro : tes boulots et tes stats n'apparaissent pas.
+            Ton compte n'est pas relié à ton nom de {v.one} : tes boulots et tes stats n'apparaissent pas.
             {manager ? ' Fais-le dans Réglages → Comptes.' : ' Demande à un animateur de le faire.'}
           </p>
         </div>
@@ -166,7 +169,7 @@ const Home = ({
           </div>
 
           {myNext.length === 0 ? (
-            <p className="text-sm text-gray-500">Tu n'es inscrit à aucun boulot à venir.</p>
+            <p className="text-sm text-gray-500">Tu n'es inscrit{v.e} à aucun boulot à venir.</p>
           ) : (
             <ul className="divide-y divide-gray-100">
               {myNext.map((job) => (
@@ -231,7 +234,9 @@ const Home = ({
           </span>
         </Tile>
 
-        {manager && (<>
+        {/* Bar et Finance : ouverts à tous. Les animés y passent commande et
+            consultent la caisse, sans encoder d'argent. */}
+        {barEnabled && (
         <Tile index={1} onClick={() => navigateTo('bar')} icon={Beer} title="Bar" className="bg-bar-500 text-white">
           <span className="block text-sm text-white/90 mt-1.5">
             {stats.openSlates > 0 ? plural(stats.openSlates, 'ardoise ouverte', 'ardoises ouvertes') : 'Aucune ardoise'}
@@ -240,11 +245,22 @@ const Home = ({
             )}
           </span>
         </Tile>
+        )}
 
-        <Tile index={2} onClick={() => navigateTo('finance')} icon={Coins} title="Finance" className="bg-finance-500 text-white">
-          <span className="block text-sm text-white/90 mt-1.5">Caisse et comptes</span>
+        <Tile
+          index={2}
+          onClick={() => navigateTo('finance')}
+          icon={Coins}
+          title="Finance"
+          className={`bg-finance-500 text-white ${!manager && !barEnabled ? 'col-span-2' : ''}`}
+        >
+          <span className="block text-sm text-white/90 mt-1.5">
+            {manager ? 'Caisse et comptes' : 'Caisse et comptes, en consultation'}
+          </span>
         </Tile>
 
+        {/* Voyage et Réglages : animateurs seulement. */}
+        {manager && (<>
         <Tile index={3} onClick={openTrip} icon={Plane} title="Voyage" className="bg-voyage-500 text-white">
           <span className="block text-sm text-white/90 mt-1.5">
             {tripPasswordProtected ? 'Protégé' : 'Dépenses, calendrier'}
@@ -256,9 +272,9 @@ const Home = ({
           onClick={() => navigateTo(settingsAuthenticated ? 'settings' : 'settings-password')}
           icon={Settings}
           title="Réglages"
-          className="stitch-quiet bg-white text-gray-900 ring-1 ring-gray-200 [&_.tile-icon]:bg-purple-500/15 [&_.tile-icon]:text-purple-600"
+          className={`stitch-quiet bg-white text-gray-900 ring-1 ring-gray-200 [&_.tile-icon]:bg-purple-500/15 [&_.tile-icon]:text-purple-600 ${barEnabled ? '' : 'col-span-2'}`}
         >
-          <span className="block text-sm text-gray-600 mt-1.5">Comptes, carte, saison</span>
+          <span className="block text-sm text-gray-600 mt-1.5">{barEnabled ? 'Comptes, carte, saison' : 'Comptes, saison'}</span>
         </Tile>
         </>)}
       </div>

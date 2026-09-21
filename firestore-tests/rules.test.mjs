@@ -57,6 +57,10 @@ await env.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(p('scheduledJobs', 'sj-kid'), { description: 'Par Kid', createdBy: ANIME.uid, brosNeeded: 2, registeredBros: [], unavailableBros: [] });
     await setDoc(p('scheduledJobs', 'sj-full'), { description: 'Avec inscrits', createdBy: ANIMATEUR.uid, brosNeeded: 1, registeredBros: [{ broId: 'bro-kid2' }], unavailableBros: [] });
     await setDoc(p('financialTransactions', 'f1'), { type: 'expense', amount: 10 });
+    await setDoc(p('products', 'p1'), { name: 'Jupiler', price: 1.5, stock: 24 });
+    await setDoc(p('orders', 'o1'), { memberId: 'm1', type: 'order', amount: 3 });
+    await setDoc(p('tripSettings', 'ts1'), { isProtected: true });
+    await setDoc(p('jobSettings', 'js1'), { hourlyRate: 10 });
   }
 });
 
@@ -85,14 +89,64 @@ for (const [treeName, prefix] of [['racine', []], ['saison', ['seasons', '2026-2
   await ok(t('animé lit les boulots'), getDocs(col(as(ANIME), 'jobs')));
   await ok(t('animé lit les Bro'), getDocs(col(as(ANIME), 'bros')));
   await ok(t('animé lit les boulots programmés'), getDocs(col(as(ANIME), 'scheduledJobs')));
-  await ko(t('animé ne lit pas les membres du bar'), getDocs(col(as(ANIME), 'members')));
-  await ko(t('animé ne lit pas les finances'), getDocs(col(as(ANIME), 'financialTransactions')));
+  await ok(t('animé lit les membres du bar'), getDocs(col(as(ANIME), 'members')));
+  await ok(t('animé lit la carte'), getDocs(col(as(ANIME), 'products')));
+  await ok(t('animé lit les finances'), getDocs(col(as(ANIME), 'financialTransactions')));
+  await ok(t('animé lit les réglages du bar'), getDocs(col(as(ANIME), 'barSettings')));
+  await ko(t('animé ne lit pas les réglages du voyage'), getDocs(col(as(ANIME), 'tripSettings')));
+  await ko(t('animé ne lit pas le tarif des boulots'), getDocs(col(as(ANIME), 'jobSettings')));
+  await ko(t('compte en attente ne lit pas les finances'), getDocs(col(as(PENDING), 'financialTransactions')));
   await ok(t('animateur lit les membres'), getDocs(col(as(ANIMATEUR), 'members')));
   await ok(t('animateur lit les finances'), getDocs(col(as(ANIMATEUR), 'financialTransactions')));
 
   // --- bar / finances : animateurs seulement ---
   await ko(t('animé n\'écrit pas dans les membres'), setDoc(ref(as(ANIME), 'members', 'x'), { name: 'X', balance: 0 }));
   await ok(t('animateur écrit dans les membres'), setDoc(ref(as(ANIMATEUR), 'members', 'x'), { name: 'X', balance: 0 }));
+
+  // --- finances : lecture seule pour les animés ---
+  await ko(t('animé n\'encode pas d\'entrée'),
+    setDoc(ref(as(ANIME), 'financialTransactions', `in-${treeName}`), { type: 'income', amount: 50 }));
+  await ko(t('animé n\'encode pas de sortie'),
+    setDoc(ref(as(ANIME), 'financialTransactions', `out-${treeName}`), { type: 'expense', amount: 50 }));
+  await ko(t('animé ne modifie pas une transaction'),
+    updateDoc(ref(as(ANIME), 'financialTransactions', 'f1'), { amount: 1, updatedAt: 'x' }));
+  await ko(t('animé ne supprime pas une transaction'), deleteDoc(ref(as(ANIME), 'financialTransactions', 'f1')));
+  await ko(t('animé ne change pas l\'objectif financier'),
+    setDoc(ref(as(ANIME), 'financialGoals', 'g1'), { amount: 1, isActive: true }));
+  await ok(t('animateur encode une entrée'),
+    setDoc(ref(as(ANIMATEUR), 'financialTransactions', `in-${treeName}`), { type: 'income', amount: 50 }));
+
+  // --- bar : un animé passe une commande, sans toucher à l'argent ---
+  await ok(t('animé enregistre une consommation'),
+    setDoc(ref(as(ANIME), 'orders', `ord-${treeName}`), { memberId: 'm1', type: 'order', amount: 3, items: [] }));
+  await ko(t('animé n\'enregistre pas de rechargement'),
+    setDoc(ref(as(ANIME), 'orders', `rech-${treeName}`), { memberId: 'm1', type: 'recharge', amount: 50 }));
+  await ko(t('animé ne modifie pas une commande'),
+    updateDoc(ref(as(ANIME), 'orders', 'o1'), { amount: 0, updatedAt: 'x' }));
+  await ko(t('animé ne supprime pas une commande'), deleteDoc(ref(as(ANIME), 'orders', 'o1')));
+  await ok(t('animé débite une ardoise'),
+    updateDoc(ref(as(ANIME), 'members', 'm1'), { balance: -7, updatedAt: 'x' }));
+  await ko(t('animé ne recrédite pas une ardoise'),
+    updateDoc(ref(as(ANIME), 'members', 'm1'), { balance: 100, updatedAt: 'x' }));
+  await ko(t('animé ne renomme pas un membre'),
+    updateDoc(ref(as(ANIME), 'members', 'm1'), { name: 'Autre', updatedAt: 'x' }));
+  await ko(t('animé ne supprime pas un membre'), deleteDoc(ref(as(ANIME), 'members', 'm1')));
+  await ok(t('animé sort du stock'),
+    updateDoc(ref(as(ANIME), 'products', 'p1'), { stock: 23, updatedAt: 'x' }));
+  await ko(t('animé ne regonfle pas un stock'),
+    updateDoc(ref(as(ANIME), 'products', 'p1'), { stock: 500, updatedAt: 'x' }));
+  await ko(t('animé ne change pas un prix'),
+    updateDoc(ref(as(ANIME), 'products', 'p1'), { price: 0.1, updatedAt: 'x' }));
+  await ko(t('animé ne crée pas de produit'),
+    setDoc(ref(as(ANIME), 'products', 'p-new'), { name: 'Gratuit', price: 0, stock: 99 }));
+  await ok(t('animé trace la sortie de stock'),
+    setDoc(ref(as(ANIME), 'stockMovements', `sm-${treeName}`), { productId: 'p1', quantityChange: -1 }));
+  await ko(t('animé ne masque pas le bar'),
+    setDoc(ref(as(ANIME), 'barSettings', 'bs1'), { barEnabled: false }));
+  await ok(t('animateur masque le bar'),
+    setDoc(ref(as(ANIMATEUR), 'barSettings', `bs-${treeName}`), { barEnabled: false, openThreshold: 8 }));
+  await ok(t('animateur recharge une ardoise'),
+    updateDoc(ref(as(ANIMATEUR), 'members', 'm1'), { balance: 20, updatedAt: 'x' }));
 
   // --- boulots programmés ---
   await ok(t('animé propose un boulot à son nom'),

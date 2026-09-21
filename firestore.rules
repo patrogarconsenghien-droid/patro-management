@@ -105,17 +105,47 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------ saison
-    // Collections réservées aux animateurs : bar, stock, finances, réglages, voyage.
+    // Collections réservées aux animateurs : réglages des boulots et voyage.
     function isManagerOnlyColl(coll) {
+      return coll in ['jobSettings', 'tripSettings', 'tripExpenses', 'tripEvents'];
+    }
+
+    // Bar et finances : les animés les consultent (carte, ardoises, caisse),
+    // mais n'y écrivent que ce qu'exige une commande au bar, voir plus bas.
+    function isBarOrFinanceColl(coll) {
       return coll in [
         'members', 'products', 'orders', 'stockMovements', 'financialTransactions',
-        'financialGoals', 'popularProducts', 'barSettings', 'surpriseSettings',
-        'jobSettings', 'tripSettings', 'tripExpenses', 'tripEvents'
+        'financialGoals', 'popularProducts', 'barSettings', 'surpriseSettings'
       ];
     }
 
     function isSeasonColl(coll) {
-      return isManagerOnlyColl(coll) || coll in ['bros', 'jobs', 'scheduledJobs'];
+      return isManagerOnlyColl(coll) || isBarOrFinanceColl(coll)
+        || coll in ['bros', 'jobs', 'scheduledJobs'];
+    }
+
+    // Ce qu'un animé écrit en passant une commande au bar. Tout le reste du
+    // bar et toutes les finances (entrées, sorties, rechargements, dépôts)
+    // restent réservés aux animateurs.
+    //  - orders : une consommation, jamais un rechargement ;
+    //  - stockMovements : la trace de la sortie de stock ;
+    //  - surpriseSettings : le stock des produits exclusifs du verre surprise,
+    //    réécrit à chaque tirage.
+    function animeCreatesBarDoc(coll) {
+      return (coll == 'orders' && request.resource.data.type == 'order')
+        || coll == 'stockMovements'
+        || coll == 'surpriseSettings';
+    }
+
+    // Une commande ne peut que débiter une ardoise et faire sortir du stock :
+    // un animé ne peut ni se recréditer, ni regonfler un stock.
+    function animeUpdatesBarDoc(coll) {
+      return (coll == 'members'
+          && changedKeys().hasOnly(['balance', 'updatedAt'])
+          && request.resource.data.balance <= resource.data.balance)
+        || (coll == 'products'
+          && changedKeys().hasOnly(['stock', 'updatedAt'])
+          && request.resource.data.stock <= resource.data.stock);
     }
 
     // Un boulot ouvert à l'autre section se lit depuis l'autre section, avec
@@ -142,6 +172,8 @@ service cloud.firestore {
         isManagerOf(sec)
         // Proposer un boulot : l'auteur est enregistré.
         || (coll == 'scheduledJobs' && isActiveIn(sec) && request.resource.data.createdBy == request.auth.uid)
+        // Passer une commande au bar.
+        || (isActiveIn(sec) && animeCreatesBarDoc(coll))
         || (coll == 'jobs'
           && request.resource.data.crossSectionFrom is string
           && request.resource.data.crossSectionFrom != sec
@@ -157,6 +189,8 @@ service cloud.firestore {
           resource.data.createdBy == request.auth.uid
           || changedKeys().hasOnly(['registeredBros', 'unavailableBros', 'updatedAt'])
         ))
+        // Passer une commande au bar : débiter une ardoise, sortir du stock.
+        || (isActiveIn(sec) && animeUpdatesBarDoc(coll))
         // Depuis l'autre section : répondre à un boulot ouvert.
         || (isOpenJob(coll) && changedKeys().hasOnly(['registeredBros', 'unavailableBros', 'updatedAt']))
         // Valider un boulot ouvert crédite les heures d'un Bro de l'autre section.

@@ -264,9 +264,12 @@ export async function executeRollover({
     });
   }
 
-  if (choices.settings.barThreshold && barSettings != null) {
+  // Un bar masqué le reste dans la nouvelle saison, même sans reprendre le seuil.
+  const keepThreshold = choices.settings.barThreshold && barSettings != null;
+  if (keepThreshold || data.barEnabled === false) {
     push(docRefIn(toSeasonId, 'barSettings'), {
-      openThreshold: barSettings,
+      openThreshold: keepThreshold ? barSettings : 8,
+      barEnabled: data.barEnabled !== false,
       updatedAt: new Date().toISOString()
     });
   }
