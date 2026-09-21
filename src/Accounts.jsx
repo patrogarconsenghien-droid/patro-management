@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { collection, doc, onSnapshot, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import { ROLE_LABELS, ROLES, SECTIONS, isAdmin } from './auth/account';
+import { vocabFor } from './lib/vocab';
 
 const STATUS_LABELS = {
   pending: 'En attente',
@@ -29,6 +30,7 @@ const initialsOf = (name) =>
  * compte, pour ne jamais se retirer l'accès par erreur.
  */
 const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase, sectionId }) => {
+  const v = vocabFor(sectionId);
   const [users, setUsers] = useState([]);
   const [error, setError] = useState(null);
   const [busyId, setBusyId] = useState(null);
@@ -90,7 +92,7 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase, sect
     }
     if (target.role === ROLES.ANIME && !target.broId) {
       const ok = confirm(
-        `${target.displayName} n'est relié à aucun Bro : il ne pourra pas répondre aux boulots.\n\nValider quand même ?`
+        `${target.displayName} n'est relié à aucun${v.e} ${v.one} : il ne pourra pas répondre aux boulots.\n\nValider quand même ?`
       );
       if (!ok) return;
     }
@@ -110,7 +112,7 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase, sect
       });
     } catch (createError) {
       console.error('Création du Bro impossible:', createError);
-      alert(`Impossible de créer le Bro « ${name} ».`);
+      alert(`Impossible de créer ${v.the} « ${name} ».`);
     } finally {
       setBusyId(null);
     }
@@ -208,11 +210,11 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase, sect
 
               {target.sectionId && target.sectionId !== sectionId ? (
                 <p className="text-xs text-gray-500">
-                  Ses Bro sont dans la section {SECTIONS[target.sectionId]} : passe sur cette section pour le relier.
+                  Ses {vocabFor(target.sectionId).many} sont dans la section {SECTIONS[target.sectionId]} : passe sur cette section pour le relier.
                 </p>
               ) : (
               <label className="block text-xs text-gray-600">
-                Relié au Bro
+                Relié {v.toThe}
                 <select
                   value={target.broId || ''}
                   disabled={broLocked}
@@ -239,7 +241,7 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase, sect
                   onClick={() => createBroFor(target)}
                   className="text-xs text-blue-600 underline"
                 >
-                  Créer le Bro « {target.displayName} » et le relier
+                  Créer {v.the} « {target.displayName} » et {v.it} relier
                 </button>
               )}
 
@@ -283,7 +285,7 @@ const Accounts = ({ Header, navigateTo, account, bros = [], saveToFirebase, sect
               )}
 
               {isSelf && (
-                <p className="text-xs text-gray-500">Tu ne peux pas changer ton propre rôle ni ton statut, seulement ton Bro.</p>
+                <p className="text-xs text-gray-500">Tu ne peux pas changer ton propre rôle ni ton statut, seulement {v.your}.</p>
               )}
             </div>
           );

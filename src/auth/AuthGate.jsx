@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Check, Copy, ExternalLink, LogOut } from 'lucide-react';
 import { signInWithGoogle, signOutUser } from '../firebase';
 import { androidBrowserIntent, detectInAppBrowser } from '../lib/inAppBrowser';
+import { vocabFor } from '../lib/vocab';
 import { AccountContext } from './account';
 import { useAccountState } from './useAccountState';
 
@@ -134,6 +135,7 @@ export default function AuthGate({ children }) {
   const [signInError, setSignInError] = useState(null);
   const [browser] = useState(detectInAppBrowser);
   const [forceSignIn, setForceSignIn] = useState(false);
+  const v = vocabFor(profile?.sectionId);
 
   const signIn = async () => {
     setSigningIn(true);
@@ -215,15 +217,15 @@ export default function AuthGate({ children }) {
   if (status === 'rejected') {
     return (
       <Screen>
-        <Brand subtitle="Brothers only" />
+        <Brand subtitle={`${v.section} only`} />
         <div className="bg-white rounded-3xl shadow-sm ring-1 ring-gray-200 p-5 space-y-3">
           <p className="text-5xl text-center" aria-hidden="true">🚪🚫</p>
           <p className="text-sm text-gray-700">
-            Désolé <strong>{profile?.displayName || profile?.email}</strong>, ici c'est réservé aux Brothers.
+            Désolé <strong>{profile?.displayName || profile?.email}</strong>, ici c'est réservé aux {v.section}.
             T'as pas le foulard, t'as pas le tonneau, t'as pas l'app.
           </p>
           <p className="text-sm text-gray-500">
-            Si tu es sûr d'être un Bro et qu'on t'a oublié, viens râler auprès d'un animateur. Avec une bière, ça passe mieux.
+            Si tu es sûr{v.e} d'être un{v.e} {v.one} et qu'on t'a oublié{v.e}, viens râler auprès d'un animateur. Avec une bière, ça passe mieux.
           </p>
         </div>
         <SignOutButton />

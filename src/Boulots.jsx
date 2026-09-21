@@ -12,6 +12,7 @@ import { SECTIONS, canManage as canManageAccount } from './auth/account';
 import { addDoc, increment, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import { collectionRef, docRef, otherSectionId } from './lib/seasons';
+import { vocabFor } from './lib/vocab';
 
 const BoulotsDomain = ({
   screen,
@@ -59,6 +60,7 @@ const BoulotsDomain = ({
 
   // Boulots de ma section, plus ceux que l'autre section nous a ouverts.
   const otherId = otherSectionId(sectionId);
+  const v = vocabFor(sectionId);
   const otherLabel = SECTIONS[otherId] || otherId;
   const allScheduledJobs = [
     ...scheduledJobs,
@@ -144,10 +146,10 @@ Boulot Patro:
 📝 ${job.description}
 💰 Tarif: ${formatCurrency(job.customRate)}/h
 ⏱️ Durée estimée: ${job.estimatedHours}h
-👥 Bro requis: ${job.brosNeeded}
+👥 ${v.many} ${v.requis}: ${job.brosNeeded}
 📍 Lieu: ${job.location || 'À préciser'}${contactLine(job) ? `\n📞 Contact: ${contactLine(job)}` : ''}
 
-Bro inscrits (${job.registeredBros.length}/${job.brosNeeded}):
+${v.many} inscrit${v.e}s (${job.registeredBros.length}/${job.brosNeeded}):
 ${job.registeredBros.map(reg => {
         const bro = bros.find(b => b.id === reg.broId);
         return `• ${bro?.name || 'Inconnu'}`;
@@ -173,7 +175,7 @@ ${job.registeredBros.map(reg => {
         setNewBroName('');
         setShowModal(false);
       } catch (error) {
-        alert('Erreur lors de l\'ajout du Bro');
+        alert(`Erreur lors de l'ajout ${v.ofThe}`);
       }
     }
   };
@@ -295,7 +297,7 @@ ${job.registeredBros.map(reg => {
         setShowModal(false);
 
         // Message de succès avec info notification
-        alert('🎉 Boulot programmé avec succès !\n📱 Notifications envoyées automatiquement aux Bro !');
+        alert(`🎉 Boulot programmé avec succès !\n📱 Notifications envoyées automatiquement aux ${v.many} !`);
 
       } catch (error) {
         console.error('Erreur programmation boulot:', error);
@@ -366,7 +368,7 @@ ${job.registeredBros.map(reg => {
 
     if (conflictingJob) {
       const bro = bros.find(b => b.id === broId);
-      const confirmMessage = `⚠️ CONFLIT D'HORAIRE !\n\n${bro?.name || 'Ce Bro'} est déjà inscrit sur :\n"${conflictingJob.description}"\nle même jour (${formatDate(job.date)}).\n\nVoulez-vous quand même l'inscrire sur ce nouveau boulot ?`;
+      const confirmMessage = `⚠️ CONFLIT D'HORAIRE !\n\n${bro?.name || v.thisOne} est déjà inscrit${v.e} sur :\n"${conflictingJob.description}"\nle même jour (${formatDate(job.date)}).\n\nVoulez-vous quand même l'inscrire sur ce nouveau boulot ?`;
 
       if (!confirm(confirmMessage)) {
         return; // Annuler l'inscription
@@ -455,7 +457,7 @@ ${job.registeredBros.map(reg => {
       console.log('Bro retiré avec succès du boulot programmé');
     } catch (error) {
       console.error('Erreur lors du retrait du Bro:', error);
-      alert('Erreur lors du retrait du Bro');
+      alert(`Erreur lors du retrait ${v.ofThe}`);
     }
   };
 
@@ -465,18 +467,18 @@ ${job.registeredBros.map(reg => {
 
     // Validation : soit quota complet, soit au moins 1 Bro inscrit pour validation partielle
     if (!isPartial && job.registeredBros.length < job.brosNeeded) {
-      alert('Le quota de Bro n\'est pas atteint pour une finalisation complète.');
+      alert(`Le quota de ${v.many} n'est pas atteint pour une finalisation complète.`);
       return;
     }
 
     if (isPartial && job.registeredBros.length === 0) {
-      alert('Aucun Bro inscrit pour ce boulot.');
+      alert(`Aucun${v.e} ${v.one} inscrit${v.e} pour ce boulot.`);
       return;
     }
 
     // Message de confirmation adaptatif
     const confirmMessage = isPartial
-      ? `Valider ce boulot avec seulement ${job.registeredBros.length} Bro sur ${job.brosNeeded} requis ?\n\n"${job.description}"\n\nSeuls les Bro inscrits seront payés.`
+      ? `Valider ce boulot avec seulement ${job.registeredBros.length} ${v.many} sur ${job.brosNeeded} ${v.requis} ?\n\n"${job.description}"\n\n${v.seuls} les ${v.many} inscrit${v.e}s seront payé${v.e}s.`
       : `Finaliser ce boulot avec le quota complet ?\n\n"${job.description}"`;
 
     if (!confirm(confirmMessage)) return;
@@ -540,7 +542,7 @@ ${job.registeredBros.map(reg => {
       await deleteFromFirebase('scheduledJobs', jobId);
 
       const successMessage = isPartial
-        ? `Boulot "${job.description}" validé partiellement !\n${job.registeredBros.length} Bro sur ${job.brosNeeded} ont été enregistrés.`
+        ? `Boulot "${job.description}" validé partiellement !\n${job.registeredBros.length} ${v.many} sur ${job.brosNeeded} ont été enregistré${v.e}s.`
         : `Boulot "${job.description}" marqué comme terminé !`;
 
       alert(successMessage);
@@ -638,7 +640,7 @@ ${job.registeredBros.map(reg => {
             <div className="flex items-center space-x-3">
               <User className="text-green-500" size={24} />
               <div className="text-left">
-                <h3 className="font-semibold">Gestion des Bro</h3>
+                <h3 className="font-semibold">Gestion des {v.many}</h3>
                 <p className="text-gray-600 text-sm">Liste et suppressions</p>
               </div>
             </div>
@@ -801,7 +803,7 @@ ${job.registeredBros.map(reg => {
                                       return (
                                         <span
                                           key={index}
-                                          title={busy ? 'Déjà inscrit sur un autre boulot ce jour-là' : undefined}
+                                          title={busy ? `Déjà inscrit${v.e} sur un autre boulot ce jour-là` : undefined}
                                           className={`inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full text-sm ${busy ? 'bg-orange-50 ring-1 ring-orange-300' : 'bg-gray-100'}`}
                                         >
                                           <BroAvatar name={name} photoURL={broPhotos[registration.broId]} size="sm" />
@@ -849,7 +851,7 @@ ${job.registeredBros.map(reg => {
                                 <div>
                                   <p className="text-sm font-semibold mb-2">
                                     {mine
-                                      ? '✅ Tu es inscrit'
+                                      ? `✅ Tu es inscrit${v.e}`
                                       : cannot
                                         ? '✗ Tu as dit que tu ne pouvais pas venir'
                                         : full
@@ -1192,7 +1194,7 @@ ${job.registeredBros.map(reg => {
             {/* Nombre de Bro AVEC BOUTONS +/- */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                👥 Nombre de Bro nécessaires *
+                👥 Nombre de {v.many} nécessaires *
               </label>
               <div className="flex items-center space-x-2">
                 {/* Bouton - */}
@@ -1233,7 +1235,7 @@ ${job.registeredBros.map(reg => {
                 </button>
               </div>
               <p className="text-xs text-gray-500 mt-1">
-                Nombre de personnes requises (max: {bros.length} Bro disponibles)
+                Nombre de personnes requises (max: {bros.length} {v.many} disponibles)
               </p>
             </div>
 
@@ -1250,7 +1252,7 @@ ${job.registeredBros.map(reg => {
                 )}
                 <p>⏱️ Durée: {newScheduledJob.estimatedHours}h par personne</p>
                 <p>💰 Tarif: {formatCurrency(newScheduledJob.customRate)}/heure</p>
-                <p>👥 Bro requis: {newScheduledJob.brosNeeded} personne(s)</p>
+                <p>👥 {v.many} {v.requis}: {newScheduledJob.brosNeeded} personne(s)</p>
                 <p className="font-semibold border-t border-blue-200 pt-1 mt-2">
                   💸 Coût total estimé: {formatCurrency(newScheduledJob.customRate * newScheduledJob.estimatedHours * newScheduledJob.brosNeeded)}
                 </p>
@@ -1273,7 +1275,7 @@ ${job.registeredBros.map(reg => {
         <Modal
           isOpen={showModal && modalType === 'register-bro'}
           onClose={() => { setShowModal(false); setSelectedJob(null); }}
-          title="Inscrire un Bro"
+          title={`Inscrire un${v.e} ${v.one}`}
         >
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
@@ -1286,7 +1288,7 @@ ${job.registeredBros.map(reg => {
             {/* Compteur de places avec mise à jour en temps réel */}
             <div className="flex items-center justify-between p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-sm text-gray-700 font-medium">
-                Bro inscrits :
+                {v.many} inscrit{v.e}s :
               </p>
               <span className={`font-bold text-lg ${selectedJob && selectedJob.registeredBros.length >= selectedJob.brosNeeded
                 ? 'text-green-600'
@@ -1344,7 +1346,7 @@ ${job.registeredBros.map(reg => {
                         } else {
                           // Inscrire le Bro
                           if (hasConflict) {
-                            if (confirm(`⚠️ ${bro.name} est déjà inscrit sur "${conflictingJob?.description}" ce jour-là.\n\nVoulez-vous quand même l'inscrire ?`)) {
+                            if (confirm(`⚠️ ${bro.name} est déjà inscrit${v.e} sur "${conflictingJob?.description}" ce jour-là.\n\nVoulez-vous quand même l'inscrire ?`)) {
                               registerBroToJob(currentJob?.id, bro.id);
                             }
                           } else {
@@ -1369,7 +1371,7 @@ ${job.registeredBros.map(reg => {
                             </span>
                             {isRegistered && (
                               <span className="px-2 py-1 bg-green-500 text-white text-xs rounded-full font-semibold">
-                                ✓ Inscrit
+                                ✓ Inscrit{v.e}
                               </span>
                             )}
                             {isUnavailable && (
@@ -1388,7 +1390,7 @@ ${job.registeredBros.map(reg => {
                           </span>
                           {!isRegistered && hasConflict && conflictingJob && (
                             <div className="text-xs text-orange-600 mt-1">
-                              Déjà inscrit sur: "{conflictingJob.description}"
+                              Déjà inscrit{v.e} sur: "{conflictingJob.description}"
                             </div>
                           )}
                         </div>
@@ -1422,10 +1424,10 @@ ${job.registeredBros.map(reg => {
             <div className="bg-gray-50 p-3 rounded-lg">
               <h4 className="font-medium text-gray-800 mb-2">💡 Légende :</h4>
               <div className="text-sm text-gray-600 space-y-1">
-                <p>• <span className="font-medium text-green-600">✓ Inscrit</span> : Bro déjà inscrit (clic pour retirer)</p>
-                <p>• <span className="font-medium">Normal</span> : Bro disponible (clic pour inscrire)</p>
+                <p>• <span className="font-medium text-green-600">✓ Inscrit</span> : {v.one} déjà inscrit{v.e} (clic pour retirer)</p>
+                <p>• <span className="font-medium">Normal</span> : {v.one} disponible (clic pour inscrire)</p>
                 <p>• <span className="font-medium text-gray-700">✗ Ne peut pas</span> : a répondu qu'il ne pouvait pas venir (« Annuler » pour revenir en arrière)</p>
-                <p>• <span className="font-medium text-orange-600">⚠️ Conflit</span> : Déjà inscrit ce jour-là (clic possible avec confirmation)</p>
+                <p>• <span className="font-medium text-orange-600">⚠️ Conflit</span> : Déjà inscrit{v.e} ce jour-là (clic possible avec confirmation)</p>
               </div>
             </div>
 
@@ -1499,7 +1501,7 @@ ${job.registeredBros.map(reg => {
                           ? 'bg-green-100 text-green-800'
                           : 'bg-orange-100 text-orange-800'
                           }`}>
-                          {job.registeredBros.length}/{job.brosNeeded} Bro
+                          {job.registeredBros.length}/{job.brosNeeded} {v.many}
                         </div>
                       </div>
 
@@ -1520,7 +1522,7 @@ ${job.registeredBros.map(reg => {
 
                       {/* Liste des Bro inscrits */}
                       <div className="mb-3">
-                        <p className="text-sm font-medium text-gray-700 mb-2">👥 Bro inscrits :</p>
+                        <p className="text-sm font-medium text-gray-700 mb-2">👥 {v.many} inscrit{v.e}s :</p>
                         <div className="flex flex-wrap gap-2">
                           {job.registeredBros.map((registration, index) => {
                             const bro = bros.find(b => b.id === registration.broId);
@@ -1568,7 +1570,7 @@ ${job.registeredBros.map(reg => {
                         {hasEnoughBros && (
                           <button
                             onClick={() => {
-                              if (confirm(`✅ Valider ce boulot avec l'équipe complète ?\n\n"${job.description}"\n${job.registeredBros.length} Bro inscrits\n\nIls seront tous payés ${formatCurrency(job.customRate * job.estimatedHours)} chacun.`)) {
+                              if (confirm(`✅ Valider ce boulot avec l'équipe complète ?\n\n"${job.description}"\n${job.registeredBros.length} ${v.many} inscrit${v.e}s\n\n${v.ils} seront ${v.tous} payé${v.e}s ${formatCurrency(job.customRate * job.estimatedHours)} chacun${v.e}.`)) {
                                 completeScheduledJob(job.id, false);
                               }
                             }}
@@ -1581,7 +1583,7 @@ ${job.registeredBros.map(reg => {
                         {/* Validation partielle (toujours disponible si au moins 1 Bro) */}
                         <button
                           onClick={() => {
-                            if (confirm(`⚠️ Validation PARTIELLE ?\n\n"${job.description}"\nSeulement ${job.registeredBros.length} Bro sur ${job.brosNeeded} requis\n\nCoût total : ${formatCurrency(job.customRate * job.estimatedHours * job.registeredBros.length)}\n\nSeuls les Bro inscrits seront payés.`)) {
+                            if (confirm(`⚠️ Validation PARTIELLE ?\n\n"${job.description}"\nSeulement ${job.registeredBros.length} ${v.many} sur ${job.brosNeeded} ${v.requis}\n\nCoût total : ${formatCurrency(job.customRate * job.estimatedHours * job.registeredBros.length)}\n\n${v.seuls} les ${v.many} inscrit${v.e}s seront payé${v.e}s.`)) {
                               completeScheduledJob(job.id, true);
                             }
                           }}
@@ -1657,11 +1659,11 @@ ${job.registeredBros.map(reg => {
   if (screen === 'boulots-bros') {
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header title="Gestion des Bro" onBack={() => navigateTo('boulots')} />
+        <Header title={`Gestion des ${v.many}`} onBack={() => navigateTo('boulots')} />
 
         <div className="p-4">
           <div className="flex justify-between items-center mb-4">
-            <h2 className="text-lg font-semibold">Bro ({bros.length})</h2>
+            <h2 className="text-lg font-semibold">{v.many} ({bros.length})</h2>
             <button
               onClick={() => { setModalType('add-bro'); setShowModal(true); }}
               className="p-2 bg-green-500 text-white rounded-full active:scale-95 transition-transform"
@@ -1727,12 +1729,12 @@ ${job.registeredBros.map(reg => {
         <Modal
           isOpen={showModal && modalType === 'add-bro'}
           onClose={() => { setShowModal(false); setNewBroName(''); }}
-          title="Ajouter un Bro"
+          title={`Ajouter un${v.e} ${v.one}`}
         >
           <div className="space-y-4">
             <input
               type="text"
-              placeholder="Nom du Bro"
+              placeholder={`Nom ${v.ofThe}`}
               value={newBroName}
               onChange={(e) => setNewBroName(e.target.value)}
               className="w-full p-3 border rounded-lg"
@@ -1893,7 +1895,7 @@ ${job.registeredBros.map(reg => {
               <div className="mb-3">
                 <div className="flex items-center justify-between">
                   <label className="block text-sm font-medium text-gray-700">
-                    Bro assignés ({newJob.bros.length})
+                    {v.many} assigné{v.e}s ({newJob.bros.length})
                   </label>
                   <button
                     onClick={addBroToJob}
@@ -1906,7 +1908,7 @@ ${job.registeredBros.map(reg => {
 
                 {showBroDropdown && (
                   <div className="mt-2 p-2 bg-gray-50 rounded border">
-                    <p className="text-sm text-gray-600 mb-2">Sélectionner un Bro :</p>
+                    <p className="text-sm text-gray-600 mb-2">Sélectionner un{v.e} {v.one} :</p>
                     <div className="space-y-1">
                       {bros.filter(bro =>
                         !newJob.bros.some(assignment => assignment.broId === bro.id)
@@ -1944,7 +1946,7 @@ ${job.registeredBros.map(reg => {
                         onChange={(e) => updateBroSelection(index, e.target.value)}
                         className="flex-1 p-2 border rounded"
                       >
-                        <option value="">Choisir un Bro...</option>
+                        <option value="">Choisir un{v.e} {v.one}...</option>
                         {availableBros.map(bro => (
                           <option key={bro.id} value={bro.id}>{bro.name}</option>
                         ))}
@@ -1978,7 +1980,7 @@ ${job.registeredBros.map(reg => {
               {newJob.bros.length === 0 && (
                 <div className="text-center py-4 text-gray-500 bg-gray-50 rounded-lg">
                   <User size={24} className="mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">Aucun Bro assigné</p>
+                  <p className="text-sm">Aucun{v.e} {v.one} assigné{v.e}</p>
                 </div>
               )}
             </div>
@@ -2198,7 +2200,7 @@ ${job.registeredBros.map(reg => {
 
     return (
       <div className="min-h-screen bg-gray-50">
-        <Header title="Statistiques des Bro" onBack={() => navigateTo('boulots')} />
+        <Header title={`Statistiques des ${v.many}`} onBack={() => navigateTo('boulots')} />
 
         <div className="p-4 space-y-6">
           {/* Statistiques globales en premier */}
@@ -2236,7 +2238,7 @@ ${job.registeredBros.map(reg => {
                     return `${hours}h${minutes.toString().padStart(2, '0')}min`;
                   })() : '0h00min'}
                 </div>
-                <div className="text-xs text-gray-600">Moyenne/Bro</div>
+                <div className="text-xs text-gray-600">Moyenne/{v.one}</div>
               </div>
             </div>
           </div>

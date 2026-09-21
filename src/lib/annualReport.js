@@ -141,7 +141,8 @@ export function buildAnnualReport({
   members = [],
   bros = [],
   products = [],
-  stockMovements = []
+  stockMovements = [],
+  sectionId = null
 }) {
   const period = getPeriod(year, mode);
   const months = buildMonthlyBuckets(period);
@@ -284,6 +285,7 @@ export function buildAnnualReport({
     meta: {
       year,
       mode,
+      sectionId,
       label: period.label,
       start: period.start,
       end: period.end,

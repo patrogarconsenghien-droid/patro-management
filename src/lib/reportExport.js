@@ -1,6 +1,7 @@
 // Export du rapport annuel en fichier HTML autonome : lisible tel quel dans un
 // navigateur, imprimable en PDF, et envoyable par mail sans dépendance.
 import { formatCurrency, plural } from './format';
+import { vocabFor } from './vocab';
 
 const escapeHtml = (value) =>
   String(value ?? '')
@@ -30,6 +31,7 @@ const kpi = (label, value, hint) => `
 
 export function buildReportHtml(report) {
   const { meta, summary, bar, jobs, finance, members, stock, months } = report;
+  const v = vocabFor(meta.sectionId);
   const generated = meta.generatedAt.toLocaleDateString('fr-FR', {
     day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit'
   });
@@ -132,8 +134,8 @@ export function buildReportHtml(report) {
       ${kpi('Taux horaire moyen', `${eur(jobs.averageRate)}/h`)}
     </div>
 
-    <h3>Bro les plus actifs</h3>
-    ${table(['Bro', 'Boulots', 'Heures', 'Montant'], jobs.topBros.map((b) => [
+    <h3>${v.many} les plus ${v.actif}s</h3>
+    ${table([v.one, 'Boulots', 'Heures', 'Montant'], jobs.topBros.map((b) => [
       escapeHtml(b.name), `<span class="num">${escapeHtml(b.jobs)}</span>`,
       `<span class="num">${escapeHtml(b.hours)} h</span>`, `<span class="num">${eur(b.total)}</span>`
     ]))}

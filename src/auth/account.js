@@ -13,8 +13,8 @@ export const ROLE_LABELS = {
 };
 
 export const SECTIONS = {
-  garcons: 'Garçons',
-  filles: 'Filles'
+  garcons: 'Brothers',
+  filles: 'Grandes'
 };
 
 // Comptes qui deviennent admin dès leur première connexion. Sans eux, personne

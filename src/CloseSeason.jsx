@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check } from 'lucide-react';
 import { formatCurrency, plural, roundHours } from './lib/format';
 import { nextSeasonId, seasonLabel } from './lib/seasons';
+import { vocabFor } from './lib/vocab';
 import {
   buildRolloverPreview,
   computeMemberBalances,
@@ -66,12 +67,14 @@ const CloseSeason = ({
   orders = [],
   financialTransactions = [],
   barOpenThreshold,
+  barEnabled = true,
   hourlyRate,
   surpriseSettings,
   popularProducts,
   financialGoal,
   sectionId
 }) => {
+  const v = vocabFor(sectionId);
   const [choices, setChoices] = useState(defaultChoices);
   const [tripCounts, setTripCounts] = useState({ expenses: 0, events: 0 });
   const [confirmText, setConfirmText] = useState('');
@@ -135,6 +138,7 @@ const CloseSeason = ({
           jobs,
           orders,
           barSettings: barOpenThreshold,
+          barEnabled,
           hourlyRate,
           surpriseSettings,
           popularProducts,
@@ -258,11 +262,11 @@ const CloseSeason = ({
           )}
         </Section>
 
-        <Section title="Bro" hint={`${bros.length} Bro`}>
+        <Section title={v.many} hint={`${bros.length} ${v.many}`}>
           <Toggle
             checked={choices.bros.keep}
             onChange={(v) => set('bros.keep', v)}
-            label="Reprendre la liste des Bro"
+            label={`Reprendre la liste des ${v.many}`}
           />
           {choices.bros.keep && (
             <>
@@ -428,7 +432,7 @@ const CloseSeason = ({
               <span className="font-medium text-green-600">{formatCurrency(preview.carriedCredit)}</span>
             </li>
             <li className="flex justify-between">
-              <span>Bro</span><span className="font-medium">{preview.bros}</span>
+              <span>{v.many}</span><span className="font-medium">{preview.bros}</span>
             </li>
             <li className="flex justify-between">
               <span>Heures reportées</span><span className="font-medium">{preview.carriedHours} h</span>

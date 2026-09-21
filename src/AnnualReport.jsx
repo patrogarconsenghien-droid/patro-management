@@ -3,6 +3,7 @@ import { Download, Printer, TrendingDown, TrendingUp } from 'lucide-react';
 import { formatCurrency, plural } from './lib/format';
 import { buildAnnualReport, getAvailableYears, getCurrentPatroYear } from './lib/annualReport';
 import { downloadReport, printReport } from './lib/reportExport';
+import { vocabFor } from './lib/vocab';
 
 const Kpi = ({ label, value, hint, tone = 'neutral' }) => {
   const tones = {
@@ -65,8 +66,10 @@ const AnnualReport = ({
   members = [],
   bros = [],
   products = [],
-  stockMovements = []
+  stockMovements = [],
+  sectionId
 }) => {
+  const v = vocabFor(sectionId);
   const availableYears = useMemo(
     () => getAvailableYears({ orders, jobs, financialTransactions }),
     [orders, jobs, financialTransactions]
@@ -86,9 +89,9 @@ const AnnualReport = ({
 
   const report = useMemo(
     () => buildAnnualReport({
-      year, mode, orders, jobs, financialTransactions, members, bros, products, stockMovements
+      year, mode, orders, jobs, financialTransactions, members, bros, products, stockMovements, sectionId
     }),
-    [year, mode, orders, jobs, financialTransactions, members, bros, products, stockMovements]
+    [year, mode, orders, jobs, financialTransactions, members, bros, products, stockMovements, sectionId]
   );
 
   const { summary, bar, jobs: jobStats, finance, members: memberStats, stock, months } = report;
@@ -204,7 +207,7 @@ const AnnualReport = ({
         {/* Boulots */}
         <Section title="Boulots" icon="🔧">
           <div className="grid grid-cols-2 gap-3 mb-4">
-            <Kpi label="Boulots" value={jobStats.count} hint={`${jobStats.activeBros} Bro ${jobStats.activeBros >= 2 ? 'actifs' : 'actif'}`} />
+            <Kpi label="Boulots" value={jobStats.count} hint={`${jobStats.activeBros} ${jobStats.activeBros >= 2 ? v.many : v.one} ${v.actif}${jobStats.activeBros >= 2 ? 's' : ''}`} />
             <Kpi label="Heures" value={`${jobStats.hours} h`} />
             <Kpi label="Montant total" value={formatCurrency(jobStats.revenue)} />
             <Kpi
