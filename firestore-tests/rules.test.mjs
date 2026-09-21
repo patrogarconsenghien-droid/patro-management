@@ -361,6 +361,13 @@ await ko('animateur ne baisse pas un montant', updateDoc(doc(as(ANIMATEUR), 'pay
 await ko('animateur ne marque pas payé depuis l\'app', updateDoc(doc(as(ANIMATEUR), 'paymentRequests', 'rg'), { status: 'paid' }));
 await ko('admin ne marque pas payé depuis l\'app', updateDoc(doc(as(ADMIN), 'paymentRequests', 'rg'), { status: 'paid' }));
 await ko('admin ne supprime pas une demande', deleteDoc(doc(as(ADMIN), 'paymentRequests', 'rg')));
+await env.withSecurityRulesDisabled(async (ctx) => {
+  await setDoc(doc(ctx.firestore(), 'paymentCodes', 'garcons_m1'), { sectionId: 'garcons', memberId: 'm1', communication: '910000000150', token: 'tok-m1' });
+});
+await ko('admin ne lit pas les codes des membres', getDoc(doc(as(ADMIN), 'paymentCodes', 'garcons_m1')));
+await ko('animateur ne liste pas les codes', getDocs(collection(as(ANIMATEUR), 'paymentCodes')));
+await ko('animateur ne réattribue pas un code', updateDoc(doc(as(ANIMATEUR), 'paymentCodes', 'garcons_m1'), { memberId: 'm2' }));
+await ko('animé ne se crée pas un code', setDoc(doc(as(ANIME), 'paymentCodes', 'garcons_kid'), { sectionId: 'garcons', memberId: 'kid', communication: '910000000150' }));
 await ko('personne ne lit les compteurs', getDoc(doc(as(ADMIN), 'paymentCounters', 'garcons-2026')));
 await ko('personne ne remet un compteur à zéro', setDoc(doc(as(ADMIN), 'paymentCounters', 'garcons-2026'), { last: 0 }));
 

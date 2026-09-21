@@ -87,7 +87,7 @@ const RequestDetail = ({ request, onClose }) => {
 
   const markReceived = () => run(async () => {
     const typed = window.prompt(
-      `Montant reçu sur le compte pour « ${request.label} » ?\n\nUn montant supérieur est compté comme ${request.kind === 'bar' ? 'rechargement' : 'pourboire'}.`,
+      `Montant reçu sur le compte pour « ${request.label} » ?\n\nUn montant supérieur est compté comme pourboire.`,
       String((request.amountCents / 100).toFixed(2)).replace('.', ',')
     );
     if (typed === null) return;
@@ -198,11 +198,9 @@ const RequestDetail = ({ request, onClose }) => {
   );
 };
 
-const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [], members = [], barEnabled = true }) => {
+const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [] }) => {
   const [requests, setRequests] = useState(null);
   const [selectedJobs, setSelectedJobs] = useState(() => new Set());
-  const [memberId, setMemberId] = useState('');
-  const [barAmount, setBarAmount] = useState('');
   const [openId, setOpenId] = useState(null);
   // La demande qu'on vient de créer, telle que le serveur l'a renvoyée : le QR
   // s'ouvre tout de suite, sans attendre que la liste se mette à jour.
@@ -295,20 +293,6 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [], members 
     setOpenId(created.id);
   });
 
-  const createForBar = () => run(async () => {
-    const amountCents = Math.round(parseFloat(String(barAmount).replace(',', '.')) * 100);
-    if (!memberId || !Number.isFinite(amountCents)) { setError('Choisis un membre et un montant.'); return; }
-    const created = await call('createBarPaymentRequest', {
-      memberPath: docRef(db, seasonId, 'members', memberId, sectionId).path,
-      amountCents
-    });
-    const member = members.find((m) => m.id === memberId);
-    setJustCreated({ ...created, status: 'pending', kind: 'bar', label: `Compte bar · ${member?.name || ''}`, targets: [] });
-    setMemberId('');
-    setBarAmount('');
-    setOpenId(created.id);
-  });
-
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
       <Header title="Paiements par QR" onBack={() => navigateTo('boulots')} />
@@ -316,7 +300,8 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [], members 
       <div className="p-4 space-y-5">
         <p className="text-sm text-gray-600">
           Le client scanne un QR avec son app bancaire : le compte des {SECTIONS[sectionId] || sectionId}, le montant et la
-          communication sont préremplis.
+          communication sont préremplis. Pour recharger un compte bar, passe par l'onglet Bar : chaque membre y a
+          son propre QR.
         </p>
 
         {error && <p className="text-sm text-red-700 bg-red-50 rounded-xl p-3" role="alert">{error}</p>}
@@ -382,38 +367,6 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [], members 
             </button>
           )}
         </section>
-
-        {/* Rechargement d'un compte bar */}
-        {barEnabled && members.length > 0 && (
-          <section>
-            <h2 className="font-display text-lg font-bold mb-2">Recharger un compte bar</h2>
-            <div className="bg-white rounded-2xl ring-1 ring-gray-200 p-4 space-y-3">
-              <select id="bar-member" value={memberId} onChange={(e) => setMemberId(e.target.value)} className="w-full p-3 border rounded-lg bg-white">
-                <option value="">Choisir un membre…</option>
-                {[...members].sort((a, b) => a.name.localeCompare(b.name)).map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.name} ({formatCurrency(Number(member.balance) || 0)})
-                  </option>
-                ))}
-              </select>
-              <input
-                id="bar-amount"
-                inputMode="decimal"
-                value={barAmount}
-                onChange={(e) => setBarAmount(e.target.value)}
-                placeholder="Montant en €, de 1 à 500"
-                className="w-full p-3 border rounded-lg"
-              />
-              <button
-                onClick={createForBar}
-                disabled={busy || !memberId || !barAmount}
-                className="w-full p-3 rounded-xl bg-bar-500 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-transform"
-              >
-                <QrCode size={18} />Créer le QR de rechargement
-              </button>
-            </div>
-          </section>
-        )}
 
         {/* Demandes */}
         <section>

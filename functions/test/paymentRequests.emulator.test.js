@@ -45,6 +45,7 @@ async function reset({ account = true } = {}) {
 
   await db.doc(`${G}jobs/a`).set({ description: "Tondre la pelouse", broName: "Tom", date: "2026-10-01", total: 30, isPaid: false });
   await db.doc(`${G}jobs/b`).set({ description: "Tailler la haie", broName: "Léo", date: "2026-10-01", total: 15.5, isPaid: false });
+  await db.doc(`${G}jobs/c`).set({ description: "Ranger le garage", broName: "Sam", date: "2026-10-02", total: 20, isPaid: false });
   await db.doc(`${G}jobs/paid`).set({ description: "Déjà payé", broName: "Tom", total: 20, isPaid: true });
   await db.doc(`${G}jobs/zero`).set({ description: "Sans montant", broName: "Tom", total: 0, isPaid: false });
   await db.doc("seasons/2025-2026/jobs/old").set({ description: "Ancien", total: 10, isPaid: false });
@@ -82,7 +83,7 @@ test("demande groupée : montant relu sur les boulots, communication valide, bou
   assert.equal((await data(`${G}jobs/a`)).paymentRequestId, created.id);
 
   // Le compteur avance, par section et par année.
-  const second = await requests.createBarRequest(db, as("anim"), { memberPath: `${G}members/m1`, amountCents: 2000 }, at);
+  const second = await requests.createJobsRequest(db, as("anim"), { jobPaths: [`${G}jobs/c`] }, at);
   assert.equal(second.communication.slice(0, 10), "2610000002");
   assert.notEqual(second.token, created.token);
 });
@@ -166,31 +167,6 @@ test("montant exact : pas de pourboire, pas de rentrée en trop", async () => {
   assert.equal(result.receivedCents, 3000);
   assert.equal(result.tipCents, 0);
   assert.equal((await db.collection(`${G}financialTransactions`).get()).size, 0);
-});
-
-test("compte bar : tout le montant reçu est crédité", async () => {
-  await reset();
-  const make = (amountCents, memberPath = `${G}members/m1`) =>
-    requests.createBarRequest(db, as("anim"), { memberPath, amountCents }, at);
-  for (const bad of [0, 50, 50_001, 12.5, "2000", null]) await rejects(make(bad), "bad-amount");
-  await rejects(make(2000, `${G}members/absent`), "no-member");
-  await rejects(make(2000, `${G}jobs/a`), "bad-path");
-
-  // Martin doit 12,50 € : il verse 25 € au lieu des 20 demandés.
-  const created = await make(2000);
-  await requests.markReceived(db, as("anim"), { requestId: created.id, receivedCents: 2500 }, at);
-  assert.equal((await data(`${G}members/m1`)).balance, 12.5);
-  const orders = (await db.collection(`${G}orders`).get()).docs.map((d) => d.data());
-  assert.equal(orders.length, 1);
-  assert.deepEqual(
-    { type: orders[0].type, amount: orders[0].amount, paymentMethod: orders[0].paymentMethod, memberId: orders[0].memberId },
-    { type: "repayment", amount: 25, paymentMethod: "account", memberId: "m1" }
-  );
-
-  // Hugo est en positif : c'est un rechargement. Un montant inférieur est crédité tel quel.
-  const hugo = await make(2000, `${G}members/m2`);
-  await requests.markReceived(db, as("anim"), { requestId: hugo.id, receivedCents: 1000 }, at);
-  assert.equal((await data(`${G}members/m2`)).balance, 13);
 });
 
 test("boulot fait à dix : dix lignes en base, une seule pour le client", async () => {

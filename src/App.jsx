@@ -16,6 +16,7 @@ import HomeScreen from './Home';
 import SettingsScreen from './Settings';
 import BoulotsScreen from './Boulots';
 import PaymentsScreen from './Payments';
+import MemberPayCode from './components/MemberPayCode';
 import { formatCurrency, formatDate, formatDateTime, openingBalanceOf } from './lib/format';
 import { computeMemberBalances } from './lib/seasonRollover';
 import { celebrate, toast } from './lib/feedback';
@@ -25,7 +26,8 @@ import MemberAvatar from './components/MemberAvatar';
 import { createStockHelpers } from './lib/stock';
 import { useFirestoreData } from './hooks/useFirestoreData';
 import { canManage as canManageAccount, isAdmin as isAdminAccount, useCurrentAccount } from './auth/account';
-import { DEFAULT_SECTION_ID } from './lib/seasons';
+import { db } from './firebase';
+import { DEFAULT_SECTION_ID, docRef } from './lib/seasons';
 import { vocabFor } from './lib/vocab';
 import { useBroPhotos } from './hooks/useBroPhotos';
 
@@ -1134,8 +1136,6 @@ const eligible = [
         sectionId={sectionId}
         seasonId={viewedSeasonId}
         jobs={jobs}
-        members={members}
-        barEnabled={barEnabled}
       />
     );
   }
@@ -1601,6 +1601,15 @@ const eligible = [
                     </strong></p>
                   );
                 })()}
+
+                {/* Par virement : le membre verse ce qu'il veut avec SA communication. */}
+                <MemberPayCode
+                  key={selectedMember.id}
+                  memberPath={docRef(db, viewedSeasonId, 'members', selectedMember.id, sectionId).path}
+                  memberName={selectedMember.name}
+                />
+
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-1">Ou encoder un paiement reçu</p>
 
                 <div>
                   <label className="block text-sm font-medium mb-1">Montant</label>
@@ -5209,4 +5218,4 @@ const eligible = [
   );
 };
 
-export default PatroApp;
+export default PatroApp;

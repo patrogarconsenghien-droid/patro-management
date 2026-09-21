@@ -20,8 +20,12 @@ function formatAmount(amountCents) {
   return `EUR${Math.floor(amountCents / 100)}.${String(amountCents % 100).padStart(2, "0")}`;
 }
 
-/** Les 11 lignes du QR. Un retour à la ligne dans un champ casserait le format. */
-function buildEpcPayload({ holderName, iban, amountCents, communication }) {
+/**
+ * Les 11 lignes du QR. Un retour à la ligne dans un champ casserait le format.
+ * Sans `amountCents`, le montant est laissé vide : l'app bancaire le demande
+ * au payeur. C'est le cas d'un rechargement de compte bar, du montant voulu.
+ */
+function buildEpcPayload({ holderName, iban, amountCents = null, communication }) {
   const name = String(holderName || "").replace(/[\r\n]+/g, " ").trim().slice(0, MAX_NAME_LENGTH);
   if (!name) throw new Error("Nom du bénéficiaire manquant");
 
@@ -33,7 +37,7 @@ function buildEpcPayload({ holderName, iban, amountCents, communication }) {
     "", // BIC
     name,
     normalizeIban(iban),
-    formatAmount(amountCents),
+    amountCents === null ? "" : formatAmount(amountCents),
     "", // motif
     formatCommunication(communication), // remittance structurée
     "", // remittance libre : jamais les deux à la fois

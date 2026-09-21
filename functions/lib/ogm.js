@@ -25,6 +25,22 @@ function buildCommunication({ sectionId, year, sequence }) {
   return base + checkDigits(base);
 }
 
+/**
+ * Identifiant permanent d'un membre du bar : 9 S NNNNNNNN + clé. Le 9 de tête
+ * le distingue des demandes de paiement, qui commencent par l'année.
+ */
+function buildMemberCode({ sectionId, sequence }) {
+  const section = SECTION_DIGIT[sectionId];
+  if (!section) throw new Error(`Section inconnue : ${sectionId}`);
+  if (!Number.isInteger(sequence) || sequence < 1 || sequence > 99_999_999) {
+    throw new Error(`Numéro d'ordre hors limites : ${sequence}`);
+  }
+  const base = `9${section}${String(sequence).padStart(8, "0")}`;
+  return base + checkDigits(base);
+}
+
+const isMemberCode = (digits) => isValidCommunication(digits) && digits[0] === "9";
+
 /** « 261000004257 » → « +++261/0000/04257+++ ». */
 const formatCommunication = (digits) =>
   `+++${digits.slice(0, 3)}/${digits.slice(3, 7)}/${digits.slice(7, 12)}+++`;
@@ -49,4 +65,4 @@ function findCommunication(text) {
   return null;
 }
 
-module.exports = { buildCommunication, formatCommunication, isValidCommunication, findCommunication, SECTION_DIGIT };
+module.exports = { buildMemberCode, isMemberCode, buildCommunication, formatCommunication, isValidCommunication, findCommunication, SECTION_DIGIT };

@@ -67,10 +67,11 @@ export default function PayPage({ token }) {
         if (cancelled) return;
         setPage(data);
         setError(null);
-        if (data.status === 'pending') {
+        if (data.status === 'pending' || data.status === 'open') {
           renderQr(data.qrPayload).then((image) => { if (!cancelled) setQr(image); });
-          timer = setTimeout(load, REFRESH_MS);
         }
+        // Une demande en attente finit par être payée ; un code de membre, lui, reste ouvert.
+        if (data.status === 'pending') timer = setTimeout(load, REFRESH_MS);
       } catch (caught) {
         if (cancelled) return;
         const missing = caught?.details?.reason === 'no-request';
@@ -110,7 +111,11 @@ export default function PayPage({ token }) {
     <Shell>
       <div className="bg-white rounded-3xl shadow-sm ring-1 ring-gray-200 p-5">
         <p className="text-sm text-gray-600">{page.label} · {page.sectionLabel}</p>
-        <p className="font-display text-5xl font-extrabold tracking-tight mt-1">{euros(page.amountCents)}</p>
+        {page.amountCents === null ? (
+          <p className="font-display text-3xl font-extrabold tracking-tight mt-1">Le montant que tu veux</p>
+        ) : (
+          <p className="font-display text-5xl font-extrabold tracking-tight mt-1">{euros(page.amountCents)}</p>
+        )}
 
         {lines.length > 0 && (
           <ul className="mt-4 text-sm text-gray-700 divide-y divide-gray-100">
@@ -138,11 +143,13 @@ export default function PayPage({ token }) {
         </div>
       )}
 
-      {page.status === 'pending' && (
+      {(page.status === 'pending' || page.status === 'open') && (
         <>
           <div className="mt-4 bg-white rounded-3xl shadow-sm ring-1 ring-gray-200 p-5 text-center">
             <p className="font-semibold">Scanne ce QR avec ton app bancaire</p>
-            <p className="text-sm text-gray-600 mt-0.5">Belfius, KBC, ING, BNP Paribas Fortis, Argenta… Tout est prérempli.</p>
+            <p className="text-sm text-gray-600 mt-0.5">
+              Belfius, KBC, ING, BNP Paribas Fortis, Argenta… {page.amountCents === null ? 'Tu choisis le montant, le reste est prérempli.' : 'Tout est prérempli.'}
+            </p>
             {qr
               ? <img src={qr} alt="QR de virement" width="260" height="260" className="mx-auto mt-3" />
               : <div className="mx-auto mt-3 w-[260px] h-[260px] rounded-xl bg-gray-100" aria-hidden="true" />}
@@ -153,13 +160,14 @@ export default function PayPage({ token }) {
             <CopyRow label="Compte" value={page.iban} />
             <CopyRow label="Bénéficiaire" value={page.holderName} mono={false} />
             <CopyRow label="Communication structurée" value={page.communication} />
-            <CopyRow label="Montant" value={euros(page.amountCents)} mono={false} />
+            {page.amountCents !== null && <CopyRow label="Montant" value={euros(page.amountCents)} mono={false} />}
           </div>
 
           <p className="text-xs text-gray-500 mt-4 px-1">
-            Garde bien la communication : c'est elle qui relie ton virement à cette demande. Avant de valider, vérifie
-            que ton app bancaire affiche le bénéficiaire ci-dessus. Cette page se met à jour toute seule une fois le
-            paiement reçu.
+            {page.amountCents === null
+              ? 'Cette communication est la tienne, pour toujours : enregistre ce bénéficiaire dans ton app bancaire, et recharge quand tu veux, du montant que tu veux. Ce que tu verses arrive sur ton compte bar.'
+              : 'Garde bien la communication : c\'est elle qui relie ton virement à cette demande. Cette page se met à jour toute seule une fois le paiement reçu.'}
+            {' '}Avant de valider, vérifie que ton app bancaire affiche le bénéficiaire ci-dessus.
           </p>
         </>
       )}

@@ -242,6 +242,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Codes de paiement permanents des membres du bar : créés et lus par le
+    // serveur (fonction getMemberPaymentCode). Réattribuer un code depuis l'app
+    // ferait arriver les rechargements d'un membre sur le compte d'un autre.
+    match /paymentCodes/{code} {
+      allow read, write: if false;
+    }
+
     // Compteurs des communications structurées.
     match /paymentCounters/{counter} {
       allow read, write: if false;

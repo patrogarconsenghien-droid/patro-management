@@ -117,26 +117,26 @@ au nom du patro depuis un navigateur.
 ## Paiements : demandes et QR
 
 Boulots → « Paiements par QR » (animateurs). On coche un ou plusieurs boulots
-faits d'un même client, ou on choisit un membre du bar et un montant : le
-serveur crée une demande de paiement.
+faits d'un même client : le serveur crée une demande de paiement. Un boulot
+fait à plusieurs, enregistré en une ligne par participant, n'y est qu'une
+ligne à cocher.
 
-- **Communication structurée belge**, unique par demande : `AA S NNNNNNN` plus
-  la clé modulo 97. `AA` est l'année, `S` la section (1 Brothers, 2 Grandes),
-  `N` un compteur. Code dans `functions/lib/ogm.js`.
-- **QR de virement SEPA** (EPC069-12 version 2), selon le guide Febelfin : la
-  communication va dans la remittance structurée, au format
-  `+++123/1234/12345+++`. Code dans `functions/lib/epcQr.js`. Le contenu du QR
-  vient toujours du serveur, à partir de `paymentSettings` ; l'app ne fait que
-  le dessiner.
-- **Lien public** `https://patro-management.vercel.app/payer/<jeton>`, ouvert
-  sans compte. Le jeton fait 128 bits. La page ne montre que le montant, le
-  détail des boulots, le compte et la communication ; elle passe d'elle-même à
-  « reçu ». `vercel.json` renvoie `/payer/*` vers l'app.
-- **Une demande ne change plus** une fois créée. Pour corriger, on l'annule et
-  on en crée une autre. Les règles Firestore interdisent toute écriture sur
-  `paymentRequests` depuis l'app.
-- **Paiement reçu** : en attendant le rapprochement bancaire automatique, un
-  animateur marque « j'ai vu le virement », ce qui laisse une ligne dans
-  `auditLog`. Boulots : payés par virement, le surplus devient un pourboire,
-  noté sur le boulot et encodé en rentrée. Compte bar : tout le montant reçu
-  est crédité. `settleRequest` servira tel quel au rapprochement automatique.
+## Paiements : recharger un compte bar
+
+Le rechargement ne passe pas par une demande. Chaque membre du bar a un
+**identifiant de paiement permanent** : une communication structurée
+`9 S NNNNNNNN` plus la clé, créée par le serveur à la première demande
+(`functions/lib/memberCodes.js`). Il verse le montant qu'il veut avec cette
+communication, et ce qui arrive sur le compte est ajouté à son solde. Il peut
+enregistrer le bénéficiaire une fois pour toutes dans son app bancaire.
+
+Dans l'app : onglet Bar, « Rembourser » ou « Recharger » sur un membre, puis
+« Recharger par virement ». On y trouve son QR (sans montant : l'app bancaire
+le demande), sa communication, et un lien à lui envoyer. Tout compte actif de
+la section peut l'afficher.
+
+Le code est lié à la section et au membre, pas à une saison : un membre garde
+le même identifiant interne d'une saison à l'autre. En attendant le
+rapprochement bancaire, un animateur qui voit le virement l'encode comme
+aujourd'hui, mode « compte ». `creditMemberByCode` le fera ensuite tout seul,
+et refuse de créditer deux fois le même virement.

@@ -1,6 +1,7 @@
 // Demandes de paiement : un montant, une communication structurée unique et un
-// lien public, pour des boulots faits ou pour recharger un compte bar. Sans
-// dépendance à Cloud Functions, testé sur l'émulateur Firestore.
+// lien public, pour des boulots faits. Sans dépendance à Cloud Functions,
+// testé sur l'émulateur Firestore. (Le rechargement d'un compte bar passe par
+// le code permanent du membre : voir memberCodes.js.)
 //
 // Rien ici ne vient de l'app sans être revérifié : les montants sont relus sur
 // les boulots, le compte bénéficiaire vient de paymentSettings, et une demande
@@ -16,8 +17,6 @@ const SECTIONS = { garcons: "Brothers", filles: "Grandes" };
 const DEFAULT_SECTION = "garcons";
 // Une ligne par participant : un gros boulot à quinze en fait quinze à lui seul.
 const MAX_JOBS_PER_REQUEST = 150;
-const BAR_MIN_CENTS = 100;
-const BAR_MAX_CENTS = 50_000;
 
 class PaymentError extends Error {
   constructor(code, reason, message) {
@@ -144,48 +143,6 @@ async function createJobsRequest(db, auth, { jobPaths, payerName, payerPhone } =
   return { id: requestRef.id, token: result.token, communication: result.communication, amountCents: result.amountCents };
 }
 
-/** Demande de rechargement d'un compte bar, du montant choisi. */
-async function createBarRequest(db, auth, { memberPath, amountCents } = {}, { nowMs = Date.now() } = {}) {
-  if (!auth || !auth.uid) throw new PaymentError("unauthenticated", "signed-out", "Connexion requise.");
-  const member = parseSeasonDoc(memberPath, "members");
-  if (!Number.isInteger(amountCents) || amountCents < BAR_MIN_CENTS || amountCents > BAR_MAX_CENTS) {
-    throw new PaymentError(
-      "invalid-argument", "bad-amount",
-      `Le montant doit être entre ${BAR_MIN_CENTS / 100} et ${BAR_MAX_CENTS / 100} €.`
-    );
-  }
-  const actor = await requireManager(db, auth, member.sectionId);
-  await requireSettings(db, member.sectionId);
-
-  const requestRef = db.collection("paymentRequests").doc();
-  const result = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(db.doc(member.path));
-    if (!snap.exists) throw new PaymentError("not-found", "no-member", "Ce membre n'existe plus.");
-    const name = cleanText(snap.data().name, 70);
-
-    const communication = await nextCommunication(tx, db, member.sectionId, nowMs);
-    const request = {
-      sectionId: member.sectionId,
-      base: member.base,
-      kind: "bar",
-      label: `Compte bar · ${name}`,
-      amountCents,
-      communication,
-      token: newToken(),
-      status: "pending",
-      member: { path: member.path, id: member.id, name },
-      payer: { name, phone: "" },
-      createdBy: actor.uid,
-      createdByName: actor.name,
-      createdAt: FieldValue.serverTimestamp(),
-    };
-    tx.set(requestRef, request);
-    return request;
-  });
-
-  return { id: requestRef.id, token: result.token, communication: result.communication, amountCents: result.amountCents };
-}
-
 async function loadRequest(db, requestId) {
   if (!new RegExp(`^${ID}$`).test(String(requestId || ""))) {
     throw new PaymentError("invalid-argument", "bad-request", "Demande introuvable.");
@@ -222,9 +179,8 @@ async function cancelRequest(db, auth, { requestId } = {}) {
  * Applique un paiement reçu à une demande en attente. Sert à la saisie manuelle
  * d'un animateur, et servira au rapprochement bancaire (`source.type = "bank"`).
  *
- *  - Boulots : il faut au moins le montant demandé. Le surplus est un
- *    pourboire, noté sur le premier boulot et encodé en rentrée.
- *  - Compte bar : tout le montant reçu est crédité, quel qu'il soit.
+ * Il faut au moins le montant demandé. Le surplus est un pourboire, noté sur
+ * le premier boulot et encodé en rentrée.
  */
 async function settleRequest(db, requestId, { receivedCents, source, nowMs = Date.now() }) {
   const ref = db.doc(`paymentRequests/${requestId}`);
@@ -242,51 +198,31 @@ async function settleRequest(db, requestId, { receivedCents, source, nowMs = Dat
       throw new PaymentError("invalid-argument", "bad-amount", "Montant reçu invalide.");
     }
 
-    let tipCents = 0;
-    if (request.kind === "jobs") {
-      if (received < request.amountCents) {
-        throw new PaymentError(
-          "failed-precondition", "underpaid",
-          "Le montant reçu est inférieur au montant demandé. Annule la demande et marque les boulots à la main, ou attends le solde."
-        );
-      }
-      tipCents = received - request.amountCents;
-      request.targets.forEach((target, index) => {
-        tx.update(db.doc(target.path), {
-          isPaid: true,
-          paymentMethod: "account",
-          paidAt: paidAtIso,
-          paidVia: "payment-request",
-          ...(index === 0 && tipCents > 0 ? { tip: tipCents / 100 } : {}),
-          updatedAt: FieldValue.serverTimestamp(),
-        });
-      });
-      if (tipCents > 0) {
-        tx.set(db.collection(`${request.base}financialTransactions`).doc(), {
-          type: "income",
-          amount: tipCents / 100,
-          description: `Pourboire · ${request.label}`,
-          paymentMethod: "account",
-          category: "other",
-          timestamp: paidAtIso,
-          paymentRequestId: requestId,
-          createdAt: FieldValue.serverTimestamp(),
-        });
-      }
-    } else {
-      const memberRef = db.doc(request.member.path);
-      const memberSnap = await tx.get(memberRef);
-      if (!memberSnap.exists) throw new PaymentError("not-found", "no-member", "Ce membre n'existe plus.");
-      const before = Number(memberSnap.data().balance) || 0;
-      tx.update(memberRef, { balance: FieldValue.increment(received / 100), updatedAt: FieldValue.serverTimestamp() });
-      tx.set(db.collection(`${request.base}orders`).doc(), {
-        memberId: request.member.id,
-        memberName: request.member.name,
-        type: before < 0 ? "repayment" : "recharge",
-        amount: received / 100,
+    if (received < request.amountCents) {
+      throw new PaymentError(
+        "failed-precondition", "underpaid",
+        "Le montant reçu est inférieur au montant demandé. Annule la demande et marque les boulots à la main, ou attends le solde."
+      );
+    }
+    const tipCents = received - request.amountCents;
+    request.targets.forEach((target, index) => {
+      tx.update(db.doc(target.path), {
+        isPaid: true,
         paymentMethod: "account",
+        paidAt: paidAtIso,
+        paidVia: "payment-request",
+        ...(index === 0 && tipCents > 0 ? { tip: tipCents / 100 } : {}),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+    if (tipCents > 0) {
+      tx.set(db.collection(`${request.base}financialTransactions`).doc(), {
+        type: "income",
+        amount: tipCents / 100,
+        description: `Pourboire · ${request.label}`,
+        paymentMethod: "account",
+        category: "other",
         timestamp: paidAtIso,
-        items: [],
         paymentRequestId: requestId,
         createdAt: FieldValue.serverTimestamp(),
       });
@@ -360,8 +296,8 @@ async function getPublicPage(db, { token } = {}) {
   const page = {
     status: request.status,
     sectionLabel: SECTIONS[request.sectionId],
-    label: request.kind === "bar" ? request.label : "Boulots du patro",
-    lines: request.kind === "jobs" ? mergeLines(request.targets) : [],
+    label: "Boulots du patro",
+    lines: mergeLines(request.targets),
     amountCents: request.amountCents,
   };
   if (request.status !== "pending") return page;
@@ -385,7 +321,6 @@ module.exports = {
   PaymentError,
   parseSeasonDoc,
   createJobsRequest,
-  createBarRequest,
   cancelRequest,
   markReceived,
   settleRequest,
