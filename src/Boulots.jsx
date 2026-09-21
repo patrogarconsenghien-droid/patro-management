@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import NotificationPrompt from './components/NotificationPrompt';
 import {
-  BarChart3, Calendar, CheckCircle, Clock, Euro, MapPin, Minus, Pencil, Phone, Plus, Settings, Trash2, User, Wrench
+  BarChart3, BellRing, Calendar, CheckCircle, Clock, Euro, MapPin, Minus, Pencil, Phone, Plus, Settings, Trash2, User, Wrench
 } from 'lucide-react';
 import BroAvatar from './components/BroAvatar';
 import PhotoPicker from './components/PhotoPicker';
@@ -10,7 +10,9 @@ import HeaderBase from './components/Header';
 import { formatCurrency, formatDate } from './lib/format';
 import { SECTIONS, canManage as canManageAccount } from './auth/account';
 import { addDoc, increment, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from './firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from './firebase';
+import { toast } from './lib/feedback';
 import { collectionRef, docRef, otherSectionId } from './lib/seasons';
 import { vocabFor } from './lib/vocab';
 
@@ -37,6 +39,7 @@ const BoulotsDomain = ({
   sharedJobs = [],
   sharedSeasonId,
   sectionId,
+  seasonId,
   broPhotos = {},
   newJob,
   setNewJob,
@@ -76,6 +79,39 @@ const BoulotsDomain = ({
 
   // ===== ÉTAT LOCAL AUX ÉCRANS BOULOTS =====
   const [showBroDropdown, setShowBroDropdown] = useState(false);
+  const [remindingJobId, setRemindingJobId] = useState(null);
+
+  // Rappel : notification et mail à ceux de ma section qui n'ont pas répondu.
+  // Le serveur recalcule la liste et refuse plus d'un rappel par heure.
+  const REMINDER_PAUSE_MS = 60 * 60 * 1000;
+  const lastReminderOf = (job) => job.lastReminderAt?.[sectionId]?.toMillis?.() || 0;
+  const sendReminder = async (job, count) => {
+    if (!confirm(
+      `Envoyer un rappel pour « ${job.description} » ?\n\n` +
+      `${count} ${count > 1 ? v.many : v.one} sans réponse ${count > 1 ? 'recevront' : 'recevra'} une notification et un mail.`
+    )) return;
+
+    setRemindingJobId(job.id);
+    try {
+      const jobRef = job._shared
+        ? docRef(db, sharedSeasonId, 'scheduledJobs', job.id, otherId)
+        : docRef(db, seasonId, 'scheduledJobs', job.id, sectionId);
+      const { data } = await httpsCallable(functions, 'sendJobReminder')({
+        jobPath: jobRef.path,
+        brosPath: collectionRef(db, seasonId, 'bros', sectionId).path
+      });
+      const parts = [`${data.notified} notification${data.notified > 1 ? 's' : ''}`, `${data.emailed} mail${data.emailed > 1 ? 's' : ''}`];
+      toast(`Rappel envoyé : ${parts.join(', ')}`);
+      if (data.unreachable > 0) {
+        alert(`${data.unreachable} ${data.unreachable > 1 ? v.many : v.one} sans réponse n'${data.unreachable > 1 ? 'ont' : 'a'} pas de compte relié : personne à prévenir dans l'app, à relancer de vive voix.`);
+      }
+    } catch (error) {
+      console.error('Rappel impossible:', error);
+      alert(error?.details?.reason ? error.message : "Le rappel n'a pas pu être envoyé. Vérifie ta connexion et réessaie.");
+    } finally {
+      setRemindingJobId(null);
+    }
+  };
   const [newBroName, setNewBroName] = useState('');
   const [newScheduledJob, setNewScheduledJob] = useState({
     description: '', date: new Date().toISOString().split('T')[0],
@@ -839,6 +875,28 @@ ${job.registeredBros.map(reg => {
                                       </span>
                                     ))}
                                   </div>
+                                  {(() => {
+                                    const last = lastReminderOf(job);
+                                    const paused = Date.now() - last < REMINDER_PAUSE_MS;
+                                    return (
+                                      <>
+                                        <button
+                                          onClick={() => sendReminder(job, toAsk.length)}
+                                          disabled={paused || remindingJobId === job.id || past}
+                                          className="mt-2.5 w-full py-2.5 rounded-xl bg-yellow-400 text-yellow-950 text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-transform"
+                                        >
+                                          <BellRing size={16} />
+                                          {remindingJobId === job.id ? 'Envoi…' : 'Envoyer un rappel'}
+                                        </button>
+                                        {last > 0 && (
+                                          <p className="text-xs text-gray-500 mt-1.5">
+                                            Dernier rappel le {new Date(last).toLocaleString('fr-BE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                            {paused ? ' · un rappel par heure au plus' : ''}
+                                          </p>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
                                 </div>
                               )}
 

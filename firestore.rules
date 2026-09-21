@@ -210,6 +210,35 @@ service cloud.firestore {
       );
     }
 
+    // ------------------------------------------------------------ paiements
+    // Le compte de réception d'une section. Personne ne l'écrit depuis l'app,
+    // pas même l'admin : seule la fonction setPaymentAccount le fait, après
+    // reconnexion Google et code de l'app d'authentification. Les animateurs
+    // le lisent pour vérifier d'un coup d'œil le compte en vigueur.
+    match /paymentSettings/{sec} {
+      allow read: if isManagerOf(sec);
+      allow write: if false;
+    }
+
+    // Secret de l'app d'authentification de l'admin : jamais lu ni écrit
+    // depuis l'app. Le lire suffirait à fabriquer des codes valides.
+    match /paymentSecurity/{uid} {
+      allow read, write: if false;
+    }
+
+    // Journal des gestes sensibles, en ajout seul, écrit par le serveur.
+    match /auditLog/{entry} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // File d'attente des mails (rappels de boulots), écrite par le serveur et
+    // vidée par l'extension « Trigger Email ». Y écrire depuis l'app permettrait
+    // d'envoyer n'importe quel mail au nom du patro.
+    match /mail/{message} {
+      allow read, write: if false;
+    }
+
     // ------------------------------------------------------------ garçons
     // La saison en cours se lit depuis n'importe quelle section : il faut la
     // connaître pour voir les boulots ouverts de l'autre section.

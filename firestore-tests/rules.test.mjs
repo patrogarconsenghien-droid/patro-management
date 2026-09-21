@@ -302,6 +302,54 @@ await ok('animé enregistre son jeton de notification', setDoc(doc(as(ANIME), 'f
 await ko('animé ne lit pas les jetons', getDocs(collection(as(ANIME), 'fcmTokens')));
 await ko('anonyme n\'enregistre pas de jeton', setDoc(doc(anonymous(), 'fcmTokens', 'tok2'), { token: 'tok2' }));
 
+// --- paiements : compte verrouillé, secret illisible, journal en ajout seul ---
+await env.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'paymentSettings', 'garcons'), { sectionId: 'garcons', iban: 'BE68539007547034', holderName: 'Patro Garçons' });
+  await setDoc(doc(db, 'paymentSettings', 'filles'), { sectionId: 'filles', iban: 'BE71096123456769', holderName: 'Patro Filles' });
+  await setDoc(doc(db, 'paymentSecurity', ADMIN.uid), { secret: 'JBSWY3DPEHPK3PXP' });
+  await setDoc(doc(db, 'auditLog', 'a1'), { type: 'iban.set', sectionId: 'garcons' });
+});
+const PIRATE = { sectionId: 'garcons', iban: 'BE71096123456769', holderName: 'Pirate' };
+
+await ok('animateur lit le compte de sa section', getDoc(doc(as(ANIMATEUR), 'paymentSettings', 'garcons')));
+await ko('animateur ne lit pas le compte de l\'autre section', getDoc(doc(as(ANIMATEUR), 'paymentSettings', 'filles')));
+await ok('animatrice lit le compte des filles', getDoc(doc(as(FILLE_ANIM), 'paymentSettings', 'filles')));
+await ok('admin lit les deux comptes', getDoc(doc(as(ADMIN), 'paymentSettings', 'filles')));
+await ko('animé ne lit pas le compte', getDoc(doc(as(ANIME), 'paymentSettings', 'garcons')));
+await ko('anonyme ne lit pas le compte', getDoc(doc(anonymous(), 'paymentSettings', 'garcons')));
+
+await ko('admin ne change pas le compte depuis l\'app', setDoc(doc(as(ADMIN), 'paymentSettings', 'garcons'), PIRATE));
+await ko('admin ne retouche pas l\'IBAN depuis l\'app', updateDoc(doc(as(ADMIN), 'paymentSettings', 'garcons'), { iban: PIRATE.iban }));
+await ko('admin ne supprime pas le compte', deleteDoc(doc(as(ADMIN), 'paymentSettings', 'garcons')));
+await ko('animateur ne change pas le compte', setDoc(doc(as(ANIMATEUR), 'paymentSettings', 'garcons'), PIRATE));
+await ko('animé ne change pas le compte', setDoc(doc(as(ANIME), 'paymentSettings', 'garcons'), PIRATE));
+await ko('personne ne crée le compte d\'une section inventée', setDoc(doc(as(ADMIN), 'paymentSettings', 'autre'), PIRATE));
+
+await ko('admin ne lit pas son propre secret', getDoc(doc(as(ADMIN), 'paymentSecurity', ADMIN.uid)));
+await ko('admin ne liste pas les secrets', getDocs(collection(as(ADMIN), 'paymentSecurity')));
+await ko('admin ne remplace pas son secret depuis l\'app', setDoc(doc(as(ADMIN), 'paymentSecurity', ADMIN.uid), { secret: 'AAAAAAAA' }));
+await ko('admin ne lève pas un verrouillage', updateDoc(doc(as(ADMIN), 'paymentSecurity', ADMIN.uid), { failedAttempts: 0, lockedUntil: null }));
+await ko('animateur ne lit pas le secret de l\'admin', getDoc(doc(as(ANIMATEUR), 'paymentSecurity', ADMIN.uid)));
+
+await ok('admin lit le journal', getDocs(collection(as(ADMIN), 'auditLog')));
+await ko('animateur ne lit pas le journal', getDocs(collection(as(ANIMATEUR), 'auditLog')));
+await ko('admin n\'écrit pas dans le journal', setDoc(doc(as(ADMIN), 'auditLog', 'faux'), { type: 'iban.set' }));
+await ko('admin ne réécrit pas le journal', updateDoc(doc(as(ADMIN), 'auditLog', 'a1'), { type: 'rien' }));
+await ko('admin n\'efface pas le journal', deleteDoc(doc(as(ADMIN), 'auditLog', 'a1')));
+
+// --- mails : personne n'envoie de mail au nom du patro depuis l'app ---
+const FAKE_MAIL = { to: ['victime@example.org'], message: { subject: 'Faux', text: 'Faux' } };
+await ko('animé ne dépose pas de mail', setDoc(doc(as(ANIME), 'mail', 'm1'), FAKE_MAIL));
+await ko('animateur ne dépose pas de mail', setDoc(doc(as(ANIMATEUR), 'mail', 'm2'), FAKE_MAIL));
+await ko('admin ne dépose pas de mail', setDoc(doc(as(ADMIN), 'mail', 'm3'), FAKE_MAIL));
+await ko('admin ne lit pas la file des mails', getDocs(collection(as(ADMIN), 'mail')));
+
+// Le rappel marque le boulot depuis le serveur ; un animé ne peut pas remettre
+// le compteur à zéro pour relancer en boucle.
+await ko('animé ne touche pas au compteur de rappels',
+  updateDoc(doc(as(ANIME), 'seasons', '2026-2027', 'scheduledJobs', 'sj-anim'), { reminderCount: 0, lastReminderAt: null, updatedAt: 'x' }));
+
 await env.cleanup();
 
 console.log(`\n${passed} cas réussis, ${failures.length} en échec.`);

@@ -10,11 +10,13 @@
     "deploy": "pnpm run build && firebase deploy --only hosting",
     "deploy:functions": "node scripts/deploy-functions.mjs",
     "test:rules": "firebase emulators:exec --only firestore --project patro-rules-test \"node firestore-tests/rules.test.mjs\"",
-    "deploy:rules": "firebase deploy --only firestore:rules --project patro-management-2024"
+    "deploy:rules": "firebase deploy --only firestore:rules --project patro-management-2024",
+    "test:functions": "firebase emulators:exec --only firestore --project patro-rules-test \"node --test --test-concurrency=1 functions/test/totp.test.js functions/test/iban.test.js functions/test/paymentSecurity.emulator.test.js functions/test/jobReminder.emulator.test.js\""
   },
   "dependencies": {
     "firebase": "^12.1.0",
     "lucide-react": "^0.539.0",
+    "qrcode": "^1.5.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
   },

@@ -24,6 +24,9 @@ L'app tourne sur http://localhost:5173.
 | `pnpm preview` | Sert le build de production en local |
 | `pnpm deploy` | Build puis déploiement du site sur Firebase Hosting |
 | `pnpm deploy:functions` | Déploiement des Cloud Functions uniquement |
+| `pnpm deploy:rules` | Déploiement des règles Firestore uniquement |
+| `pnpm test:rules` | Tests des règles Firestore sur l'émulateur (Java requis) |
+| `pnpm test:functions` | Tests des Cloud Functions : codes TOTP, IBAN, sécurité des paiements |
 
 Le déploiement suppose la Firebase CLI installée et connectée
 (`npm i -g firebase-tools` puis `firebase login`). Le projet ciblé est
@@ -59,3 +62,54 @@ functions/            Cloud Functions (notification à la création d'un boulot)
   la mettre à jour aux deux endroits.
 - `dist/` et `node_modules/` ne sont pas versionnés : ils sont régénérés par
   `pnpm install` et `pnpm build`.
+
+## Paiements : compte de réception
+
+Chaque section a son compte bancaire, dans `paymentSettings/{section}`. Ce
+document est la cible de tous les QR de paiement : il est verrouillé.
+
+- Les règles Firestore refusent toute écriture depuis l'app, même de l'admin.
+- Seule la fonction `setPaymentAccount` l'écrit. Elle exige un admin, une
+  connexion Google de moins de 5 minutes, et un code de l'app
+  d'authentification de l'admin (TOTP, RFC 6238). Un code ne sert qu'une fois ;
+  5 codes faux verrouillent 15 minutes.
+- Seuls les IBAN belges valides sont acceptés.
+- Chaque geste laisse une ligne dans `auditLog`, en ajout seul, lisible par
+  l'admin. Les animateurs de la section reçoivent une notification à chaque
+  changement, et l'ancien compte reste affiché 30 jours à côté du nouveau.
+
+L'écran est dans Réglages → Compte de paiement. La logique est dans
+`functions/lib/paymentSecurity.js`, testée par `pnpm test:functions`.
+
+**Téléphone de l'admin perdu.** Le secret de l'app d'authentification est dans
+`paymentSecurity/{uid}`, illisible depuis l'app. Pour repartir de zéro, le
+propriétaire du projet supprime ce document dans la console Firebase ; l'admin
+relie ensuite une nouvelle app depuis l'écran. Tant que ce n'est pas fait, le
+compte de paiement en place continue de fonctionner, il ne peut simplement
+plus être changé.
+
+## Rappels de boulots
+
+Sur un boulot programmé incomplet, un animateur voit « À relancer » et un
+bouton « Envoyer un rappel ». La fonction `sendJobReminder` recalcule côté
+serveur qui n'a pas répondu (ni inscrit, ni « ne peut pas », ni déjà pris ce
+jour-là), puis envoie une notification et un mail aux comptes reliés à ces
+membres. Un rappel par heure et par section au plus. La logique est dans
+`functions/lib/jobReminder.js`.
+
+**Mails.** La fonction ne parle à aucun serveur de messagerie : elle dépose
+un document par destinataire dans la collection `mail`. C'est l'extension
+Firebase « Trigger Email from Firestore » qui les envoie. À installer une fois
+depuis la console Firebase → Extensions :
+
+- collection des mails : `mail` ;
+- région : `europe-west1` ;
+- adresse d'expédition et serveur SMTP : par exemple Gmail, avec un mot de
+  passe d'application (compte Google → Sécurité → Validation en deux étapes →
+  Mots de passe des applications). L'extension range ce mot de passe dans
+  Secret Manager ; il n'est jamais dans le dépôt.
+
+Tant que l'extension n'est pas installée, les notifications partent et les
+mails restent en attente dans `mail`, sans erreur. Les règles Firestore
+interdisent à l'app d'écrire dans `mail` : personne ne peut envoyer un mail
+au nom du patro depuis un navigateur.

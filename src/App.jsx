@@ -1120,7 +1120,7 @@ const eligible = [
 
 
 
-  const SETTINGS_SCREENS = ['settings-password', 'settings', 'settings-surprise', 'settings-bar-threshold', 'settings-products', 'settings-stock', 'settings-rate', 'settings-history', 'settings-goal', 'settings-popular', 'settings-report', 'settings-close-season', 'settings-repair-balances', 'settings-duplicates', 'settings-accounts'];
+  const SETTINGS_SCREENS = ['settings-password', 'settings', 'settings-surprise', 'settings-bar-threshold', 'settings-products', 'settings-stock', 'settings-rate', 'settings-history', 'settings-goal', 'settings-popular', 'settings-report', 'settings-close-season', 'settings-repair-balances', 'settings-duplicates', 'settings-accounts', 'settings-payment'];
 
   if (!canManage && !ANIME_SCREENS.includes(currentScreen)) return null;
   if (!barEnabled && BAR_SCREENS.includes(currentScreen)) return null;
@@ -2675,6 +2675,7 @@ const eligible = [
         sharedJobs={sharedJobs}
         sharedSeasonId={sharedSeasonId}
         sectionId={sectionId}
+        seasonId={viewedSeasonId}
         broPhotos={broPhotos}
       />
     );
