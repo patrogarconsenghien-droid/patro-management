@@ -91,6 +91,23 @@ test("QR de rechargement : pas de montant, la communication du membre", async ()
   assert.equal(lines[9], code.communication);
 });
 
+test("QR de remboursement : le montant de la dette est proposé, la communication ne change pas", async () => {
+  await reset();
+  const m1 = { memberPath: `${G}members/m1` };
+  const free = await memberCodes.getMemberCode(db, as("anim"), m1);
+  const debt = await memberCodes.getMemberCode(db, as("anim"), { ...m1, amountCents: 1250 });
+  assert.equal(debt.communication, free.communication);
+  assert.equal(debt.amountCents, 1250);
+  assert.equal(debt.qrPayload.split("\n")[7], "EUR12.50");
+  assert.equal(free.amountCents, null);
+
+  for (const bad of [0, -5, 12.5, 100_001, "1250"]) {
+    await rejects(memberCodes.getMemberCode(db, as("anim"), { ...m1, amountCents: bad }), "bad-amount");
+  }
+  // Le lien public du membre, lui, reste à montant libre.
+  assert.equal((await publicPage.getPublicPage(db, { token: free.token })).amountCents, null);
+});
+
 test("qui peut afficher un code", async () => {
   await reset();
   const m1 = { memberPath: `${G}members/m1` };

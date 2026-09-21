@@ -9,7 +9,16 @@ import { payUrl, renderQr } from '../lib/payLink';
  * communication : il verse ce qu'il veut, et le montant arrive sur son compte.
  * Le code est créé par le serveur à la première demande, et ne change plus.
  */
-export default function MemberPayCode({ memberPath, memberName }) {
+const euros = (cents) =>
+  new Intl.NumberFormat('fr-BE', { style: 'currency', currency: 'EUR' }).format(cents / 100);
+
+/** « 12,5 » ou « 12.50 » → 1250 ; null si vide ou invalide. */
+const toCents = (text) => {
+  const value = Math.round(parseFloat(String(text || '').replace(',', '.')) * 100);
+  return Number.isInteger(value) && value >= 1 ? value : null;
+};
+
+export default function MemberPayCode({ memberPath, memberName, amount = '' }) {
   const [code, setCode] = useState(null);
   const [qr, setQr] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -17,11 +26,16 @@ export default function MemberPayCode({ memberPath, memberName }) {
   const [fullscreen, setFullscreen] = useState(false);
   const [copied, setCopied] = useState(null);
 
+  const wanted = toCents(amount);
+  const outdated = code && (code.amountCents ?? null) !== wanted;
+
   const load = async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await httpsCallable(functions, 'getMemberPaymentCode')({ memberPath });
+      // Le montant saisi dans la fenêtre (une dette à rembourser) est proposé
+      // dans le QR ; sans montant, l'app bancaire le demande au membre.
+      const { data } = await httpsCallable(functions, 'getMemberPaymentCode')({ memberPath, amountCents: wanted });
       setCode(data);
       setQr(await renderQr(data.qrPayload, 560));
     } catch (caught) {
@@ -62,7 +76,8 @@ export default function MemberPayCode({ memberPath, memberName }) {
         <img src={qr} alt="QR de rechargement" className="w-full max-w-md" />
         <p className="font-display text-2xl font-extrabold text-gray-900">{memberName}</p>
         <p className="font-mono text-lg text-gray-900">{code.communication}</p>
-        <p className="text-sm text-gray-500">Scanne, choisis ton montant · touche pour fermer</p>
+        {code.amountCents && <p className="font-display text-3xl font-extrabold text-gray-900">{euros(code.amountCents)}</p>}
+        <p className="text-sm text-gray-500">{code.amountCents ? 'Scanne avec ton app bancaire' : 'Scanne, choisis ton montant'} · touche pour fermer</p>
       </button>
     );
   }
@@ -76,7 +91,7 @@ export default function MemberPayCode({ memberPath, memberName }) {
           className="w-full p-3 rounded-xl bg-bar-500 text-white font-semibold flex items-center justify-center gap-2 disabled:opacity-60 active:scale-95 transition-transform"
         >
           <QrCode size={18} />
-          {loading ? 'Préparation…' : 'Recharger par virement'}
+          {loading ? 'Préparation…' : wanted ? `QR de virement pour ${euros(wanted)}` : 'QR de virement, montant libre'}
         </button>
         {error && <p className="mt-2 text-sm text-red-700 bg-red-50 rounded-xl p-3" role="alert">{error}</p>}
       </div>
@@ -86,9 +101,20 @@ export default function MemberPayCode({ memberPath, memberName }) {
   return (
     <div className="rounded-2xl ring-1 ring-gray-200 p-3 space-y-3">
       <p className="text-sm text-gray-700">
-        <strong>{memberName}</strong> verse le montant qu'il veut avec <strong>sa</strong> communication, toujours la même.
-        Ce qui arrive sur le compte est ajouté à son solde.
+        {code.amountCents
+          ? <>Ce QR propose <strong>{euros(code.amountCents)}</strong> à <strong>{memberName}</strong>, avec <strong>sa</strong> communication, toujours la même.</>
+          : <><strong>{memberName}</strong> verse le montant qu'il veut avec <strong>sa</strong> communication, toujours la même.</>}
+        {' '}Ce qui arrive sur le compte est ajouté à son solde.
       </p>
+      {outdated && (
+        <button
+          onClick={load}
+          disabled={loading}
+          className="w-full p-2.5 rounded-xl bg-yellow-400 text-yellow-950 text-sm font-bold disabled:opacity-60 active:scale-95 transition-transform"
+        >
+          {loading ? 'Préparation…' : wanted ? `Refaire le QR pour ${euros(wanted)}` : 'Refaire le QR à montant libre'}
+        </button>
+      )}
       {qr && (
         <button onClick={() => setFullscreen(true)} className="block mx-auto" aria-label="Afficher le QR en plein écran">
           <img src={qr} alt="QR de rechargement" width="200" height="200" className="rounded-xl ring-1 ring-gray-200" />

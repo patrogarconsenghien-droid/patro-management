@@ -41,20 +41,29 @@ async function requireSettings(db, sectionId) {
 
 const codeRef = (db, sectionId, memberId) => db.doc(`paymentCodes/${sectionId}_${memberId}`);
 
-const describe = (code, settings) => ({
+// Un QR peut proposer un montant (une dette à rembourser) : c'est une
+// suggestion, le membre reste libre de verser autre chose, et c'est toujours le
+// montant réellement reçu qui est crédité.
+const MAX_SUGGESTED_CENTS = 100_000;
+
+const describe = (code, settings, amountCents = null) => ({
   memberName: code.memberName,
   sectionLabel: SECTIONS[code.sectionId],
   token: code.token,
   holderName: settings.holderName,
   iban: formatIban(settings.iban),
   communication: formatCommunication(code.communication),
-  // Pas de montant : l'app bancaire le demande au payeur.
-  qrPayload: buildEpcPayload({ holderName: settings.holderName, iban: settings.iban, communication: code.communication }),
+  amountCents,
+  // Sans montant, l'app bancaire le demande au payeur.
+  qrPayload: buildEpcPayload({ holderName: settings.holderName, iban: settings.iban, amountCents, communication: code.communication }),
 });
 
 /** Le code d'un membre, créé à la première demande. */
-async function getMemberCode(db, auth, { memberPath } = {}) {
+async function getMemberCode(db, auth, { memberPath, amountCents = null } = {}) {
   if (!auth || !auth.uid) throw new PaymentError("unauthenticated", "signed-out", "Connexion requise.");
+  if (amountCents !== null && !(Number.isInteger(amountCents) && amountCents >= 1 && amountCents <= MAX_SUGGESTED_CENTS)) {
+    throw new PaymentError("invalid-argument", "bad-amount", `Le montant doit être entre 0,01 et ${MAX_SUGGESTED_CENTS / 100} €.`);
+  }
   const member = parseSeasonDoc(memberPath, "members");
   const actor = await requireSectionMember(db, auth, member.sectionId);
   const settings = await requireSettings(db, member.sectionId);
@@ -90,7 +99,7 @@ async function getMemberCode(db, auth, { memberPath } = {}) {
     return created;
   });
 
-  return describe(code, settings);
+  return describe(code, settings, amountCents);
 }
 
 /** Page publique d'un code de membre, à partir du jeton de son lien. Null si inconnu. */
@@ -99,7 +108,7 @@ async function getMemberPage(db, token) {
   if (snap.empty) return null;
   const code = snap.docs[0].data();
   const settings = await requireSettings(db, code.sectionId);
-  const { token: _token, ...page } = describe(code, settings);
+  const { token: _token, amountCents: _amount, ...page } = describe(code, settings);
   return { status: "open", kind: "member", label: `Compte bar · ${code.memberName}`, amountCents: null, lines: [], ...page };
 }
 

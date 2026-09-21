@@ -1596,20 +1596,21 @@ const eligible = [
                   const realBalance = openingBalanceOf(selectedMember) + totalRecharged - totalSpent;
 
                   return (
-                    <p>Solde actuel: <strong className={realBalance < 0 ? 'text-red-500' : 'text-green-500'}>
-                      {formatCurrency(realBalance)}
-                    </strong></p>
+                    <>
+                      <p>Solde actuel: <strong className={realBalance < 0 ? 'text-red-500' : 'text-green-500'}>
+                        {formatCurrency(realBalance)}
+                      </strong></p>
+                      {realBalance < -0.005 && (
+                        <button
+                          onClick={() => setRepaymentAmount(Math.abs(realBalance).toFixed(2))}
+                          className="text-sm font-semibold text-bar-700 underline underline-offset-2"
+                        >
+                          Rembourser toute la dette : {formatCurrency(Math.abs(realBalance))}
+                        </button>
+                      )}
+                    </>
                   );
                 })()}
-
-                {/* Par virement : le membre verse ce qu'il veut avec SA communication. */}
-                <MemberPayCode
-                  key={selectedMember.id}
-                  memberPath={docRef(db, viewedSeasonId, 'members', selectedMember.id, sectionId).path}
-                  memberName={selectedMember.name}
-                />
-
-                <p className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-1">Ou encoder un paiement reçu</p>
 
                 <div>
                   <label className="block text-sm font-medium mb-1">Montant</label>
@@ -1622,6 +1623,17 @@ const eligible = [
                     className="w-full p-3 border rounded-lg"
                   />
                 </div>
+
+                {/* Par virement : un QR avec la communication du membre, et le
+                    montant ci-dessus s'il y en a un. */}
+                <MemberPayCode
+                  key={selectedMember.id}
+                  memberPath={docRef(db, viewedSeasonId, 'members', selectedMember.id, sectionId).path}
+                  memberName={selectedMember.name}
+                  amount={repaymentAmount}
+                />
+
+                <p className="text-xs font-bold uppercase tracking-wide text-gray-500 pt-1">Ou encoder un paiement déjà reçu</p>
 
                 <div>
                   <label className="block text-sm font-medium mb-2">Mode de paiement</label>
