@@ -204,17 +204,23 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [], members 
   const [memberId, setMemberId] = useState('');
   const [barAmount, setBarAmount] = useState('');
   const [openId, setOpenId] = useState(null);
+  // La demande qu'on vient de créer, telle que le serveur l'a renvoyée : le QR
+  // s'ouvre tout de suite, sans attendre que la liste se mette à jour.
+  const [justCreated, setJustCreated] = useState(null);
+  const [listError, setListError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
 
   useEffect(() => onSnapshot(
     query(collection(db, 'paymentRequests'), where('sectionId', '==', sectionId)),
-    (snapshot) => setRequests(
+    (snapshot) => { setListError(false); setRequests(
       snapshot.docs
         .map((d) => ({ id: d.id, ...d.data() }))
         .sort((a, b) => (b.createdAt?.toMillis?.() || Date.now()) - (a.createdAt?.toMillis?.() || Date.now()))
-    ),
-    (readError) => { console.error('Lecture des demandes de paiement impossible:', readError); setRequests([]); }
+    ); },
+    // Ne jamais faire passer un refus de lecture pour une liste vide : des
+    // demandes existent peut-être, et leurs boulots sont réservés.
+    (readError) => { console.error('Lecture des demandes de paiement impossible:', readError); setListError(true); setRequests([]); }
   ), [sectionId]);
 
   // Boulots faits, non payés, sans demande en cours, regroupés par client.
@@ -245,7 +251,8 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [], members 
 
   const selected = jobs.filter((job) => selectedJobs.has(job.id));
   const selectedTotal = selected.reduce((sum, job) => sum + Number(job.total), 0);
-  const opened = requests?.find((r) => r.id === openId) || null;
+  const opened = requests?.find((r) => r.id === openId)
+    || (justCreated?.id === openId ? justCreated : null);
 
   // Cocher un boulot ou un client coche toutes ses lignes d'un coup.
   const toggleGroup = (group) => setSelectedJobs((current) => {
@@ -271,6 +278,19 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [], members 
       payerName: clients.length === 1 ? clients[0] : '',
       payerPhone: clients.length === 1 ? (first.contactPhone || '') : ''
     });
+    setJustCreated({
+      ...created,
+      status: 'pending',
+      kind: 'jobs',
+      label: clients.length === 1 ? `Boulots · ${clients[0]}` : (selected[0]?.description || 'Boulots'),
+      targets: selected.map((job) => ({
+        path: job.id,
+        description: job.description,
+        broName: job.broName,
+        date: job.date,
+        amountCents: Math.round(Number(job.total) * 100)
+      }))
+    });
     setSelectedJobs(new Set());
     setOpenId(created.id);
   });
@@ -282,6 +302,8 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [], members 
       memberPath: docRef(db, seasonId, 'members', memberId, sectionId).path,
       amountCents
     });
+    const member = members.find((m) => m.id === memberId);
+    setJustCreated({ ...created, status: 'pending', kind: 'bar', label: `Compte bar · ${member?.name || ''}`, targets: [] });
     setMemberId('');
     setBarAmount('');
     setOpenId(created.id);
@@ -397,7 +419,14 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [], members 
         <section>
           <h2 className="font-display text-lg font-bold mb-2">Demandes</h2>
           {requests === null && <p className="text-sm text-gray-500">Chargement…</p>}
-          {requests?.length === 0 && (
+          {listError && (
+            <p className="text-sm text-red-700 bg-red-50 rounded-2xl p-4" role="alert">
+              L'app n'a pas le droit de lire les demandes de paiement : les règles Firestore publiées ne sont pas à
+              jour. Les demandes déjà créées existent bien et réapparaîtront ici dès que l'admin aura publié les
+              nouvelles règles.
+            </p>
+          )}
+          {!listError && requests?.length === 0 && (
             <p className="text-sm text-gray-500 bg-white rounded-2xl ring-1 ring-gray-200 p-4">Aucune demande pour l'instant.</p>
           )}
           {requests?.length > 0 && (
