@@ -207,3 +207,6 @@ Object.assign(exports, require("./payments"));
 
 // Rappel d'un boulot : notification et mail à ceux qui n'ont pas répondu.
 Object.assign(exports, require("./reminders"));
+
+// Demandes de paiement : communication structurée, QR, page publique.
+Object.assign(exports, require("./paymentRequests"));

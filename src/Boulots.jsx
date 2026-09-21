@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import NotificationPrompt from './components/NotificationPrompt';
 import {
-  BarChart3, BellRing, Calendar, CheckCircle, Clock, Euro, MapPin, Minus, Pencil, Phone, Plus, Settings, Trash2, User, Wrench
+  BarChart3, BellRing, Calendar, CheckCircle, Clock, Euro, MapPin, Minus, Pencil, Phone, Plus, QrCode, Settings, Trash2, User, Wrench
 } from 'lucide-react';
 import BroAvatar from './components/BroAvatar';
 import PhotoPicker from './components/PhotoPicker';
@@ -537,6 +537,9 @@ ${job.registeredBros.map(reg => {
         isPaid: false,
         paymentMethod: null,
         originalScheduledJobId: jobId,
+        contactName: (job.contactName || '').trim(),
+        contactPhone: (job.contactPhone || '').trim(),
+        location: (job.location || '').trim(),
         isPartialCompletion: isPartial,
         originalBrosNeeded: job.brosNeeded,
         actualBrosUsed: job.registeredBros.length
@@ -656,6 +659,19 @@ ${job.registeredBros.map(reg => {
           </button>
 
           {canManage && (<>
+          <button
+            onClick={() => navigateTo('payments')}
+            className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"
+          >
+            <div className="flex items-center space-x-3">
+              <QrCode className="text-green-500" size={24} />
+              <div className="text-left">
+                <h3 className="font-semibold">Paiements par QR</h3>
+                <p className="text-gray-600 text-sm">Faire payer un client par virement, suivre les paiements</p>
+              </div>
+            </div>
+          </button>
+
           <button
             onClick={() => navigateTo('boulots-new')}
             className="w-full p-4 bg-white rounded-lg shadow-md active:scale-95 transition-transform"

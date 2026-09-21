@@ -232,6 +232,21 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Demandes de paiement : créées, annulées et soldées par le serveur
+    // uniquement. Une demande fixe un montant et une communication : les
+    // modifier depuis l'app permettrait de maquiller un paiement. Les
+    // animateurs lisent celles de leur section ; le client, lui, passe par la
+    // fonction getPaymentPage avec le jeton de son lien.
+    match /paymentRequests/{request} {
+      allow read: if isManagerOf(resource.data.sectionId);
+      allow write: if false;
+    }
+
+    // Compteurs des communications structurées.
+    match /paymentCounters/{counter} {
+      allow read, write: if false;
+    }
+
     // File d'attente des mails (rappels de boulots), écrite par le serveur et
     // vidée par l'extension « Trigger Email ». Y écrire depuis l'app permettrait
     // d'envoyer n'importe quel mail au nom du patro.

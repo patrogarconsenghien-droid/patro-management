@@ -338,6 +338,32 @@ await ko('admin n\'écrit pas dans le journal', setDoc(doc(as(ADMIN), 'auditLog'
 await ko('admin ne réécrit pas le journal', updateDoc(doc(as(ADMIN), 'auditLog', 'a1'), { type: 'rien' }));
 await ko('admin n\'efface pas le journal', deleteDoc(doc(as(ADMIN), 'auditLog', 'a1')));
 
+// --- demandes de paiement : lecture par section, aucune écriture depuis l'app ---
+await env.withSecurityRulesDisabled(async (ctx) => {
+  const db = ctx.firestore();
+  await setDoc(doc(db, 'paymentRequests', 'rg'), { sectionId: 'garcons', status: 'pending', amountCents: 4500, communication: '261000000108', token: 'tok-g' });
+  await setDoc(doc(db, 'paymentRequests', 'rf'), { sectionId: 'filles', status: 'pending', amountCents: 1000, communication: '262000000197', token: 'tok-f' });
+  await setDoc(doc(db, 'paymentCounters', 'garcons-2026'), { last: 1 });
+});
+const ofSection = (db, sec) => query(collection(db, 'paymentRequests'), where('sectionId', '==', sec));
+
+await ok('animateur liste les demandes de sa section', getDocs(ofSection(as(ANIMATEUR), 'garcons')));
+await ko('animateur ne liste pas celles de l\'autre section', getDocs(ofSection(as(ANIMATEUR), 'filles')));
+await ko('animateur ne liste pas tout sans filtre', getDocs(collection(as(ANIMATEUR), 'paymentRequests')));
+await ok('animatrice liste celles des filles', getDocs(ofSection(as(FILLE_ANIM), 'filles')));
+await ok('admin lit une demande des filles', getDoc(doc(as(ADMIN), 'paymentRequests', 'rf')));
+await ko('animé ne lit pas les demandes', getDocs(ofSection(as(ANIME), 'garcons')));
+await ko('anonyme ne lit pas une demande', getDoc(doc(anonymous(), 'paymentRequests', 'rg')));
+
+await ko('animateur ne crée pas de demande depuis l\'app',
+  setDoc(doc(as(ANIMATEUR), 'paymentRequests', 'fausse'), { sectionId: 'garcons', status: 'pending', amountCents: 1, communication: '261000000108' }));
+await ko('animateur ne baisse pas un montant', updateDoc(doc(as(ANIMATEUR), 'paymentRequests', 'rg'), { amountCents: 1 }));
+await ko('animateur ne marque pas payé depuis l\'app', updateDoc(doc(as(ANIMATEUR), 'paymentRequests', 'rg'), { status: 'paid' }));
+await ko('admin ne marque pas payé depuis l\'app', updateDoc(doc(as(ADMIN), 'paymentRequests', 'rg'), { status: 'paid' }));
+await ko('admin ne supprime pas une demande', deleteDoc(doc(as(ADMIN), 'paymentRequests', 'rg')));
+await ko('personne ne lit les compteurs', getDoc(doc(as(ADMIN), 'paymentCounters', 'garcons-2026')));
+await ko('personne ne remet un compteur à zéro', setDoc(doc(as(ADMIN), 'paymentCounters', 'garcons-2026'), { last: 0 }));
+
 // --- mails : personne n'envoie de mail au nom du patro depuis l'app ---
 const FAKE_MAIL = { to: ['victime@example.org'], message: { subject: 'Faux', text: 'Faux' } };
 await ko('animé ne dépose pas de mail', setDoc(doc(as(ANIME), 'mail', 'm1'), FAKE_MAIL));

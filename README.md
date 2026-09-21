@@ -113,3 +113,30 @@ Tant que l'extension n'est pas installée, les notifications partent et les
 mails restent en attente dans `mail`, sans erreur. Les règles Firestore
 interdisent à l'app d'écrire dans `mail` : personne ne peut envoyer un mail
 au nom du patro depuis un navigateur.
+
+## Paiements : demandes et QR
+
+Boulots → « Paiements par QR » (animateurs). On coche un ou plusieurs boulots
+faits d'un même client, ou on choisit un membre du bar et un montant : le
+serveur crée une demande de paiement.
+
+- **Communication structurée belge**, unique par demande : `AA S NNNNNNN` plus
+  la clé modulo 97. `AA` est l'année, `S` la section (1 Brothers, 2 Grandes),
+  `N` un compteur. Code dans `functions/lib/ogm.js`.
+- **QR de virement SEPA** (EPC069-12 version 2), selon le guide Febelfin : la
+  communication va dans la remittance structurée, au format
+  `+++123/1234/12345+++`. Code dans `functions/lib/epcQr.js`. Le contenu du QR
+  vient toujours du serveur, à partir de `paymentSettings` ; l'app ne fait que
+  le dessiner.
+- **Lien public** `https://patro-management.vercel.app/payer/<jeton>`, ouvert
+  sans compte. Le jeton fait 128 bits. La page ne montre que le montant, le
+  détail des boulots, le compte et la communication ; elle passe d'elle-même à
+  « reçu ». `vercel.json` renvoie `/payer/*` vers l'app.
+- **Une demande ne change plus** une fois créée. Pour corriger, on l'annule et
+  on en crée une autre. Les règles Firestore interdisent toute écriture sur
+  `paymentRequests` depuis l'app.
+- **Paiement reçu** : en attendant le rapprochement bancaire automatique, un
+  animateur marque « j'ai vu le virement », ce qui laisse une ligne dans
+  `auditLog`. Boulots : payés par virement, le surplus devient un pourboire,
+  noté sur le boulot et encodé en rentrée. Compte bar : tout le montant reçu
+  est crédité. `settleRequest` servira tel quel au rapprochement automatique.

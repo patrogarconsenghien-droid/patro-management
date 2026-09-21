@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/payer/:token",
+      "destination": "/index.html"
+    },
+    {
       "source": "/__/auth/:path*",
       "destination": "https://patro-management-2024.firebaseapp.com/__/auth/:path*"
     },

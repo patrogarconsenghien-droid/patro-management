@@ -4,7 +4,7 @@
   "scripts": {
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
-    "test": "node --test test/totp.test.js test/iban.test.js"
+    "test": "node --test test/totp.test.js test/iban.test.js test/ogm-epc.test.js"
   },
   "engines": {
     "node": "22"

@@ -15,6 +15,7 @@ import { useSeasons } from './hooks/useSeasons';
 import HomeScreen from './Home';
 import SettingsScreen from './Settings';
 import BoulotsScreen from './Boulots';
+import PaymentsScreen from './Payments';
 import { formatCurrency, formatDate, formatDateTime, openingBalanceOf } from './lib/format';
 import { computeMemberBalances } from './lib/seasonRollover';
 import { celebrate, toast } from './lib/feedback';
@@ -1124,6 +1125,20 @@ const eligible = [
 
   if (!canManage && !ANIME_SCREENS.includes(currentScreen)) return null;
   if (!barEnabled && BAR_SCREENS.includes(currentScreen)) return null;
+
+  if (currentScreen === 'payments') {
+    return (
+      <PaymentsScreen
+        Header={Header}
+        navigateTo={navigateTo}
+        sectionId={sectionId}
+        seasonId={viewedSeasonId}
+        jobs={jobs}
+        members={members}
+        barEnabled={barEnabled}
+      />
+    );
+  }
 
   if (currentScreen === 'home') {
     // Chiffres des tuiles d'accueil, calculés comme dans la section Bar.
