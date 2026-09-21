@@ -17,6 +17,20 @@ const STATUS = {
 };
 
 const euros = (cents) => formatCurrency((cents || 0) / 100);
+
+/** Une ligne par boulot : un boulot fait à dix est enregistré en dix lignes. */
+const mergeTargets = (targets = []) => {
+  const merged = new Map();
+  targets.forEach((target) => {
+    const description = String(target.description || '').replace(/\s*\(PARTIEL [^)]*\)\s*$/, '').trim();
+    const key = `${target.date}|${description.toLowerCase()}`;
+    if (!merged.has(key)) merged.set(key, { key, description, amountCents: 0, names: [] });
+    const line = merged.get(key);
+    line.amountCents += target.amountCents;
+    if (target.broName) line.names.push(target.broName);
+  });
+  return [...merged.values()];
+};
 const call = async (name, data) => (await httpsCallable(functions, name)(data)).data;
 const messageOf = (error) =>
   error?.details?.reason ? error.message : 'Ça n\'a pas marché. Vérifie ta connexion et réessaie.';
@@ -116,10 +130,15 @@ const RequestDetail = ({ request, onClose }) => {
 
       {request.kind === 'jobs' && (
         <ul className="text-sm text-gray-700 divide-y divide-gray-100">
-          {request.targets.map((target) => (
-            <li key={target.path} className="py-1.5 flex justify-between gap-3">
-              <span className="min-w-0 truncate">{target.description}{target.broName ? ` · ${target.broName}` : ''}</span>
-              <span className="font-mono flex-none">{euros(target.amountCents)}</span>
+          {mergeTargets(request.targets).map((line) => (
+            <li key={line.key} className="py-1.5 flex justify-between gap-3">
+              <span className="min-w-0">
+                <span className="block truncate">{line.description}</span>
+                <span className="block text-xs text-gray-500 truncate">
+                  {line.names.length > 1 ? `${line.names.length} participants : ${line.names.join(', ')}` : line.names[0]}
+                </span>
+              </span>
+              <span className="font-mono flex-none">{euros(line.amountCents)}</span>
             </li>
           ))}
         </ul>
@@ -199,6 +218,8 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [], members 
   ), [sectionId]);
 
   // Boulots faits, non payés, sans demande en cours, regroupés par client.
+  // Un boulot fait à plusieurs est enregistré en une ligne par participant :
+  // ici il redevient UN boulot, avec son total et une seule case à cocher.
   const groups = useMemo(() => {
     const byClient = new Map();
     jobs
@@ -207,21 +228,26 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [], members 
       .forEach((job) => {
         const name = (job.contactName || '').trim();
         const key = name ? name.toLowerCase() : '';
-        if (!byClient.has(key)) byClient.set(key, { key, name, phone: job.contactPhone || '', jobs: [] });
-        byClient.get(key).jobs.push(job);
+        if (!byClient.has(key)) byClient.set(key, { key, name, phone: job.contactPhone || '', jobs: [], works: new Map() });
+        const group = byClient.get(key);
+        group.jobs.push(job);
+
+        // Même boulot programmé, ou à défaut même jour et même intitulé.
+        const base = String(job.description || '').replace(/\s*\(PARTIEL [^)]*\)\s*$/, '').trim();
+        const workKey = job.originalScheduledJobId || `${job.date}|${base.toLowerCase()}`;
+        if (!group.works.has(workKey)) group.works.set(workKey, { key: workKey, description: base, date: job.date, jobs: [] });
+        group.works.get(workKey).jobs.push(job);
       });
-    return [...byClient.values()].sort((a, b) => (a.key === '') - (b.key === '') || a.key.localeCompare(b.key));
+    return [...byClient.values()]
+      .map((group) => ({ ...group, works: [...group.works.values()] }))
+      .sort((a, b) => (a.key === '') - (b.key === '') || a.key.localeCompare(b.key));
   }, [jobs]);
 
   const selected = jobs.filter((job) => selectedJobs.has(job.id));
   const selectedTotal = selected.reduce((sum, job) => sum + Number(job.total), 0);
   const opened = requests?.find((r) => r.id === openId) || null;
 
-  const toggle = (jobId) => setSelectedJobs((current) => {
-    const next = new Set(current);
-    if (next.has(jobId)) next.delete(jobId); else next.add(jobId);
-    return next;
-  });
+  // Cocher un boulot ou un client coche toutes ses lignes d'un coup.
   const toggleGroup = (group) => setSelectedJobs((current) => {
     const ids = group.jobs.map((job) => job.id);
     const all = ids.every((id) => current.has(id));
@@ -287,28 +313,36 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [], members 
                   <button onClick={() => toggleGroup(group)} className="w-full px-4 py-2.5 flex items-center justify-between gap-3 bg-gray-100 text-left">
                     <span className="font-semibold truncate">{group.name || 'Sans client indiqué'}</span>
                     <span className="text-xs text-gray-600 flex-none">
-                      {group.jobs.length} boulot{group.jobs.length > 1 ? 's' : ''} · tout cocher
+                      {group.works.length} boulot{group.works.length > 1 ? 's' : ''} · tout cocher
                     </span>
                   </button>
                   <ul className="divide-y divide-gray-100">
-                    {group.jobs.map((job) => (
-                      <li key={job.id}>
-                        <label className="flex items-center gap-3 px-4 py-2.5">
-                          <input
-                            id={`job-${job.id}`}
-                            type="checkbox"
-                            checked={selectedJobs.has(job.id)}
-                            onChange={() => toggle(job.id)}
-                            className="w-5 h-5 flex-none"
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block font-medium truncate">{job.description}</span>
-                            <span className="block text-xs text-gray-500">{formatDate(job.date)} · {job.broName}</span>
-                          </span>
-                          <span className="font-mono text-sm flex-none">{formatCurrency(Number(job.total))}</span>
-                        </label>
-                      </li>
-                    ))}
+                    {group.works.map((work) => {
+                      const ids = work.jobs.map((job) => job.id);
+                      const checked = ids.every((id) => selectedJobs.has(id));
+                      const total = work.jobs.reduce((sum, job) => sum + Number(job.total), 0);
+                      const names = work.jobs.map((job) => job.broName).filter(Boolean);
+                      return (
+                        <li key={work.key}>
+                          <label className="flex items-center gap-3 px-4 py-2.5">
+                            <input
+                              id={`work-${work.key}`}
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleGroup(work)}
+                              className="w-5 h-5 flex-none"
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-medium truncate">{work.description}</span>
+                              <span className="block text-xs text-gray-500 truncate">
+                                {formatDate(work.date)} · {names.length > 1 ? `${names.length} participants : ${names.join(', ')}` : names[0]}
+                              </span>
+                            </span>
+                            <span className="font-mono text-sm flex-none">{formatCurrency(total)}</span>
+                          </label>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               ))}

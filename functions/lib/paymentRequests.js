@@ -14,7 +14,8 @@ const { formatIban } = require("./iban");
 
 const SECTIONS = { garcons: "Brothers", filles: "Grandes" };
 const DEFAULT_SECTION = "garcons";
-const MAX_JOBS_PER_REQUEST = 20;
+// Une ligne par participant : un gros boulot à quinze en fait quinze à lui seul.
+const MAX_JOBS_PER_REQUEST = 150;
 const BAR_MIN_CENTS = 100;
 const BAR_MAX_CENTS = 50_000;
 
@@ -302,6 +303,21 @@ async function settleRequest(db, requestId, { receivedCents, source, nowMs = Dat
   });
 }
 
+/**
+ * Une ligne par boulot pour le client : un boulot fait à dix est enregistré en
+ * dix lignes, une par participant, qu'il n'a pas à voir.
+ */
+function mergeLines(targets) {
+  const merged = new Map();
+  for (const target of targets) {
+    const description = String(target.description || "").replace(/\s*\(PARTIEL [^)]*\)\s*$/, "").trim();
+    const key = `${target.date}|${description.toLowerCase()}`;
+    if (!merged.has(key)) merged.set(key, { description, date: target.date, amountCents: 0 });
+    merged.get(key).amountCents += target.amountCents;
+  }
+  return [...merged.values()];
+}
+
 /** Un animateur a vu le virement sur le compte : il marque la demande reçue. */
 async function markReceived(db, auth, { requestId, receivedCents } = {}, opts = {}) {
   if (!auth || !auth.uid) throw new PaymentError("unauthenticated", "signed-out", "Connexion requise.");
@@ -345,9 +361,7 @@ async function getPublicPage(db, { token } = {}) {
     status: request.status,
     sectionLabel: SECTIONS[request.sectionId],
     label: request.kind === "bar" ? request.label : "Boulots du patro",
-    lines: request.kind === "jobs"
-      ? request.targets.map((t) => ({ description: t.description, date: t.date, amountCents: t.amountCents }))
-      : [],
+    lines: request.kind === "jobs" ? mergeLines(request.targets) : [],
     amountCents: request.amountCents,
   };
   if (request.status !== "pending") return page;

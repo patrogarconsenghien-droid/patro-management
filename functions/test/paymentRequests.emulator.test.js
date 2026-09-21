@@ -193,6 +193,32 @@ test("compte bar : tout le montant reçu est crédité", async () => {
   assert.equal((await data(`${G}members/m2`)).balance, 13);
 });
 
+test("boulot fait à dix : dix lignes en base, une seule pour le client", async () => {
+  await reset();
+  const names = ["Tom", "Léo", "Sam", "Ben", "Noa", "Ugo", "Max", "Eli", "Axel", "Théo"];
+  await Promise.all(names.map((name, i) => db.doc(`${G}jobs/team${i}`).set({
+    description: i === 0 ? "Vider le grenier (PARTIEL 10/12)" : "Vider le grenier",
+    broName: name, date: "2026-10-02", total: 30, isPaid: false, originalScheduledJobId: "sj1",
+  })));
+
+  const created = await requests.createJobsRequest(db, as("anim"), {
+    jobPaths: [...names.map((_, i) => `${G}jobs/team${i}`), `${G}jobs/a`],
+  }, at);
+  assert.equal(created.amountCents, 33000);
+  assert.equal((await data(`paymentRequests/${created.id}`)).targets.length, 11);
+
+  const page = await requests.getPublicPage(db, { token: created.token });
+  assert.deepEqual(page.lines, [
+    { description: "Vider le grenier", date: "2026-10-02", amountCents: 30000 },
+    { description: "Tondre la pelouse", date: "2026-10-01", amountCents: 3000 },
+  ]);
+
+  // Payé : les dix lignes le sont, d'un coup.
+  await requests.markReceived(db, as("anim"), { requestId: created.id }, at);
+  const paid = await Promise.all(names.map((_, i) => data(`${G}jobs/team${i}`)));
+  assert.ok(paid.every((job) => job.isPaid && job.paymentMethod === "account"));
+});
+
 test("page publique : le jeton seul, et rien de trop", async () => {
   await reset();
   const created = await requests.createJobsRequest(db, as("anim"), jobsAB, at);
