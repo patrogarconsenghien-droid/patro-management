@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import BroAvatar from './components/BroAvatar';
 import PhotoPicker from './components/PhotoPicker';
+import JobCalendar from './components/JobCalendar';
 import Modal from './components/Modal';
 import HeaderBase from './components/Header';
 import { formatCurrency, formatDate } from './lib/format';
@@ -1086,16 +1087,18 @@ ${job.registeredBros.map(reg => {
               />
             </div>
 
-            {/* Date */}
+            {/* Date : le calendrier montre les boulots déjà programmés, pour
+                proposer au client un jour où l'équipe est libre. */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 📅 Date prévue *
               </label>
-              <input
-                type="date"
+              <JobCalendar
                 value={newScheduledJob.date}
-                onChange={(e) => setNewScheduledJob({ ...newScheduledJob, date: e.target.value })}
-                className="w-full p-3 border rounded-lg"
+                onChange={(date) => setNewScheduledJob({ ...newScheduledJob, date })}
+                jobs={allScheduledJobs}
+                excludeId={editingScheduledJob?.id || null}
+                otherLabel={otherLabel}
               />
             </div>
 
