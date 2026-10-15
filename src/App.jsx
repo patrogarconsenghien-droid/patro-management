@@ -30,6 +30,7 @@ import { db } from './firebase';
 import { DEFAULT_SECTION_ID, docRef } from './lib/seasons';
 import { vocabFor } from './lib/vocab';
 import { useBroPhotos } from './hooks/useBroPhotos';
+import SectionDebts from './components/SectionDebts';
 
 // Écrans accessibles à un animé : l'accueil et les boulots programmés.
 // Le bar sert à passer commande et à consulter ; la finance est en lecture
@@ -96,6 +97,7 @@ const PatroApp = () => {
     barOpenThreshold, setBarOpenThreshold,
     barEnabled, setBarEnabled,
     hourlyRate, setHourlyRate,
+    collectOpenJobsTogether, setCollectOpenJobsTogether,
     surpriseSettings, setSurpriseSettings,
     tripPasswordProtected, setTripPasswordProtected,
     saveToFirebase, updateInFirebase, deleteFromFirebase,
@@ -1442,6 +1444,8 @@ const eligible = [
         setSettingsAuthenticated={setSettingsAuthenticated}
         hourlyRate={hourlyRate}
         setHourlyRate={setHourlyRate}
+        collectOpenJobsTogether={collectOpenJobsTogether}
+        setCollectOpenJobsTogether={setCollectOpenJobsTogether}
         surpriseSettings={surpriseSettings}
         setSurpriseSettings={setSurpriseSettings}
         rarityWeights={rarityWeights}
@@ -2697,6 +2701,7 @@ const eligible = [
         scheduledJobs={scheduledJobs}
         setScheduledJobs={setScheduledJobs}
         hourlyRate={hourlyRate}
+        collectOpenJobsTogether={collectOpenJobsTogether}
         newJob={newJob}
         setNewJob={setNewJob}
         paymentMethod={paymentMethod}
@@ -2911,6 +2916,8 @@ const eligible = [
         <Header title="Section Finance" onBack={() => navigateTo('home')} />
 
         <div className="p-6 space-y-6">
+          {canManage && <SectionDebts sectionId={sectionId} />}
+
           {/* Objectif Financier */}
           {financialGoal.isActive && (
             <div className="bg-gradient-to-r from-purple-100 to-pink-100 rounded-xl shadow-lg p-6 mb-6">

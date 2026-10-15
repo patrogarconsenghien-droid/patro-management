@@ -36,6 +36,7 @@ const BoulotsDomain = ({
   scheduledJobs,
   setScheduledJobs,
   hourlyRate,
+  collectOpenJobsTogether = false,
   isSupported,
   permission,
   requestPermission,
@@ -506,7 +507,7 @@ ${job.registeredBros.map(reg => {
   };
 
   /** Données de la note de frais ; `payment` vient du serveur. */
-  const buildExpenseNote = (job, { lines, rate, billTo }, payment = null, preview = false) => ({
+  const buildExpenseNote = (job, { lines, rate, billTo, collectTogether }, payment = null, preview = false) => ({
     issuedAt: new Date().toISOString(),
     sectionId,
     sectionLabel: SECTIONS[sectionId],
@@ -517,19 +518,22 @@ ${job.registeredBros.map(reg => {
     location: job.location,
     rate,
     lines,
+    collectTogether: Boolean(collectTogether),
     payment,
     preview
   });
 
   /**
-   * Demande de paiement des boulots faits de ma section, et ce qu'il faut pour
-   * la note : QR, IBAN, communication structurée, lien. Tout vient du serveur,
-   * qui seul connaît le compte de réception de la section.
+   * Demande de paiement des boulots faits, et ce qu'il faut pour la note : QR,
+   * IBAN, communication structurée, lien. Tout vient du serveur, qui seul
+   * connaît le compte de réception de la section. Les chemins peuvent inclure
+   * les boulots créés chez l'autre section (encaissement en une fois).
    */
-  const requestPayment = async (jobIds, { billTo, phone }) => {
+  const requestPayment = async (jobPaths, { billTo, phone }) => {
     const call = async (name, data) => (await httpsCallable(functions, name)(data)).data;
     const created = await call('createJobsPaymentRequest', {
-      jobPaths: jobIds.map((id) => docRef(db, seasonId, 'jobs', id, sectionId).path),
+      jobPaths,
+      sectionId,
       payerName: billTo,
       payerPhone: phone
     });
@@ -548,7 +552,7 @@ ${job.registeredBros.map(reg => {
    * venu, combien d'heures chacun, à quel tarif. Avec la note de frais, crée
    * aussi la demande de paiement des boulots de la section.
    */
-  const completeScheduledJob = async (job, { lines, rate, billTo, withNote }) => {
+  const completeScheduledJob = async (job, { lines, rate, billTo, withNote, collectTogether }) => {
     if (!job || job._shared || lines.length === 0) return;
 
     const isPartial = lines.length < job.brosNeeded;
@@ -557,7 +561,7 @@ ${job.registeredBros.map(reg => {
       : job.description;
     const payer = (billTo || job.contactName || '').trim();
 
-    let ownJobIds;
+    let createdJobs;
     try {
       // Chaque boulot fait est créé dans la section du participant : sa part
       // compte dans la caisse de sa section, et ses heures sur son compteur.
@@ -580,14 +584,17 @@ ${job.registeredBros.map(reg => {
           originalBrosNeeded: job.brosNeeded,
           actualBrosUsed: lines.length
         };
-        if (line.sectionId === sectionId) return saveToFirebase('jobs', completedJob);
+        if (line.sectionId === sectionId) {
+          return saveToFirebase('jobs', completedJob)
+            .then((id) => ({ own: true, path: id ? docRef(db, seasonId, 'jobs', id, sectionId).path : null }));
+        }
         return addDoc(collectionRef(db, sharedSeasonId, 'jobs', line.sectionId), {
           ...completedJob,
           crossSectionFrom: sectionId,
           createdAt: serverTimestamp()
-        }).then(() => null);
+        }).then((ref) => ({ own: false, path: ref.path }));
       }));
-      ownJobIds = created.filter(Boolean);
+      createdJobs = created.filter((c) => c.path);
 
       // Heures totales, par incrément : on ne connaît pas le compteur d'un
       // membre de l'autre section.
@@ -619,17 +626,21 @@ ${job.registeredBros.map(reg => {
     // Le boulot est validé ; la demande de paiement peut échouer à part (pas
     // de compte de réception, réseau) : la note s'affiche alors sans QR, et la
     // demande se refait depuis Paiements.
+    // En une fois : la demande reprend aussi les boulots de l'autre section,
+    // et sa part devient une dette envers elle quand le paiement arrive.
+    const together = Boolean(collectTogether) && createdJobs.some((c) => !c.own);
+    const paths = createdJobs.filter((c) => together || c.own).map((c) => c.path);
     let payment = null;
-    if (ownJobIds.length > 0) {
+    if (createdJobs.some((c) => c.own)) {
       try {
-        payment = await requestPayment(ownJobIds, { billTo: payer, phone: (job.contactPhone || '').trim() });
+        payment = await requestPayment(paths, { billTo: payer, phone: (job.contactPhone || '').trim() });
       } catch (error) {
         console.error('Demande de paiement impossible:', error);
         const reason = error?.details?.reason ? error.message : 'Vérifie ta connexion.';
         toast(`Boulot validé, mais QR non créé : ${reason} Refais-le depuis Paiements.`, { tone: 'error', duration: 7000 });
       }
     }
-    setExpenseNote(buildExpenseNote(job, { lines, rate, billTo: payer }, payment));
+    setExpenseNote(buildExpenseNote(job, { lines, rate, billTo: payer, collectTogether: together && Boolean(payment) }, payment));
   };
 
   if (screen === 'boulots') {
@@ -1717,6 +1728,7 @@ ${job.registeredBros.map(reg => {
             bros={bros}
             broPhotos={broPhotos}
             sectionId={sectionId}
+            collectOpenJobsTogether={collectOpenJobsTogether}
             onConfirm={(draft) => completeScheduledJob(validatingJob, draft)}
             onPreview={(draft) => setExpenseNote(buildExpenseNote(validatingJob, draft, null, true))}
             onClose={() => setValidatingJob(null)}
@@ -2158,6 +2170,12 @@ ${job.registeredBros.map(reg => {
                           <button
                             onClick={() => {
                               if (!canManage) return;
+                              // Encaissé par l'autre section : il passe payé quand elle nous verse
+                              // notre part (Finances), pas à la main, sinon il compterait deux fois.
+                              if (!job.isPaid && job.collectedBy) {
+                                toast(`Le client a payé les ${SECTIONS[job.collectedBy] || job.collectedBy}. Confirme leur versement dans Finances.`, { duration: 5000 });
+                                return;
+                              }
                               setSelectedJob(job);
                               setModalType('toggle-job-payment');
                               setShowModal(true);
@@ -2173,6 +2191,8 @@ ${job.registeredBros.map(reg => {
                               <span>
                                 ✅ Payé {job.paymentMethod === 'cash' ? '💵' : job.paymentMethod === 'account' ? '🏦' : ''}
                               </span>
+                            ) : job.collectedBy ? (
+                              `💸 Chez les ${SECTIONS[job.collectedBy] || job.collectedBy}`
                             ) : (
                               '⏳ Non payé'
                             )}

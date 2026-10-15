@@ -4,6 +4,8 @@ import Modal from './Modal';
 import BroAvatar from './BroAvatar';
 import { formatCurrency } from '../lib/format';
 import { vocabFor } from '../lib/vocab';
+import { SECTIONS } from '../auth/account';
+import { otherSectionId } from '../lib/seasons';
 
 const STEP = 0.5;
 const roundHalf = (value) => Math.max(0, Math.round(Number(value) * 2) / 2);
@@ -15,13 +17,16 @@ const hoursLabel = (value) => `${String(value).replace('.', ',')} h`;
  *
  * - `lines` part des inscrits, avec la durée prévue.
  * - On n'ajoute que des membres de sa section : on ne lit pas ceux de l'autre.
- * - `onConfirm({ lines, rate, billTo, withNote })` écrit tout ; `onPreview`
- *   ouvre la note sans rien valider.
+ * - `onConfirm({ lines, rate, billTo, withNote, collectTogether })` écrit
+ *   tout ; `onPreview` ouvre la note sans rien valider.
+ * - `collectTogether` : avec des membres de l'autre section, le client paie
+ *   tout en une fois chez nous (réglage de la section, modifiable ici).
  */
 export default function ValidateJobModal({
-  job, bros = [], broPhotos = {}, sectionId, onConfirm, onPreview, onClose
+  job, bros = [], broPhotos = {}, sectionId, collectOpenJobsTogether = false, onConfirm, onPreview, onClose
 }) {
   const v = vocabFor(sectionId);
+  const otherLabel = SECTIONS[otherSectionId(sectionId)];
   const defaultHours = job.estimatedHours || 1;
   const [lines, setLines] = useState(() =>
     (job.registeredBros || []).map((registration) => {
@@ -38,12 +43,14 @@ export default function ValidateJobModal({
   const [rate, setRate] = useState(String(job.customRate ?? ''));
   const [billTo, setBillTo] = useState(job.contactName || '');
   const [withNote, setWithNote] = useState(true);
+  const [collectTogether, setCollectTogether] = useState(collectOpenJobsTogether);
   const [adding, setAdding] = useState('');
   const [saving, setSaving] = useState(false);
 
   const rateValue = Number(String(rate).replace(',', '.')) || 0;
   const totalHours = lines.reduce((sum, l) => sum + l.hours, 0);
   const total = totalHours * rateValue;
+  const otherTotal = lines.filter((l) => l.sectionId !== sectionId).reduce((sum, l) => sum + l.hours, 0) * rateValue;
   const invalid = lines.length === 0 || lines.some((l) => !(l.hours > 0)) || !(rateValue > 0);
 
   const addable = useMemo(
@@ -65,7 +72,7 @@ export default function ValidateJobModal({
     setAdding('');
   };
 
-  const payload = () => ({ lines, rate: rateValue, billTo: billTo.trim(), withNote });
+  const payload = () => ({ lines, rate: rateValue, billTo: billTo.trim(), withNote, collectTogether: collectTogether && otherTotal > 0 });
 
   const confirm = async () => {
     if (invalid || saving) return;
@@ -189,6 +196,26 @@ export default function ValidateJobModal({
                   className="mt-1 w-full p-2.5 rounded-xl border"
                 />
               </label>
+              {otherTotal > 0 && (
+                <div className="text-sm space-y-1.5">
+                  <p className="text-gray-600">Part des {otherLabel} : {formatCurrency(otherTotal)}</p>
+                  {[
+                    { value: true, label: 'Le client paie tout ici', detail: `un seul QR ; on doit ${formatCurrency(otherTotal)} aux ${otherLabel}` },
+                    { value: false, label: 'Chaque section demande sa part', detail: `les ${otherLabel} envoient leur propre demande` }
+                  ].map((option) => (
+                    <label key={String(option.value)} className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="collect-together"
+                        checked={collectTogether === option.value}
+                        onChange={() => setCollectTogether(option.value)}
+                        className="mt-1"
+                      />
+                      <span><span className="font-medium">{option.label}</span> <span className="text-gray-500">· {option.detail}</span></span>
+                    </label>
+                  ))}
+                </div>
+              )}
               <button
                 onClick={() => onPreview(payload())}
                 disabled={invalid}

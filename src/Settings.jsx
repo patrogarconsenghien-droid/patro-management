@@ -33,6 +33,8 @@ const SettingsDomain = ({
   setSettingsAuthenticated,
   hourlyRate,
   setHourlyRate,
+  collectOpenJobsTogether = false,
+  setCollectOpenJobsTogether = () => {},
   surpriseSettings,
   setSurpriseSettings,
   rarityWeights,
@@ -763,7 +765,10 @@ const SettingsDomain = ({
               <Clock className="text-purple-500" size={24} />
               <div className="text-left">
                 <h3 className="font-semibold">Tarif horaire des boulots</h3>
-                <p className="text-gray-600 text-sm">Actuellement : {formatCurrency(hourlyRate)} de l'heure</p>
+                <p className="text-gray-600 text-sm">
+                  Actuellement : {formatCurrency(hourlyRate)} de l'heure
+                  {collectOpenJobsTogether ? ' · boulots ouverts encaissés en une fois' : ''}
+                </p>
               </div>
             </div>
           </button>
@@ -2114,12 +2119,30 @@ const SettingsDomain = ({
         // rechargement de l'app.
         await saveToFirebase('jobSettings', {
           hourlyRate: rate,
+          collectOpenJobsTogether,
           updatedAt: new Date().toISOString()
         });
         navigateTo('settings');
       } catch (error) {
         console.error('Erreur sauvegarde du tarif horaire:', error);
         alert('Le tarif est appliqué mais n\'a pas pu être enregistré.');
+      }
+    };
+
+    // Les réglages des boulots sont un historique : on réécrit tout, le plus
+    // récent l'emporte.
+    const updateCollectTogether = async (value) => {
+      setCollectOpenJobsTogether(value);
+      try {
+        await saveToFirebase('jobSettings', {
+          hourlyRate,
+          collectOpenJobsTogether: value,
+          updatedAt: new Date().toISOString()
+        });
+      } catch (error) {
+        console.error('Erreur sauvegarde de l\'encaissement des boulots ouverts:', error);
+        setCollectOpenJobsTogether(!value);
+        alert('Le réglage n\'a pas pu être enregistré.');
       }
     };
 
@@ -2159,6 +2182,32 @@ const SettingsDomain = ({
             >
               Mettre à jour le tarif
             </button>
+          </div>
+
+          <div className="bg-white p-4 rounded-lg shadow-sm space-y-3 mt-4">
+            <h3 className="font-semibold">Boulots ouverts à l'autre section : qui encaisse ?</h3>
+            {[
+              {
+                value: false,
+                title: 'Chaque section demande sa part',
+                detail: 'Le client reçoit deux demandes de paiement, une par section.'
+              },
+              {
+                value: true,
+                title: 'Le client paie tout chez nous',
+                detail: 'Un seul QR pour tout le boulot. La part de l\'autre section devient une dette dans les finances, à lui verser.'
+              }
+            ].map((option) => (
+              <button
+                key={String(option.value)}
+                onClick={() => option.value !== collectOpenJobsTogether && updateCollectTogether(option.value)}
+                className={`w-full text-left p-3 rounded-lg border-2 transition-colors ${collectOpenJobsTogether === option.value ? 'border-purple-500 bg-purple-50' : 'border-gray-200'}`}
+              >
+                <p className="font-medium">{collectOpenJobsTogether === option.value ? '● ' : '○ '}{option.title}</p>
+                <p className="text-sm text-gray-600">{option.detail}</p>
+              </button>
+            ))}
+            <p className="text-xs text-gray-500">S'applique aux boulots de ta section ; tu peux encore changer au cas par cas en validant un boulot.</p>
           </div>
         </div>
       </div>

@@ -25,6 +25,9 @@ exports.cancelPaymentRequest = callable((db, auth, data) => requests.cancelReque
 
 exports.markPaymentReceived = callable((db, auth, data) => requests.markReceived(db, auth, data));
 
+// Boulot encaissé en une fois : la section qui a reçu sa part le confirme.
+exports.settleSectionDebt = callable((db, auth, data) => requests.settleDebt(db, auth, data));
+
 // Bar : le code permanent d'un membre, pour recharger du montant qu'il veut.
 exports.getMemberPaymentCode = callable((db, auth, data) => memberCodes.getMemberCode(db, auth, data));
 

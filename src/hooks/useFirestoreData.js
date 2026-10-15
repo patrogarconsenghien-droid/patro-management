@@ -29,6 +29,9 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
   // Onglet Bar affiché ou non : chaque section décide. Absent des réglages = affiché.
   const [barEnabled, setBarEnabled] = useState(true);
   const [hourlyRate, setHourlyRate] = useState(10.00); // Tarif horaire des boulots
+  // Boulot ouvert à l'autre section : le client paie tout chez nous, et on
+  // doit sa part à l'autre section. Sinon, chaque section demande la sienne.
+  const [collectOpenJobsTogether, setCollectOpenJobsTogether] = useState(false);
   const [surpriseSettings, setSurpriseSettings] = useState({
     price: 200,
     eligibleProducts: [],
@@ -145,6 +148,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
     setBarOpenThreshold(8);
     setBarEnabled(true);
     setHourlyRate(10.00);
+    setCollectOpenJobsTogether(false);
     setPopularProducts([]);
     setTripPasswordProtected(false);
 
@@ -265,6 +269,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
             new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0)
           )[0];
           if (latest.hourlyRate > 0) setHourlyRate(latest.hourlyRate);
+          setCollectOpenJobsTogether(latest.collectOpenJobsTogether === true);
         }
       });
 
@@ -322,6 +327,7 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
     barOpenThreshold, setBarOpenThreshold,
     barEnabled, setBarEnabled,
     hourlyRate, setHourlyRate,
+    collectOpenJobsTogether, setCollectOpenJobsTogether,
     surpriseSettings, setSurpriseSettings,
     tripPasswordProtected, setTripPasswordProtected,
     saveToFirebase, updateInFirebase, deleteFromFirebase,

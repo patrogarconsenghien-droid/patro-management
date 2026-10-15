@@ -371,6 +371,17 @@ await ko('animé ne se crée pas un code', setDoc(doc(as(ANIME), 'paymentCodes',
 await ko('personne ne lit les compteurs', getDoc(doc(as(ADMIN), 'paymentCounters', 'garcons-2026')));
 await ko('personne ne remet un compteur à zéro', setDoc(doc(as(ADMIN), 'paymentCounters', 'garcons-2026'), { last: 0 }));
 
+// --- dettes entre sections : lues par les deux sections, écrites par le serveur ---
+await env.withSecurityRulesDisabled(async (ctx) => {
+  await setDoc(doc(ctx.firestore(), 'sectionDebts', 'd1'), { debtorSection: 'garcons', creditorSection: 'filles', amountCents: 1200, status: 'open' });
+});
+const debtsOf = (db, field, sec) => getDocs(query(collection(db, 'sectionDebts'), where(field, '==', sec)));
+await ok('animateur garçons lit ce que sa section doit', debtsOf(as(ANIMATEUR), 'debtorSection', 'garcons'));
+await ok('animatrice filles lit ce qu\'on doit à sa section', debtsOf(as(FILLE_ANIM), 'creditorSection', 'filles'));
+await ko('animé ne lit pas les dettes entre sections', debtsOf(as(ANIME), 'debtorSection', 'garcons'));
+await ko('animatrice ne solde pas une dette elle-même', updateDoc(doc(as(FILLE_ANIM), 'sectionDebts', 'd1'), { status: 'settled' }));
+await ko('admin ne crée pas de dette', setDoc(doc(as(ADMIN), 'sectionDebts', 'd2'), { debtorSection: 'filles', creditorSection: 'garcons', amountCents: 1 }));
+
 // --- mails : personne n'envoie de mail au nom du patro depuis l'app ---
 const FAKE_MAIL = { to: ['victime@example.org'], message: { subject: 'Faux', text: 'Faux' } };
 await ko('animé ne dépose pas de mail', setDoc(doc(as(ANIME), 'mail', 'm1'), FAKE_MAIL));

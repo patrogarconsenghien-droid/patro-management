@@ -242,6 +242,14 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Dettes entre sections : un boulot ouvert encaissé en une fois par une
+    // section, qui doit la part de l'autre. Écrites par le serveur ; lues par
+    // les animateurs des deux sections concernées.
+    match /sectionDebts/{debt} {
+      allow read: if isManagerOf(resource.data.debtorSection) || isManagerOf(resource.data.creditorSection);
+      allow write: if false;
+    }
+
     // Codes de paiement permanents des membres du bar : créés et lus par le
     // serveur (fonction getMemberPaymentCode). Réattribuer un code depuis l'app
     // ferait arriver les rechargements d'un membre sur le compte d'un autre.

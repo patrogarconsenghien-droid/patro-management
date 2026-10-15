@@ -146,7 +146,7 @@ export default function ExpenseNote({ note, onClose }) {
                 <p style={{ margin: '4px 0 0' }}>Scannez le QR code avec votre app bancaire, ou faites un virement :</p>
                 <p style={{ margin: '8px 0 0' }}><span style={{ color: muted }}>Bénéficiaire :</span> {payment.holderName}</p>
                 <p style={{ margin: '2px 0 0' }}><span style={{ color: muted }}>IBAN :</span> <span style={{ fontFamily: mono }}>{payment.iban}</span></p>
-                <p style={{ margin: '2px 0 0' }}><span style={{ color: muted }}>Montant :</span> {formatCurrency(ownTotal)}</p>
+                <p style={{ margin: '2px 0 0' }}><span style={{ color: muted }}>Montant :</span> {formatCurrency(note.collectTogether ? total : ownTotal)}</p>
                 <p style={{ margin: '2px 0 0' }}><span style={{ color: muted }}>Communication :</span> <span style={{ fontFamily: mono }}>{payment.communication}</span></p>
                 {payment.link && (
                   <p style={{ margin: '6px 0 0', color: muted, wordBreak: 'break-all' }}>Ou en ligne : {payment.link}</p>
@@ -159,7 +159,12 @@ export default function ExpenseNote({ note, onClose }) {
                   : 'À régler en liquide ou par virement au patro.'}
               </p>
             )}
-            {otherTotal > 0 && (
+            {otherTotal > 0 && note.collectTogether && (
+              <p style={{ margin: '8px 0 0', color: muted }}>
+                Un seul paiement pour toute l'équipe, y compris les {note.otherLabel}.
+              </p>
+            )}
+            {otherTotal > 0 && !note.collectTogether && (
               <p style={{ margin: '8px 0 0', color: muted }}>
                 {payment ? 'Ce paiement couvre' : 'Cette note couvre'} la part des {note.sectionLabel} ({formatCurrency(ownTotal)}).
                 La part des {note.otherLabel} ({formatCurrency(otherTotal)}) est demandée séparément par leur section.

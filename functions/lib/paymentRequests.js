@@ -81,16 +81,29 @@ async function nextCommunication(tx, db, sectionId, nowMs) {
   return buildCommunication({ sectionId, year, sequence });
 }
 
-/** Demande pour un ou plusieurs boulots faits, non payés, d'une même saison. */
-async function createJobsRequest(db, auth, { jobPaths, payerName, payerPhone } = {}, { nowMs = Date.now() } = {}) {
+/**
+ * Demande pour un ou plusieurs boulots faits, non payés, d'une même saison.
+ *
+ * Un boulot ouvert à l'autre section peut être encaissé en une fois : la
+ * demande reprend alors aussi les boulots que la section a créés chez l'autre
+ * (`crossSectionFrom`), et l'autre section est remboursée plus tard (voir
+ * sectionDebts). Le client ne paie qu'une fois.
+ */
+async function createJobsRequest(db, auth, { jobPaths, payerName, payerPhone, sectionId: wanted } = {}, { nowMs = Date.now() } = {}) {
   if (!auth || !auth.uid) throw new PaymentError("unauthenticated", "signed-out", "Connexion requise.");
   const paths = [...new Set(Array.isArray(jobPaths) ? jobPaths : [])];
   if (paths.length < 1 || paths.length > MAX_JOBS_PER_REQUEST) {
     throw new PaymentError("invalid-argument", "bad-jobs", `Choisis entre 1 et ${MAX_JOBS_PER_REQUEST} boulots.`);
   }
   const parsed = paths.map((path) => parseSeasonDoc(path, "jobs"));
-  const { sectionId, base } = parsed[0];
-  if (parsed.some((p) => p.base !== base)) {
+  const sectionId = Object.hasOwn(SECTIONS, wanted) ? wanted : parsed[0].sectionId;
+  const own = parsed.filter((p) => p.sectionId === sectionId);
+  if (own.length === 0) {
+    // Sans boulot à soi, pas de demande : la section n'a rien à encaisser.
+    throw new PaymentError("permission-denied", "not-manager", "Réservé aux animateurs de la section.");
+  }
+  const { base } = own[0];
+  if (own.some((p) => p.base !== base)) {
     throw new PaymentError("invalid-argument", "mixed-seasons", "Les boulots doivent être de la même saison.");
   }
 
@@ -109,12 +122,18 @@ async function createJobsRequest(db, auth, { jobPaths, payerName, payerPhone } =
       }
       const cents = toCents(job.total);
       if (!(cents > 0)) throw new PaymentError("failed-precondition", "no-amount", `« ${job.description} » n'a pas de montant.`);
+      const cross = parsed[index].sectionId !== sectionId;
+      // Chez l'autre section, seulement les boulots que celle-ci y a créés.
+      if (cross && job.crossSectionFrom !== sectionId) {
+        throw new PaymentError("permission-denied", "not-manager", "Réservé aux animateurs de la section.");
+      }
       return {
         path: parsed[index].path,
         description: cleanText(job.description, 120),
         broName: cleanText(job.broName, 60),
         date: job.date || null,
         amountCents: cents,
+        ...(cross ? { sectionId: parsed[index].sectionId } : {}),
       };
     });
 
@@ -205,7 +224,9 @@ async function settleRequest(db, requestId, { receivedCents, source, nowMs = Dat
       );
     }
     const tipCents = received - request.amountCents;
-    request.targets.forEach((target, index) => {
+    const ownTargets = request.targets.filter((t) => !t.sectionId);
+    const crossTargets = request.targets.filter((t) => t.sectionId);
+    ownTargets.forEach((target, index) => {
       tx.update(db.doc(target.path), {
         isPaid: true,
         paymentMethod: "account",
@@ -215,6 +236,50 @@ async function settleRequest(db, requestId, { receivedCents, source, nowMs = Dat
         updatedAt: FieldValue.serverTimestamp(),
       });
     });
+
+    // La part de l'autre section est arrivée sur notre compte : une rentrée
+    // chez nous, et une dette envers elle. Ses boulots restent « à payer »
+    // chez elle jusqu'au versement (settleDebt) : c'est là que l'argent entre
+    // vraiment dans sa caisse.
+    let debtId = null;
+    if (crossTargets.length > 0) {
+      const crossCents = crossTargets.reduce((sum, t) => sum + t.amountCents, 0);
+      const creditorSection = crossTargets[0].sectionId;
+      const debtRef = db.collection("sectionDebts").doc();
+      debtId = debtRef.id;
+      crossTargets.forEach((target) => {
+        tx.update(db.doc(target.path), {
+          collectedBy: request.sectionId,
+          collectedAt: paidAtIso,
+          sectionDebtId: debtId,
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      });
+      tx.set(db.collection(`${request.base}financialTransactions`).doc(), {
+        type: "income",
+        amount: crossCents / 100,
+        description: `Part des ${SECTIONS[creditorSection]} (à leur verser) · ${request.label}`,
+        paymentMethod: "account",
+        category: "other",
+        timestamp: paidAtIso,
+        paymentRequestId: requestId,
+        sectionDebtId: debtId,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      tx.set(debtRef, {
+        debtorSection: request.sectionId,
+        debtorBase: request.base,
+        creditorSection,
+        amountCents: crossCents,
+        label: request.label,
+        paymentRequestId: requestId,
+        targets: crossTargets.map((t) => ({
+          path: t.path, broName: t.broName, description: t.description, date: t.date, amountCents: t.amountCents,
+        })),
+        status: "open",
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
     if (tipCents > 0) {
       tx.set(db.collection(`${request.base}financialTransactions`).doc(), {
         type: "income",
@@ -235,7 +300,7 @@ async function settleRequest(db, requestId, { receivedCents, source, nowMs = Dat
       tipCents,
       settledBy: source,
     });
-    return { status: "paid", receivedCents: received, tipCents, sectionId: request.sectionId, label: request.label, createdBy: request.createdBy };
+    return { status: "paid", receivedCents: received, tipCents, debtId, sectionId: request.sectionId, label: request.label, createdBy: request.createdBy };
   });
 }
 
@@ -278,6 +343,74 @@ async function markReceived(db, auth, { requestId, receivedCents } = {}, opts = 
     at: FieldValue.serverTimestamp(),
   });
   return result;
+}
+
+/**
+ * L'autre section a reçu sa part : la dette est soldée. Confirmé par la
+ * section qui reçoit l'argent (c'est elle qui le voit arriver), ou l'admin.
+ * Ses boulots passent payés, du moyen de versement, et la sortie est notée
+ * dans les finances de la section qui devait.
+ */
+async function settleDebt(db, auth, { debtId, paymentMethod } = {}, { nowMs = Date.now() } = {}) {
+  if (!auth || !auth.uid) throw new PaymentError("unauthenticated", "signed-out", "Connexion requise.");
+  if (!new RegExp(`^${ID}$`).test(String(debtId || ""))) {
+    throw new PaymentError("invalid-argument", "bad-debt", "Dette introuvable.");
+  }
+  if (!["cash", "account"].includes(paymentMethod)) {
+    throw new PaymentError("invalid-argument", "bad-method", "Liquide ou virement ?");
+  }
+  const ref = db.doc(`sectionDebts/${debtId}`);
+  const first = await ref.get();
+  if (!first.exists) throw new PaymentError("not-found", "no-debt", "Cette dette n'existe plus.");
+  const actor = await requireManager(db, auth, first.data().creditorSection);
+  const paidAtIso = new Date(nowMs).toISOString();
+
+  const debt = await db.runTransaction(async (tx) => {
+    const fresh = (await tx.get(ref)).data();
+    if (fresh.status !== "open") throw new PaymentError("failed-precondition", "not-open", "Cette dette est déjà soldée.");
+    const jobs = await Promise.all(fresh.targets.map((t) => tx.get(db.doc(t.path))));
+
+    jobs.forEach((snap) => {
+      // Un boulot supprimé entre-temps : la dette reste due, on ne le recrée pas.
+      if (!snap.exists) return;
+      tx.update(snap.ref, {
+        isPaid: true,
+        paymentMethod,
+        paidAt: paidAtIso,
+        paidVia: "section-transfer",
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    });
+    tx.set(db.collection(`${fresh.debtorBase}financialTransactions`).doc(), {
+      type: "expense",
+      amount: fresh.amountCents / 100,
+      description: `Versé aux ${SECTIONS[fresh.creditorSection]} · ${fresh.label}`,
+      paymentMethod,
+      category: "other",
+      timestamp: paidAtIso,
+      sectionDebtId: debtId,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    tx.update(ref, {
+      status: "settled",
+      paymentMethod,
+      settledAt: FieldValue.serverTimestamp(),
+      settledBy: actor.uid,
+      settledByName: actor.name,
+    });
+    return fresh;
+  });
+
+  await db.collection("auditLog").add({
+    type: "sectionDebt.settled",
+    sectionId: debt.creditorSection,
+    actorUid: actor.uid,
+    actorName: actor.name,
+    debtId,
+    amountCents: debt.amountCents,
+    at: FieldValue.serverTimestamp(),
+  });
+  return { status: "settled" };
 }
 
 /**
@@ -324,5 +457,6 @@ module.exports = {
   cancelRequest,
   markReceived,
   settleRequest,
+  settleDebt,
   getPublicPage,
 };

@@ -33,7 +33,7 @@ async function wipe(path) {
 async function reset({ account = true } = {}) {
   for (const path of [
     "users", "paymentRequests", "paymentCounters", "paymentSettings", "auditLog",
-    `${G}jobs`, `${G}members`, `${G}orders`, `${G}financialTransactions`, `${F}jobs`, "seasons/2025-2026/jobs",
+    `${G}jobs`, `${G}members`, `${G}orders`, `${G}financialTransactions`, `${F}jobs`, `${F}financialTransactions`, "sectionDebts", "seasons/2025-2026/jobs",
   ]) await wipe(path);
 
   await db.doc("users/anim").set({ role: "animateur", status: "active", sectionId: "garcons", displayName: "Max" });
@@ -50,6 +50,8 @@ async function reset({ account = true } = {}) {
   await db.doc(`${G}jobs/zero`).set({ description: "Sans montant", broName: "Tom", total: 0, isPaid: false });
   await db.doc("seasons/2025-2026/jobs/old").set({ description: "Ancien", total: 10, isPaid: false });
   await db.doc(`${F}jobs/f1`).set({ description: "Chez les filles", total: 10, isPaid: false });
+  // Une Grande venue sur un boulot des Bro : créé chez elle par les Bro.
+  await db.doc(`${F}jobs/fx`).set({ description: "Tondre la pelouse", broName: "Lina", date: "2026-10-01", total: 12, isPaid: false, crossSectionFrom: "garcons" });
   await db.doc(`${G}members/m1`).set({ name: "Martin", balance: -12.5 });
   await db.doc(`${G}members/m2`).set({ name: "Hugo", balance: 3 });
 }
@@ -226,4 +228,49 @@ test("page publique : le jeton seul, et rien de trop", async () => {
   assert.equal(paid.status, "paid");
   assert.equal(paid.qrPayload, undefined);
   assert.equal(paid.iban, undefined);
+});
+
+test("boulot ouvert encaissé en une fois : la part de l'autre section devient une dette", async () => {
+  await reset();
+  const one = { jobPaths: [`${G}jobs/a`, `${F}jobs/fx`], payerName: "Mme Dupont", sectionId: "garcons" };
+  // Un boulot des Grandes que les Bro n'ont pas créé reste à elles.
+  await rejects(requests.createJobsRequest(db, as("anim"), { ...one, jobPaths: [`${G}jobs/a`, `${F}jobs/f1`] }, at), "not-manager");
+  // Rien que des boulots de l'autre section : pas de demande.
+  await rejects(requests.createJobsRequest(db, as("anim"), { ...one, jobPaths: [`${F}jobs/fx`] }, at), "not-manager");
+  await rejects(requests.createJobsRequest(db, as("fanim"), one, at), "not-manager");
+
+  const created = await requests.createJobsRequest(db, as("anim"), one, at);
+  assert.equal(created.amountCents, 4200);
+  assert.equal((await data(`${F}jobs/fx`)).paymentRequestId, created.id);
+
+  const result = await requests.markReceived(db, as("anim"), { requestId: created.id }, at);
+  assert.ok(result.debtId);
+  assert.equal((await data(`${G}jobs/a`)).isPaid, true);
+  // Chez les Grandes, le boulot reste à payer tant que les Bro n'ont pas versé.
+  const fx = await data(`${F}jobs/fx`);
+  assert.equal(fx.isPaid, false);
+  assert.equal(fx.collectedBy, "garcons");
+  assert.equal(fx.sectionDebtId, result.debtId);
+
+  const debt = await data(`sectionDebts/${result.debtId}`);
+  assert.deepEqual(
+    { debtor: debt.debtorSection, creditor: debt.creditorSection, cents: debt.amountCents, status: debt.status },
+    { debtor: "garcons", creditor: "filles", cents: 1200, status: "open" }
+  );
+  const rows = async (path) => (await db.collection(path).get()).docs
+    .map((d) => d.data()).map((x) => [x.type, x.amount, x.paymentMethod]).sort();
+  assert.deepEqual(await rows(`${G}financialTransactions`), [["income", 12, "account"]]);
+
+  // Seule la section qui reçoit l'argent confirme le versement.
+  await rejects(requests.settleDebt(db, as("anim"), { debtId: result.debtId, paymentMethod: "cash" }, at), "not-manager");
+  await rejects(requests.settleDebt(db, as("fanim"), { debtId: result.debtId, paymentMethod: "chèque" }, at), "bad-method");
+  await requests.settleDebt(db, as("fanim"), { debtId: result.debtId, paymentMethod: "cash" }, at);
+
+  const paid = await data(`${F}jobs/fx`);
+  assert.equal(paid.isPaid, true);
+  assert.equal(paid.paymentMethod, "cash");
+  assert.equal((await data(`sectionDebts/${result.debtId}`)).status, "settled");
+  assert.deepEqual(await rows(`${G}financialTransactions`), [["expense", 12, "cash"], ["income", 12, "account"]]);
+  assert.deepEqual(await rows(`${F}financialTransactions`), []);
+  await rejects(requests.settleDebt(db, as("fanim"), { debtId: result.debtId, paymentMethod: "cash" }, at), "not-open");
 });
