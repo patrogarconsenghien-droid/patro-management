@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Printer, X } from 'lucide-react';
+import { Download, Printer, Share2, X } from 'lucide-react';
 import { formatCurrency } from '../lib/format';
 import { renderQr } from '../lib/payLink';
+import { toast } from '../lib/feedback';
+import { buildExpenseNotePdf, expenseNoteFileName } from '../lib/expenseNotePdf';
 
 const hoursLabel = (value) => `${String(value).replace('.', ',')} h`;
 
@@ -13,8 +15,9 @@ const hoursLabel = (value) => `${String(value).replace('.', ',')} h`;
  * Le QR, l'IBAN et la communication viennent du serveur (getPaymentPage) :
  * l'app n'a jamais le dernier mot sur le compte qui reçoit l'argent.
  *
- * Affichée par-dessus l'app ; « Imprimer / PDF » n'imprime qu'elle (voir
- * index.css). Couleurs en dur : c'est une feuille de papier, elle reste
+ * Affichée par-dessus l'app ; « Imprimer » n'imprime qu'elle (voir
+ * index.css). « Partager » et « Télécharger » passent par un vrai PDF, préparé
+ * dès l'ouverture : sur iPhone, le partage doit partir tout de suite au clic. Couleurs en dur : c'est une feuille de papier, elle reste
  * blanche en mode sombre.
  */
 export default function ExpenseNote({ note, onClose }) {
@@ -33,6 +36,54 @@ export default function ExpenseNote({ note, onClose }) {
     renderQr(payment.qrPayload, 360).then(setQr).catch((error) => console.error('QR impossible:', error));
   }, [payment?.qrPayload]);
 
+  // Le PDF, préparé une fois le QR prêt.
+  const [pdf, setPdf] = useState(null);
+  const qrPending = Boolean(payment?.qrPayload) && !qr;
+  useEffect(() => {
+    if (qrPending) return undefined;
+    let cancelled = false;
+    setPdf(null);
+    buildExpenseNotePdf(note, qr)
+      .then((blob) => { if (!cancelled) setPdf(new File([blob], expenseNoteFileName(note), { type: 'application/pdf' })); })
+      .catch((error) => console.error('PDF de la note impossible:', error));
+    return () => { cancelled = true; };
+  }, [note, qr, qrPending]);
+
+  const download = () => {
+    if (!pdf) return;
+    const url = URL.createObjectURL(pdf);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = pdf.name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  };
+
+  const share = async () => {
+    if (!pdf) return;
+    const text = `Note de frais : ${note.description}`;
+    try {
+      if (navigator.canShare?.({ files: [pdf] })) {
+        await navigator.share({ files: [pdf], title: pdf.name.replace(/.pdf$/, ''), text });
+      } else if (navigator.share && payment?.link) {
+        // Pas de partage de fichier ici (ordinateur) : le lien de paiement, et le PDF téléchargé.
+        download();
+        await navigator.share({ title: text, text: `${text} · paiement en ligne :`, url: payment.link });
+      } else {
+        download();
+        toast('Note téléchargée : joins-la à ton message');
+      }
+    } catch (error) {
+      if (error?.name !== 'AbortError') {
+        console.error('Partage de la note impossible:', error);
+        toast('Partage impossible : la note est téléchargée à la place', { tone: 'error' });
+        download();
+      }
+    }
+  };
+
   // Pendant l'affichage, l'impression ne garde que la note.
   useEffect(() => {
     document.body.classList.add('printing-note');
@@ -47,16 +98,28 @@ export default function ExpenseNote({ note, onClose }) {
   const cell = { padding: '10px 0', borderBottom: `1px solid ${rule}` };
   const head = { padding: '8px 0', borderBottom: `1px solid ${rule}`, fontWeight: 600 };
   const caption = { margin: 0, fontSize: 12, color: muted, textTransform: 'uppercase', letterSpacing: '.06em' };
+  const tool = { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '10px 14px', borderRadius: 12, background: '#fff', color: ink, fontWeight: 700, border: 0 };
 
   return createPortal(
     <div id="expense-note" style={{ position: 'fixed', inset: 0, zIndex: 100, overflowY: 'auto', background: 'rgba(22,19,15,.6)' }}>
       {/* Barre d'outils, absente du papier */}
       <div className="no-print" style={{ position: 'sticky', top: 0, display: 'flex', gap: 8, justifyContent: 'flex-end', padding: '12px 16px' }}>
         <button
-          onClick={() => window.print()}
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 8, padding: '10px 16px', borderRadius: 12, background: '#16a34a', color: '#fff', fontWeight: 700, border: 0 }}
+          onClick={share}
+          disabled={!pdf}
+          style={{ ...tool, background: '#16a34a', color: '#fff', opacity: pdf ? 1 : 0.6 }}
         >
-          <Printer size={18} /> Imprimer / PDF
+          <Share2 size={18} /> Partager
+        </button>
+        <button
+          onClick={download}
+          disabled={!pdf}
+          style={{ ...tool, opacity: pdf ? 1 : 0.6 }}
+        >
+          <Download size={18} /> <span className="note-tool-label">Télécharger</span>
+        </button>
+        <button onClick={() => window.print()} style={tool} aria-label="Imprimer">
+          <Printer size={18} /> <span className="note-tool-label">Imprimer</span>
         </button>
         <button
           onClick={onClose}

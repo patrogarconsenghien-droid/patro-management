@@ -178,6 +178,11 @@
 }
 
 /* Note de frais : à l'impression, seule la feuille apparaît. */
+/* Barre d'outils de la note de frais : icônes seules sur un téléphone étroit. */
+@media (max-width: 440px) {
+  .note-tool-label { display: none; }
+}
+
 @media print {
   html:has(body.printing-note), body.printing-note { background: #fff !important; }
   body.printing-note #root { display: none !important; }
