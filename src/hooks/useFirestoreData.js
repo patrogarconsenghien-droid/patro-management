@@ -111,14 +111,16 @@ export function useFirestoreData(seasonId = LEGACY_SEASON_ID, { manager = true, 
 
   const loadFromFirebase = async (collectionName, setState) => {
     try {
+      // Les écritures locales s'affichent tout de suite. Ne pas attendre la
+      // confirmation du serveur : sans changement de contenu, Firestore n'envoie
+      // pas de nouvel instantané, et la modif n'apparaissait qu'au rechargement.
+      // Un serverTimestamp() pas encore confirmé prend l'heure estimée.
       const unsubscribe = onSnapshot(collectionRef(db, seasonId, collectionName, sectionId), (snapshot) => {
-        if (!snapshot.metadata.hasPendingWrites) {
-          const data = snapshot.docs.map(d => ({
-            id: d.id,
-            ...d.data()
-          }));
-          setState(data);
-        }
+        const data = snapshot.docs.map(d => ({
+          id: d.id,
+          ...d.data({ serverTimestamps: 'estimate' })
+        }));
+        setState(data);
       });
       return unsubscribe;
     } catch (error) {
