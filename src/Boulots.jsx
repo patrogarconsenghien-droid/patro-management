@@ -6,6 +6,9 @@ import {
 import BroAvatar from './components/BroAvatar';
 import PhotoPicker from './components/PhotoPicker';
 import JobCalendar from './components/JobCalendar';
+import ValidateJobModal from './components/ValidateJobModal';
+import ExpenseNote from './components/ExpenseNote';
+import { payUrl } from './lib/payLink';
 import Modal from './components/Modal';
 import HeaderBase from './components/Header';
 import { formatCurrency, formatDate } from './lib/format';
@@ -63,6 +66,10 @@ const BoulotsDomain = ({
   const canEditJob = (job) => !job._shared && (canManage || (myUid && job.createdBy === myUid));
 
   // Boulots de ma section, plus ceux que l'autre section nous a ouverts.
+  // Validation en cours (fenêtre) et note de frais affichée.
+  const [validatingJob, setValidatingJob] = useState(null);
+  const [expenseNote, setExpenseNote] = useState(null);
+
   const otherId = otherSectionId(sectionId);
   const v = vocabFor(sectionId);
   const otherLabel = SECTIONS[otherId] || otherId;
@@ -498,99 +505,131 @@ ${job.registeredBros.map(reg => {
     }
   };
 
-  const completeScheduledJob = async (jobId, isPartial = false) => {
-    const job = findScheduled(jobId);
-    if (!job || job._shared) return;
+  /** Données de la note de frais ; `payment` vient du serveur. */
+  const buildExpenseNote = (job, { lines, rate, billTo }, payment = null, preview = false) => ({
+    issuedAt: new Date().toISOString(),
+    sectionId,
+    sectionLabel: SECTIONS[sectionId],
+    otherLabel,
+    billTo,
+    description: job.description,
+    date: job.date,
+    location: job.location,
+    rate,
+    lines,
+    payment,
+    preview
+  });
 
-    // Validation : soit quota complet, soit au moins 1 Bro inscrit pour validation partielle
-    if (!isPartial && job.registeredBros.length < job.brosNeeded) {
-      alert(`Le quota de ${v.many} n'est pas atteint pour une finalisation complète.`);
-      return;
-    }
-
-    if (isPartial && job.registeredBros.length === 0) {
-      alert(`Aucun${v.e} ${v.one} inscrit${v.e} pour ce boulot.`);
-      return;
-    }
-
-    // Message de confirmation adaptatif
-    const confirmMessage = isPartial
-      ? `Valider ce boulot avec seulement ${job.registeredBros.length} ${v.many} sur ${job.brosNeeded} ${v.requis} ?\n\n"${job.description}"\n\n${v.seuls} les ${v.many} inscrit${v.e}s seront payé${v.e}s.`
-      : `Finaliser ce boulot avec le quota complet ?\n\n"${job.description}"`;
-
-    if (!confirm(confirmMessage)) return;
-
-    // Créer un boulot terminé pour chaque Bro inscrit
-    const completedJobs = job.registeredBros.map(registration => {
-      const bro = bros.find(b => b.id === registration.broId);
-      const actualHours = job.estimatedHours || 1; // Utiliser la durée estimée
-
-      return {
-        broId: registration.broId,
-        broName: bro ? bro.name : (registration.name || 'Inconnu'),
-        description: isPartial
-          ? `${job.description} (PARTIEL ${job.registeredBros.length}/${job.brosNeeded})`
-          : job.description,
-        hours: actualHours,
-        date: job.date,
-        hourlyRate: job.customRate,
-        total: actualHours * job.customRate,
-        isPaid: false,
-        paymentMethod: null,
-        originalScheduledJobId: jobId,
-        contactName: (job.contactName || '').trim(),
-        contactPhone: (job.contactPhone || '').trim(),
-        location: (job.location || '').trim(),
-        isPartialCompletion: isPartial,
-        originalBrosNeeded: job.brosNeeded,
-        actualBrosUsed: job.registeredBros.length
-      };
+  /**
+   * Demande de paiement des boulots faits de ma section, et ce qu'il faut pour
+   * la note : QR, IBAN, communication structurée, lien. Tout vient du serveur,
+   * qui seul connaît le compte de réception de la section.
+   */
+  const requestPayment = async (jobIds, { billTo, phone }) => {
+    const call = async (name, data) => (await httpsCallable(functions, name)(data)).data;
+    const created = await call('createJobsPaymentRequest', {
+      jobPaths: jobIds.map((id) => docRef(db, seasonId, 'jobs', id, sectionId).path),
+      payerName: billTo,
+      payerPhone: phone
     });
+    const page = await call('getPaymentPage', { token: created.token });
+    return {
+      holderName: page.holderName,
+      iban: page.iban,
+      communication: page.communication,
+      qrPayload: page.qrPayload,
+      link: payUrl(created.token)
+    };
+  };
 
+  /**
+   * Valide un boulot programmé avec ce qui s'est réellement passé : qui est
+   * venu, combien d'heures chacun, à quel tarif. Avec la note de frais, crée
+   * aussi la demande de paiement des boulots de la section.
+   */
+  const completeScheduledJob = async (job, { lines, rate, billTo, withNote }) => {
+    if (!job || job._shared || lines.length === 0) return;
+
+    const isPartial = lines.length < job.brosNeeded;
+    const description = isPartial
+      ? `${job.description} (PARTIEL ${lines.length}/${job.brosNeeded})`
+      : job.description;
+    const payer = (billTo || job.contactName || '').trim();
+
+    let ownJobIds;
     try {
       // Chaque boulot fait est créé dans la section du participant : sa part
       // compte dans la caisse de sa section, et ses heures sur son compteur.
-      const actualHours = job.estimatedHours || 1;
-      await Promise.all(job.registeredBros.map((registration, index) => {
-        const completedJob = completedJobs[index];
-        const targetSection = registration.sectionId || sectionId;
-        if (targetSection === sectionId) return saveToFirebase('jobs', completedJob);
-        return addDoc(collectionRef(db, sharedSeasonId, 'jobs', targetSection), {
+      const created = await Promise.all(lines.map((line) => {
+        const completedJob = {
+          broId: line.broId,
+          broName: line.name,
+          description,
+          hours: line.hours,
+          date: job.date,
+          hourlyRate: rate,
+          total: line.hours * rate,
+          isPaid: false,
+          paymentMethod: null,
+          originalScheduledJobId: job.id,
+          contactName: payer,
+          contactPhone: (job.contactPhone || '').trim(),
+          location: (job.location || '').trim(),
+          isPartialCompletion: isPartial,
+          originalBrosNeeded: job.brosNeeded,
+          actualBrosUsed: lines.length
+        };
+        if (line.sectionId === sectionId) return saveToFirebase('jobs', completedJob);
+        return addDoc(collectionRef(db, sharedSeasonId, 'jobs', line.sectionId), {
           ...completedJob,
-          broName: registration.name || completedJob.broName,
           crossSectionFrom: sectionId,
           createdAt: serverTimestamp()
-        });
+        }).then(() => null);
       }));
+      ownJobIds = created.filter(Boolean);
 
-      // Mettre à jour les heures totales des Bro, par incrément : on ne connaît
-      // pas le compteur d'un Bro de l'autre section.
-      await Promise.all(job.registeredBros.map(registration => {
-        const targetSection = registration.sectionId || sectionId;
-        if (targetSection === sectionId) {
-          return bros.some(b => b.id === registration.broId)
-            ? updateInFirebase('bros', registration.broId, { totalHours: increment(actualHours) })
+      // Heures totales, par incrément : on ne connaît pas le compteur d'un
+      // membre de l'autre section.
+      await Promise.all(lines.map((line) => {
+        if (line.sectionId === sectionId) {
+          return bros.some(b => b.id === line.broId)
+            ? updateInFirebase('bros', line.broId, { totalHours: increment(line.hours) })
             : Promise.resolve();
         }
-        return updateDoc(docRef(db, sharedSeasonId, 'bros', registration.broId, targetSection), {
-          totalHours: increment(actualHours),
+        return updateDoc(docRef(db, sharedSeasonId, 'bros', line.broId, line.sectionId), {
+          totalHours: increment(line.hours),
           updatedAt: serverTimestamp()
         });
       }));
 
-      // Supprimer le boulot programmé
-      await deleteFromFirebase('scheduledJobs', jobId);
-
-      const successMessage = isPartial
-        ? `Boulot "${job.description}" validé partiellement !\n${job.registeredBros.length} ${v.many} sur ${job.brosNeeded} ont été enregistré${v.e}s.`
-        : `Boulot "${job.description}" marqué comme terminé !`;
-
-      alert(successMessage);
-
+      await deleteFromFirebase('scheduledJobs', job.id);
     } catch (error) {
       console.error('Erreur lors de la finalisation:', error);
-      alert('Erreur lors de la finalisation du boulot');
+      alert('Erreur lors de la validation du boulot. Vérifie ta connexion et réessaie.');
+      return;
     }
+
+    setValidatingJob(null);
+    if (!withNote) {
+      toast(`Boulot « ${job.description} » validé`);
+      return;
+    }
+
+    // Le boulot est validé ; la demande de paiement peut échouer à part (pas
+    // de compte de réception, réseau) : la note s'affiche alors sans QR, et la
+    // demande se refait depuis Paiements.
+    let payment = null;
+    if (ownJobIds.length > 0) {
+      try {
+        payment = await requestPayment(ownJobIds, { billTo: payer, phone: (job.contactPhone || '').trim() });
+      } catch (error) {
+        console.error('Demande de paiement impossible:', error);
+        const reason = error?.details?.reason ? error.message : 'Vérifie ta connexion.';
+        toast(`Boulot validé, mais QR non créé : ${reason} Refais-le depuis Paiements.`, { tone: 'error', duration: 7000 });
+      }
+    }
+    setExpenseNote(buildExpenseNote(job, { lines, rate, billTo: payer }, payment));
   };
 
   if (screen === 'boulots') {
@@ -1641,39 +1680,17 @@ ${job.registeredBros.map(reg => {
                         </div>
                       </div>
 
-                      {/* Boutons de validation */}
+                      {/* Validation : heures, présents, note de frais */}
                       <div className="space-y-2">
-                        {/* Validation complète (si équipe complète) */}
-                        {hasEnoughBros && (
-                          <button
-                            onClick={() => {
-                              if (confirm(`✅ Valider ce boulot avec l'équipe complète ?\n\n"${job.description}"\n${job.registeredBros.length} ${v.many} inscrit${v.e}s\n\n${v.ils} seront ${v.tous} payé${v.e}s ${formatCurrency(job.customRate * job.estimatedHours)} chacun${v.e}.`)) {
-                                completeScheduledJob(job.id, false);
-                              }
-                            }}
-                            className="w-full p-3 bg-green-500 text-white rounded-lg font-semibold active:scale-95 transition-transform"
-                          >
-                            ✅ Valider avec équipe complète
-                          </button>
-                        )}
-
-                        {/* Validation partielle (toujours disponible si au moins 1 Bro) */}
                         <button
-                          onClick={() => {
-                            if (confirm(`⚠️ Validation PARTIELLE ?\n\n"${job.description}"\nSeulement ${job.registeredBros.length} ${v.many} sur ${job.brosNeeded} ${v.requis}\n\nCoût total : ${formatCurrency(job.customRate * job.estimatedHours * job.registeredBros.length)}\n\n${v.seuls} les ${v.many} inscrit${v.e}s seront payé${v.e}s.`)) {
-                              completeScheduledJob(job.id, true);
-                            }
-                          }}
-                          className={`w-full p-3 rounded-lg font-semibold active:scale-95 transition-transform ${hasEnoughBros
-                            ? 'bg-orange-500 text-white'
-                            : 'bg-orange-600 text-white'
-                            }`}
+                          onClick={() => setValidatingJob(job)}
+                          className="w-full p-3 bg-green-500 text-white rounded-xl font-bold shadow-md active:scale-95 transition-transform"
                         >
-                          {hasEnoughBros
-                            ? '⚠️ Forcer validation partielle'
-                            : `⚠️ Valider partiellement (${job.registeredBros.length}/${job.brosNeeded})`
-                          }
+                          ✅ Valider ce boulot
                         </button>
+                        <p className="text-xs text-gray-500 text-center -mt-1">
+                          Heures de chacun, présents, note de frais avec QR
+                        </p>
 
                         {/* Bouton retirer des Bro (optionnel) */}
                         <button
@@ -1693,6 +1710,19 @@ ${job.registeredBros.map(reg => {
             </div>
           )}
         </div>
+
+        {validatingJob && (
+          <ValidateJobModal
+            job={validatingJob}
+            bros={bros}
+            broPhotos={broPhotos}
+            sectionId={sectionId}
+            onConfirm={(draft) => completeScheduledJob(validatingJob, draft)}
+            onPreview={(draft) => setExpenseNote(buildExpenseNote(validatingJob, draft, null, true))}
+            onClose={() => setValidatingJob(null)}
+          />
+        )}
+        {expenseNote && <ExpenseNote note={expenseNote} onClose={() => setExpenseNote(null)} />}
 
         {/* Modal pour gérer les inscriptions */}
         <Modal

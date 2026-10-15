@@ -176,3 +176,12 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Note de frais : à l'impression, seule la feuille apparaît. */
+@media print {
+  body.printing-note #root { display: none !important; }
+  body.printing-note #expense-note { position: static !important; background: none !important; overflow: visible !important; }
+  body.printing-note #expense-note .no-print { display: none !important; }
+  body.printing-note .expense-note-sheet { margin: 0 !important; border-radius: 0 !important; max-width: none !important; padding: 0 !important; }
+  @page { margin: 16mm; }
+}
