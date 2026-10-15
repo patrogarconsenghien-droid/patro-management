@@ -95,6 +95,10 @@ for (const [treeName, prefix] of [['racine', []], ['saison', ['seasons', '2026-2
   await ok(t('animé lit les réglages du bar'), getDocs(col(as(ANIME), 'barSettings')));
   await ko(t('animé ne lit pas les réglages du voyage'), getDocs(col(as(ANIME), 'tripSettings')));
   await ko(t('animé ne lit pas le tarif des boulots'), getDocs(col(as(ANIME), 'jobSettings')));
+  await ko(t('animé ne lit pas les notes de frais'), getDocs(col(as(ANIME), 'expenseNotes')));
+  await ok(t('animateur lit les notes de frais'), getDocs(col(as(ANIMATEUR), 'expenseNotes')));
+  await ok(t('animateur enregistre une note de frais'), setDoc(ref(as(ANIMATEUR), 'expenseNotes', 'n1'), { billTo: 'Mme X', lines: [] }));
+  await ko(t('animé n\'enregistre pas de note de frais'), setDoc(ref(as(ANIME), 'expenseNotes', 'n2'), { billTo: 'Mme X', lines: [] }));
   await ko(t('compte en attente ne lit pas les finances'), getDocs(col(as(PENDING), 'financialTransactions')));
   await ok(t('animateur lit les membres'), getDocs(col(as(ANIMATEUR), 'members')));
   await ok(t('animateur lit les finances'), getDocs(col(as(ANIMATEUR), 'financialTransactions')));

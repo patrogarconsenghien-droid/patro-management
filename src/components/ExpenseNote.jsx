@@ -141,7 +141,11 @@ export default function ExpenseNote({ note, onClose }) {
           {qr && <img src={qr} alt="QR code de paiement" style={{ width: 150, height: 150 }} />}
           <div style={{ flex: '1 1 220px', fontSize: 13 }}>
             <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>Paiement</p>
-            {payment ? (
+            {note.paidAt ? (
+              <p style={{ margin: '4px 0 0', color: '#15803d', fontWeight: 700 }}>
+                Payé le {date(note.paidAt)}. Merci !
+              </p>
+            ) : payment ? (
               <>
                 <p style={{ margin: '4px 0 0' }}>Scannez le QR code avec votre app bancaire, ou faites un virement :</p>
                 <p style={{ margin: '8px 0 0' }}><span style={{ color: muted }}>Bénéficiaire :</span> {payment.holderName}</p>

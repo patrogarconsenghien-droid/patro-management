@@ -543,7 +543,8 @@ ${job.registeredBros.map(reg => {
       iban: page.iban,
       communication: page.communication,
       qrPayload: page.qrPayload,
-      link: payUrl(created.token)
+      link: payUrl(created.token),
+      requestId: created.id
     };
   };
 
@@ -640,7 +641,22 @@ ${job.registeredBros.map(reg => {
         toast(`Boulot validé, mais QR non créé : ${reason} Refais-le depuis Paiements.`, { tone: 'error', duration: 7000 });
       }
     }
-    setExpenseNote(buildExpenseNote(job, { lines, rate, billTo: payer, collectTogether: together && Boolean(payment) }, payment));
+    const note = buildExpenseNote(job, { lines, rate, billTo: payer, collectTogether: together && Boolean(payment) }, payment);
+    setExpenseNote(note);
+
+    // Gardée pour la rouvrir depuis Paiements. Le QR n'y est pas : il se
+    // redemande au serveur à l'ouverture, tant que la demande est en attente.
+    const { payment: _payment, preview: _preview, ...stored } = note;
+    try {
+      await saveToFirebase('expenseNotes', {
+        ...stored,
+        location: stored.location || '',
+        paymentRequestId: payment?.requestId || null,
+        scheduledJobId: job.id
+      });
+    } catch (error) {
+      console.error('Enregistrement de la note de frais impossible:', error);
+    }
   };
 
   if (screen === 'boulots') {
@@ -717,8 +733,8 @@ ${job.registeredBros.map(reg => {
             <div className="flex items-center space-x-3">
               <QrCode className="text-green-500" size={24} />
               <div className="text-left">
-                <h3 className="font-semibold">Paiements par QR</h3>
-                <p className="text-gray-600 text-sm">Faire payer un client par virement, suivre les paiements</p>
+                <h3 className="font-semibold">Paiements</h3>
+                <p className="text-gray-600 text-sm">Notes de frais, QR de virement, suivi des paiements</p>
               </div>
             </div>
           </button>

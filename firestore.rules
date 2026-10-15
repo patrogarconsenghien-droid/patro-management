@@ -105,9 +105,9 @@ service cloud.firestore {
     }
 
     // ------------------------------------------------------------ saison
-    // Collections réservées aux animateurs : réglages des boulots et voyage.
+    // Collections réservées aux animateurs : réglages des boulots, notes de frais (noms des jeunes et du client) et voyage.
     function isManagerOnlyColl(coll) {
-      return coll in ['jobSettings', 'tripSettings', 'tripExpenses', 'tripEvents'];
+      return coll in ['jobSettings', 'tripSettings', 'tripExpenses', 'tripEvents', 'expenseNotes'];
     }
 
     // Bar et finances : les animés les consultent (carte, ardoises, caisse),

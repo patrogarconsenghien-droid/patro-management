@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { Check, Copy, Maximize2, QrCode, Share2, X } from 'lucide-react';
+import { Check, Copy, FileText, Maximize2, QrCode, Share2, X } from 'lucide-react';
 import { db, functions } from './firebase';
 import Modal from './components/Modal';
+import ExpenseNote from './components/ExpenseNote';
 import { SECTIONS } from './auth/account';
-import { docRef } from './lib/seasons';
+import { collectionRef, docRef } from './lib/seasons';
 import { formatCurrency, formatDate } from './lib/format';
 import { toast } from './lib/feedback';
 import { payUrl, renderQr } from './lib/payLink';
@@ -36,7 +37,7 @@ const messageOf = (error) =>
   error?.details?.reason ? error.message : 'Ça n\'a pas marché. Vérifie ta connexion et réessaie.';
 
 /** Détail d'une demande : le QR à montrer, le lien à envoyer, et les actions. */
-const RequestDetail = ({ request, onClose }) => {
+const RequestDetail = ({ request, onClose, onOpenNote }) => {
   const [page, setPage] = useState(null);
   const [qr, setQr] = useState(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -144,6 +145,12 @@ const RequestDetail = ({ request, onClose }) => {
         </ul>
       )}
 
+      {onOpenNote && (
+        <button onClick={onOpenNote} className="w-full p-2.5 rounded-xl bg-gray-100 text-sm font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform">
+          <FileText size={16} />Voir la note de frais
+        </button>
+      )}
+
       {request.status === 'paid' && (
         <p className="text-sm text-green-800 bg-green-50 rounded-xl p-3">
           Reçu {euros(request.receivedCents)}
@@ -208,6 +215,28 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [] }) => {
   const [listError, setListError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  // Notes de frais faites à la validation des boulots, et la note ouverte.
+  const [notes, setNotes] = useState([]);
+  const [debts, setDebts] = useState([]);
+  const [shownNote, setShownNote] = useState(null);
+  const [openingNote, setOpeningNote] = useState(null);
+
+  useEffect(() => onSnapshot(
+    collectionRef(db, seasonId, 'expenseNotes', sectionId),
+    (snapshot) => setNotes(
+      snapshot.docs
+        .map((d) => ({ id: d.id, ...d.data() }))
+        .sort((a, b) => String(b.issuedAt).localeCompare(String(a.issuedAt)))
+    ),
+    (readError) => console.error('Lecture des notes de frais impossible:', readError)
+  ), [seasonId, sectionId]);
+
+  // Ce que la section doit à l'autre pour les boulots encaissés en une fois.
+  useEffect(() => onSnapshot(
+    query(collection(db, 'sectionDebts'), where('debtorSection', '==', sectionId)),
+    (snapshot) => setDebts(snapshot.docs.map((d) => ({ id: d.id, ...d.data() }))),
+    (readError) => console.error('Lecture des dettes entre sections impossible:', readError)
+  ), [sectionId]);
 
   useEffect(() => onSnapshot(
     query(collection(db, 'paymentRequests'), where('sectionId', '==', sectionId)),
@@ -246,6 +275,45 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [] }) => {
       .map((group) => ({ ...group, works: [...group.works.values()] }))
       .sort((a, b) => (a.key === '') - (b.key === '') || a.key.localeCompare(b.key));
   }, [jobs]);
+
+  const requestById = useMemo(() => new Map((requests || []).map((r) => [r.id, r])), [requests]);
+  const debtByRequest = useMemo(() => new Map(debts.map((d) => [d.paymentRequestId, d])), [debts]);
+  const noteByRequest = useMemo(
+    () => new Map(notes.filter((n) => n.paymentRequestId).map((n) => [n.paymentRequestId, n])),
+    [notes]
+  );
+
+  /**
+   * Rouvre une note : le QR se redemande au serveur tant que la demande est en
+   * attente ; payée, la note le dit ; sans demande, elle reste sans QR.
+   */
+  const openNote = async (note) => {
+    const request = requestById.get(note.paymentRequestId);
+    setOpeningNote(note.id);
+    try {
+      let payment = null;
+      let paidAt = null;
+      if (request?.status === 'pending') {
+        const page = await call('getPaymentPage', { token: request.token });
+        payment = {
+          holderName: page.holderName,
+          iban: page.iban,
+          communication: page.communication,
+          qrPayload: page.qrPayload,
+          link: payUrl(request.token)
+        };
+      } else if (request?.status === 'paid') {
+        paidAt = request.paidAt?.toDate?.().toISOString() || new Date().toISOString();
+      }
+      setOpenId(null);
+      setShownNote({ ...note, payment, paidAt, preview: false });
+    } catch (caught) {
+      console.error('Ouverture de la note:', caught);
+      toast(messageOf(caught), { tone: 'error' });
+    } finally {
+      setOpeningNote(null);
+    }
+  };
 
   const selected = jobs.filter((job) => selectedJobs.has(job.id));
   const selectedTotal = selected.reduce((sum, job) => sum + Number(job.total), 0);
@@ -295,7 +363,7 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [] }) => {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-10">
-      <Header title="Paiements par QR" onBack={() => navigateTo('boulots')} />
+      <Header title="Paiements" onBack={() => navigateTo('boulots')} />
 
       <div className="p-4 space-y-5">
         <p className="text-sm text-gray-600">
@@ -305,6 +373,73 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [] }) => {
         </p>
 
         {error && <p className="text-sm text-red-700 bg-red-50 rounded-xl p-3" role="alert">{error}</p>}
+
+        {/* Notes de frais */}
+        {notes.length > 0 && (
+          <section>
+            <h2 className="font-display text-lg font-bold mb-2">Notes de frais</h2>
+            <ul className="space-y-3">
+              {notes.map((note) => {
+                const lines = note.lines || [];
+                const amount = (list) => list.reduce((sum, l) => sum + l.hours * note.rate, 0);
+                const total = amount(lines);
+                const otherTotal = amount(lines.filter((l) => l.sectionId !== note.sectionId));
+                const request = requestById.get(note.paymentRequestId);
+                const debt = debtByRequest.get(note.paymentRequestId);
+                const status = request ? STATUS[request.status] : { label: 'Sans QR', tone: 'bg-gray-200 text-gray-600' };
+                return (
+                  <li key={note.id} className="bg-white rounded-2xl ring-1 ring-gray-200 p-4 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="min-w-0">
+                        <span className="block font-semibold leading-tight">{note.description}</span>
+                        <span className="block text-xs text-gray-500 mt-0.5">
+                          {note.billTo || 'Sans client indiqué'} · {formatDate(note.date)} · {lines.length} participant{lines.length > 1 ? 's' : ''}
+                        </span>
+                      </span>
+                      <span className="text-right flex-none">
+                        <span className="block font-display text-xl font-extrabold">{formatCurrency(total)}</span>
+                        <span className={`inline-block mt-0.5 px-2 py-0.5 rounded-full text-xs font-bold ${status?.tone}`}>{status?.label}</span>
+                      </span>
+                    </div>
+
+                    {otherTotal > 0 && (
+                      <p className={`text-sm rounded-xl px-3 py-2 ${
+                        debt?.status === 'settled' ? 'bg-green-50 text-green-800'
+                          : note.collectTogether ? 'bg-red-50 text-red-800' : 'bg-gray-50 text-gray-600'
+                      }`}>
+                        {!note.collectTogether
+                          ? `Part des ${note.otherLabel} : ${formatCurrency(otherTotal)}, demandée par leur section`
+                          : debt?.status === 'settled'
+                            ? `${formatCurrency(otherTotal)} versés aux ${note.otherLabel} ✓`
+                            : debt
+                              ? `Dont ${formatCurrency(otherTotal)} à verser aux ${note.otherLabel}`
+                              : `Dont ${formatCurrency(otherTotal)} pour les ${note.otherLabel}, à leur verser après paiement`}
+                      </p>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => openNote(note)}
+                        disabled={openingNote === note.id}
+                        className="flex-1 p-2.5 rounded-xl bg-gray-900 text-gray-50 text-sm font-semibold flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 transition-transform"
+                      >
+                        <FileText size={16} />{openingNote === note.id ? 'Ouverture…' : 'Ouvrir la note'}
+                      </button>
+                      {request && (
+                        <button
+                          onClick={() => setOpenId(request.id)}
+                          className="p-2.5 px-4 rounded-xl bg-white ring-1 ring-gray-200 text-sm font-semibold flex items-center gap-2 active:scale-95 transition-transform"
+                        >
+                          <QrCode size={16} />Paiement
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
 
         {/* Boulots à encaisser */}
         <section>
@@ -388,7 +523,10 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [] }) => {
                 <li key={request.id}>
                   <button onClick={() => setOpenId(request.id)} className="w-full px-4 py-3 flex items-center gap-3 text-left active:bg-gray-50">
                     <span className="min-w-0 flex-1">
-                      <span className="block font-medium truncate">{request.label}</span>
+                      <span className="block font-medium truncate">
+                        {noteByRequest.has(request.id) && <FileText size={14} className="inline -mt-0.5 mr-1 text-gray-500" aria-label="Avec note de frais" />}
+                        {request.label}
+                      </span>
                       <span className="block text-xs text-gray-500">
                         {request.createdAt?.toDate?.().toLocaleDateString('fr-BE', { day: 'numeric', month: 'short' }) || 'À l\'instant'}
                         {' · '}{request.createdByName}
@@ -407,8 +545,17 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [] }) => {
       </div>
 
       <Modal isOpen={Boolean(opened)} onClose={() => setOpenId(null)} title={opened?.label || 'Demande'}>
-        {opened && <RequestDetail key={opened.id} request={opened} onClose={() => setOpenId(null)} />}
+        {opened && (
+          <RequestDetail
+            key={opened.id}
+            request={opened}
+            onClose={() => setOpenId(null)}
+            onOpenNote={noteByRequest.has(opened.id) ? () => openNote(noteByRequest.get(opened.id)) : undefined}
+          />
+        )}
       </Modal>
+
+      {shownNote && <ExpenseNote note={shownNote} onClose={() => setShownNote(null)} />}
     </div>
   );
 };
