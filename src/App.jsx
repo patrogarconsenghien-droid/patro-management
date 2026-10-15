@@ -1137,6 +1137,7 @@ const eligible = [
         navigateTo={navigateTo}
         sectionId={sectionId}
         seasonId={viewedSeasonId}
+        sharedSeasonId={sharedSeasonId}
         jobs={jobs}
       />
     );

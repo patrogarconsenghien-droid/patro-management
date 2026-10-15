@@ -253,6 +253,11 @@ await ko('animateur garçons ne crée pas de boulot fait chez les filles sans si
   addDoc(FC(as(ANIMATEUR), 'jobs'), { broId: 'fbro1', hours: 2, total: 20, isPaid: false }));
 await ko('animateur garçons ne signe pas « filles » pour écrire chez les filles',
   addDoc(FC(as(ANIMATEUR), 'jobs'), { broId: 'fbro1', hours: 2, total: 20, isPaid: false, crossSectionFrom: 'filles' }));
+await ok('animateur garçons relit les boulots faits qu\'il a créés chez les filles',
+  getDocs(query(FC(as(ANIMATEUR), 'jobs'), where('crossSectionFrom', '==', 'garcons'))));
+await ko('animateur garçons ne lit pas les autres boulots faits des filles', getDocs(FC(as(ANIMATEUR), 'jobs')));
+await ko('animé garçons ne relit pas les boulots faits créés chez les filles',
+  getDocs(query(FC(as(ANIME), 'jobs'), where('crossSectionFrom', '==', 'garcons'))));
 await ko('animé garçons ne crée pas de boulot fait chez les filles',
   addDoc(FC(as(ANIME), 'jobs'), { broId: 'fbro1', hours: 2, total: 20, isPaid: false, crossSectionFrom: 'garcons' }));
 await ok('animateur garçons crédite les heures d\'une fille',

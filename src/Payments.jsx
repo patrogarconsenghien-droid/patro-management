@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, setDoc, query, serverTimestamp, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { Check, Copy, FileText, Maximize2, QrCode, Share2, X } from 'lucide-react';
 import { db, functions } from './firebase';
@@ -39,14 +39,15 @@ const workOf = (description) => String(description || '').replace(/\s*\(PARTIEL 
 
 /**
  * Note de frais d'une demande faite avant que les notes soient gardées :
- * reconstruite à partir de la demande (qui, combien) et des boulots de la
- * section (heures, tarif, lieu). Les boulots de l'autre section ne se lisent
- * pas d'ici : leurs heures se déduisent du montant et du tarif.
+ * reconstruite à partir de la demande (qui, combien) et des boulots faits
+ * (heures, tarif, lieu). Les participants de l'autre section venus sur le
+ * même boulot sont ajoutés, même si leur part a été demandée à part : la note
+ * montre toute l'équipe.
  */
-async function noteFromRequest(request, sectionId) {
+async function noteFromRequest(request, sectionId, sharedSeasonId) {
   const targets = request.targets || [];
+  const otherId = otherSectionId(sectionId);
   const jobs = await Promise.all(targets.map(async (target) => {
-    if (sectionOfPath(target.path) !== sectionId) return null;
     try {
       const snap = await getDoc(doc(db, target.path));
       return snap.exists() ? snap.data() : null;
@@ -58,7 +59,27 @@ async function noteFromRequest(request, sectionId) {
   const rate = Number(known.find((job) => job.hourlyRate > 0)?.hourlyRate) || 0;
   if (!(rate > 0)) throw new Error('Tarif introuvable : les boulots de cette demande n\'existent plus.');
 
-  const works = [...new Set(targets.map((t) => workOf(t.description)))];
+  // Les boulots que nous avons créés chez l'autre section pour les mêmes
+  // boulots programmés, et qui ne sont pas déjà sur la demande.
+  const scheduledIds = [...new Set(known.map((job) => job.originalScheduledJobId).filter(Boolean))];
+  const onRequest = new Set(targets.map((target) => target.path));
+  const extra = [];
+  if (sharedSeasonId) {
+    await Promise.all(scheduledIds.map(async (scheduledId) => {
+      try {
+        const snap = await getDocs(query(
+          collectionRef(db, sharedSeasonId, 'jobs', otherId),
+          where('crossSectionFrom', '==', sectionId),
+          where('originalScheduledJobId', '==', scheduledId)
+        ));
+        snap.docs.filter((d) => !onRequest.has(d.ref.path)).forEach((d) => extra.push(d.data()));
+      } catch (error) {
+        console.error('Lecture des boulots de l\'autre section impossible:', error);
+      }
+    }));
+  }
+
+  const works = [...new Set([...targets, ...extra].map((t) => workOf(t.description)))];
   const lines = targets.map((target, index) => {
     const lineSection = target.sectionId || sectionOfPath(target.path);
     const hours = Number(jobs[index]?.hours) || Math.round((target.amountCents / 100 / rate) * 100) / 100;
@@ -71,8 +92,14 @@ async function noteFromRequest(request, sectionId) {
       name: works.length > 1 ? `${name} · ${workOf(target.description)}` : name,
       hours
     };
-  });
-  const first = known[0] || {};
+  }).concat(extra.map((job, index) => ({
+    key: `${otherId}:extra${index}`,
+    broId: job.broId || null,
+    sectionId: otherId,
+    name: works.length > 1 ? `${job.broName || 'Inconnu'} · ${workOf(job.description)}` : (job.broName || 'Inconnu'),
+    hours: Number(job.hours) || 0
+  })));
+  const first = jobs.find((job, index) => job && sectionOfPath(targets[index].path) === sectionId) || known[0] || {};
   return {
     issuedAt: request.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
     sectionId,
@@ -93,7 +120,7 @@ const messageOf = (error) =>
   error?.details?.reason ? error.message : 'Ça n\'a pas marché. Vérifie ta connexion et réessaie.';
 
 /** Détail d'une demande : le QR à montrer, le lien à envoyer, et les actions. */
-const RequestDetail = ({ request, onClose, onOpenNote, onCreateNote }) => {
+const RequestDetail = ({ request, onClose, onOpenNote, onCreateNote, createNoteLabel }) => {
   const [page, setPage] = useState(null);
   const [qr, setQr] = useState(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -203,7 +230,7 @@ const RequestDetail = ({ request, onClose, onOpenNote, onCreateNote }) => {
 
       {onCreateNote && (
         <button onClick={onCreateNote} className="w-full p-2.5 rounded-xl bg-gray-100 text-sm font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform">
-          <FileText size={16} />Créer la note de frais
+          <FileText size={16} />{createNoteLabel}
         </button>
       )}
 
@@ -267,7 +294,7 @@ const RequestDetail = ({ request, onClose, onOpenNote, onCreateNote }) => {
   );
 };
 
-const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [] }) => {
+const Payments = ({ Header, navigateTo, sectionId, seasonId, sharedSeasonId, jobs = [] }) => {
   const [requests, setRequests] = useState(null);
   const [selectedJobs, setSelectedJobs] = useState(() => new Set());
   const [openId, setOpenId] = useState(null);
@@ -377,12 +404,22 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [] }) => {
     }
   };
 
+  // Une note déjà reconstruite se refait par-dessus : elle ne vient pas de la
+  // validation, rien de saisi à la main ne s'y perd.
   const createNote = async (request) => {
     try {
-      const note = await noteFromRequest(request, sectionId);
-      const ref = await addDoc(collectionRef(db, seasonId, 'expenseNotes', sectionId), { ...note, createdAt: serverTimestamp() });
-      toast('Note de frais créée');
-      await openNote({ id: ref.id, ...note });
+      const note = await noteFromRequest(request, sectionId, sharedSeasonId);
+      const existing = noteByRequest.get(request.id);
+      let id = existing?.id;
+      if (existing) {
+        await setDoc(docRef(db, seasonId, 'expenseNotes', id, sectionId), {
+          ...note, createdAt: existing.createdAt || serverTimestamp(), updatedAt: serverTimestamp()
+        });
+      } else {
+        id = (await addDoc(collectionRef(db, seasonId, 'expenseNotes', sectionId), { ...note, createdAt: serverTimestamp() })).id;
+      }
+      toast(existing ? 'Note de frais refaite' : 'Note de frais créée');
+      await openNote({ id, ...note });
     } catch (caught) {
       console.error('Création de la note:', caught);
       toast(caught?.message || 'Ça n\'a pas marché.', { tone: 'error' });
@@ -626,7 +663,8 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [] }) => {
             onClose={() => setOpenId(null)}
             onOpenNote={noteByRequest.has(opened.id) ? () => openNote(noteByRequest.get(opened.id)) : undefined}
             onCreateNote={opened.kind === 'jobs' && opened.status !== 'cancelled' && opened.targets?.[0]?.path?.includes('/')
-              && !noteByRequest.has(opened.id) ? () => createNote(opened) : undefined}
+              && (!noteByRequest.has(opened.id) || noteByRequest.get(opened.id).rebuiltFromRequest) ? () => createNote(opened) : undefined}
+            createNoteLabel={noteByRequest.has(opened.id) ? 'Refaire la note de frais' : 'Créer la note de frais'}
           />
         )}
       </Modal>

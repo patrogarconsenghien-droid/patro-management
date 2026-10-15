@@ -159,6 +159,9 @@ service cloud.firestore {
         isManagerOf(sec)
         || (isActiveIn(sec) && !isManagerOnlyColl(coll))
         || isOpenJob(coll)
+        // Les boulots faits qu'une section a créés chez l'autre (boulot ouvert) :
+        // ses animateurs les relisent pour la note de frais.
+        || (coll == 'jobs' && isManagerOf(resource.data.get('crossSectionFrom', '')))
       );
     }
 
