@@ -179,9 +179,21 @@
 
 /* Note de frais : à l'impression, seule la feuille apparaît. */
 @media print {
+  html:has(body.printing-note), body.printing-note { background: #fff !important; }
   body.printing-note #root { display: none !important; }
   body.printing-note #expense-note { position: static !important; background: none !important; overflow: visible !important; }
   body.printing-note #expense-note .no-print { display: none !important; }
-  body.printing-note .expense-note-sheet { margin: 0 !important; border-radius: 0 !important; max-width: none !important; padding: 0 !important; }
-  @page { margin: 16mm; }
+  body.printing-note .expense-note-sheet { margin: 0 !important; border-radius: 0 !important; max-width: none !important; padding: 0 !important; font-size: 12.5px !important; line-height: 1.3 !important; }
+  /* Serré pour tenir sur une page A4 jusqu'à une vingtaine de lignes. */
+  body.printing-note .note-head { padding-bottom: 10px !important; }
+  body.printing-note .note-title { font-size: 22px !important; }
+  body.printing-note .note-meta { margin: 12px 0 !important; gap: 10px !important; }
+  body.printing-note .note-lines th { padding: 4px 0 !important; }
+  body.printing-note .note-lines td { padding: 3px 0 !important; }
+  body.printing-note .note-lines tfoot td { padding-top: 8px !important; }
+  body.printing-note .note-lines tr { break-inside: avoid; }
+  body.printing-note .note-pay { margin-top: 14px !important; padding: 10px 12px !important; gap: 14px !important; break-inside: avoid; }
+  body.printing-note .note-qr { width: 120px !important; height: 120px !important; }
+  body.printing-note .note-thanks { margin-top: 10px !important; }
+  @page { size: A4; margin: 12mm; }
 }

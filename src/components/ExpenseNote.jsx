@@ -71,10 +71,10 @@ export default function ExpenseNote({ note, onClose }) {
         className="expense-note-sheet"
         style={{ background: '#fff', color: ink, maxWidth: 720, margin: '0 auto 32px', padding: '32px 28px', borderRadius: 16, fontFamily: 'Figtree, system-ui, sans-serif', fontSize: 14, lineHeight: 1.45 }}
       >
-        <header style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', borderBottom: `2px solid ${ink}`, paddingBottom: 16 }}>
+        <header className="note-head" style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'flex-start', borderBottom: `2px solid ${ink}`, paddingBottom: 16 }}>
           <div>
             <p style={{ ...caption, letterSpacing: '.08em' }}>Note de frais</p>
-            <h1 style={{ margin: '4px 0 0', fontFamily: '"Bricolage Grotesque", system-ui, sans-serif', fontSize: 28, fontWeight: 800, lineHeight: 1.1 }}>
+            <h1 className="note-title" style={{ margin: '4px 0 0', fontFamily: '"Bricolage Grotesque", system-ui, sans-serif', fontSize: 28, fontWeight: 800, lineHeight: 1.1 }}>
               {payment?.holderName || 'Patro'}
             </h1>
             {note.sectionLabel && <p style={{ margin: '2px 0 0', color: muted }}>Section {note.sectionLabel}</p>}
@@ -87,7 +87,7 @@ export default function ExpenseNote({ note, onClose }) {
           </div>
         </header>
 
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, margin: '20px 0' }}>
+        <section className="note-meta" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, margin: '20px 0' }}>
           <div>
             <p style={caption}>Pour</p>
             <p style={{ margin: '2px 0 0', fontWeight: 700, fontSize: 16 }}>{note.billTo || '—'}</p>
@@ -101,7 +101,7 @@ export default function ExpenseNote({ note, onClose }) {
           </div>
         </section>
 
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+        <table className="note-lines" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ textAlign: 'left', fontSize: 12, color: muted, textTransform: 'uppercase', letterSpacing: '.06em' }}>
               <th style={head}>Qui</th>
@@ -137,8 +137,8 @@ export default function ExpenseNote({ note, onClose }) {
           </tfoot>
         </table>
 
-        <section style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center', marginTop: 28, padding: 16, border: `1px solid ${rule}`, borderRadius: 12 }}>
-          {qr && <img src={qr} alt="QR code de paiement" style={{ width: 150, height: 150 }} />}
+        <section className="note-pay" style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center', marginTop: 28, padding: 16, border: `1px solid ${rule}`, borderRadius: 12 }}>
+          {qr && <img className="note-qr" src={qr} alt="QR code de paiement" style={{ width: 150, height: 150 }} />}
           <div style={{ flex: '1 1 220px', fontSize: 13 }}>
             <p style={{ margin: 0, fontWeight: 700, fontSize: 15 }}>Paiement</p>
             {note.paidAt ? (
@@ -177,7 +177,7 @@ export default function ExpenseNote({ note, onClose }) {
           </div>
         </section>
 
-        <p style={{ marginTop: 20, fontSize: 12, color: muted, textAlign: 'center' }}>Merci pour votre confiance !</p>
+        <p className="note-thanks" style={{ marginTop: 20, fontSize: 12, color: muted, textAlign: 'center' }}>Merci pour votre confiance !</p>
       </article>
     </div>,
     document.body
