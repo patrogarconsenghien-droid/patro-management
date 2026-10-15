@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { collection, onSnapshot, query, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, onSnapshot, query, serverTimestamp, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { Check, Copy, FileText, Maximize2, QrCode, Share2, X } from 'lucide-react';
 import { db, functions } from './firebase';
 import Modal from './components/Modal';
 import ExpenseNote from './components/ExpenseNote';
 import { SECTIONS } from './auth/account';
-import { collectionRef, docRef } from './lib/seasons';
+import { collectionRef, docRef, otherSectionId } from './lib/seasons';
 import { formatCurrency, formatDate } from './lib/format';
 import { toast } from './lib/feedback';
 import { payUrl, renderQr } from './lib/payLink';
@@ -33,11 +33,67 @@ const mergeTargets = (targets = []) => {
   return [...merged.values()];
 };
 const call = async (name, data) => (await httpsCallable(functions, name)(data)).data;
+
+const sectionOfPath = (path) => /^sections\/([^/]+)\//.exec(String(path))?.[1] || 'garcons';
+const workOf = (description) => String(description || '').replace(/\s*\(PARTIEL [^)]*\)\s*$/, '').trim();
+
+/**
+ * Note de frais d'une demande faite avant que les notes soient gardées :
+ * reconstruite à partir de la demande (qui, combien) et des boulots de la
+ * section (heures, tarif, lieu). Les boulots de l'autre section ne se lisent
+ * pas d'ici : leurs heures se déduisent du montant et du tarif.
+ */
+async function noteFromRequest(request, sectionId) {
+  const targets = request.targets || [];
+  const jobs = await Promise.all(targets.map(async (target) => {
+    if (sectionOfPath(target.path) !== sectionId) return null;
+    try {
+      const snap = await getDoc(doc(db, target.path));
+      return snap.exists() ? snap.data() : null;
+    } catch {
+      return null;
+    }
+  }));
+  const known = jobs.filter(Boolean);
+  const rate = Number(known.find((job) => job.hourlyRate > 0)?.hourlyRate) || 0;
+  if (!(rate > 0)) throw new Error('Tarif introuvable : les boulots de cette demande n\'existent plus.');
+
+  const works = [...new Set(targets.map((t) => workOf(t.description)))];
+  const lines = targets.map((target, index) => {
+    const lineSection = target.sectionId || sectionOfPath(target.path);
+    const hours = Number(jobs[index]?.hours) || Math.round((target.amountCents / 100 / rate) * 100) / 100;
+    const name = target.broName || 'Inconnu';
+    return {
+      key: `${lineSection}:${index}`,
+      broId: jobs[index]?.broId || null,
+      sectionId: lineSection,
+      // Plusieurs boulots sur la même demande : chaque ligne dit lequel.
+      name: works.length > 1 ? `${name} · ${workOf(target.description)}` : name,
+      hours
+    };
+  });
+  const first = known[0] || {};
+  return {
+    issuedAt: request.createdAt?.toDate?.().toISOString() || new Date().toISOString(),
+    sectionId,
+    sectionLabel: SECTIONS[sectionId],
+    otherLabel: SECTIONS[otherSectionId(sectionId)],
+    billTo: request.payer?.name || first.contactName || '',
+    description: works.join(' + '),
+    date: targets[0]?.date || first.date || null,
+    location: first.location || '',
+    rate,
+    lines,
+    collectTogether: targets.some((t) => t.sectionId),
+    paymentRequestId: request.id,
+    rebuiltFromRequest: true
+  };
+}
 const messageOf = (error) =>
   error?.details?.reason ? error.message : 'Ça n\'a pas marché. Vérifie ta connexion et réessaie.';
 
 /** Détail d'une demande : le QR à montrer, le lien à envoyer, et les actions. */
-const RequestDetail = ({ request, onClose, onOpenNote }) => {
+const RequestDetail = ({ request, onClose, onOpenNote, onCreateNote }) => {
   const [page, setPage] = useState(null);
   const [qr, setQr] = useState(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -143,6 +199,12 @@ const RequestDetail = ({ request, onClose, onOpenNote }) => {
             </li>
           ))}
         </ul>
+      )}
+
+      {onCreateNote && (
+        <button onClick={onCreateNote} className="w-full p-2.5 rounded-xl bg-gray-100 text-sm font-semibold flex items-center justify-center gap-2 active:scale-95 transition-transform">
+          <FileText size={16} />Créer la note de frais
+        </button>
       )}
 
       {onOpenNote && (
@@ -312,6 +374,18 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [] }) => {
       toast(messageOf(caught), { tone: 'error' });
     } finally {
       setOpeningNote(null);
+    }
+  };
+
+  const createNote = async (request) => {
+    try {
+      const note = await noteFromRequest(request, sectionId);
+      const ref = await addDoc(collectionRef(db, seasonId, 'expenseNotes', sectionId), { ...note, createdAt: serverTimestamp() });
+      toast('Note de frais créée');
+      await openNote({ id: ref.id, ...note });
+    } catch (caught) {
+      console.error('Création de la note:', caught);
+      toast(caught?.message || 'Ça n\'a pas marché.', { tone: 'error' });
     }
   };
 
@@ -551,6 +625,8 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, jobs = [] }) => {
             request={opened}
             onClose={() => setOpenId(null)}
             onOpenNote={noteByRequest.has(opened.id) ? () => openNote(noteByRequest.get(opened.id)) : undefined}
+            onCreateNote={opened.kind === 'jobs' && opened.status !== 'cancelled' && opened.targets?.[0]?.path?.includes('/')
+              && !noteByRequest.has(opened.id) ? () => createNote(opened) : undefined}
           />
         )}
       </Modal>
