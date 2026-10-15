@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, Printer, Share2, X } from 'lucide-react';
+import { Download, Pencil, Printer, Share2, X } from 'lucide-react';
 import { formatCurrency } from '../lib/format';
 import { renderQr } from '../lib/payLink';
 import { toast } from '../lib/feedback';
@@ -20,8 +20,26 @@ const hoursLabel = (value) => `${String(value).replace('.', ',')} h`;
  * dès l'ouverture : sur iPhone, le partage doit partir tout de suite au clic. Couleurs en dur : c'est une feuille de papier, elle reste
  * blanche en mode sombre.
  */
-export default function ExpenseNote({ note, onClose }) {
+export default function ExpenseNote({ note, onClose, onChangeBillTo }) {
   const [qr, setQr] = useState(null);
+  // Corriger « Pour » : enregistré par `onChangeBillTo`, qui renvoie la note à jour.
+  const [editingBillTo, setEditingBillTo] = useState(false);
+  const [billToDraft, setBillToDraft] = useState('');
+  const [savingBillTo, setSavingBillTo] = useState(false);
+  const saveBillTo = async () => {
+    const value = billToDraft.replace(/s+/g, ' ').trim();
+    if (value === (note.billTo || '')) { setEditingBillTo(false); return; }
+    setSavingBillTo(true);
+    try {
+      await onChangeBillTo(value);
+      setEditingBillTo(false);
+    } catch (error) {
+      console.error('Modification de la note impossible:', error);
+      toast('Modification impossible. Vérifie ta connexion.', { tone: 'error' });
+    } finally {
+      setSavingBillTo(false);
+    }
+  };
   const payment = note.payment;
 
   const ownLines = note.lines.filter((l) => l.sectionId === note.sectionId);
@@ -153,7 +171,41 @@ export default function ExpenseNote({ note, onClose }) {
         <section className="note-meta" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, margin: '20px 0' }}>
           <div>
             <p style={caption}>Pour</p>
-            <p style={{ margin: '2px 0 0', fontWeight: 700, fontSize: 16 }}>{note.billTo || '—'}</p>
+            {editingBillTo ? (
+              <form
+                className="no-print"
+                onSubmit={(e) => { e.preventDefault(); saveBillTo(); }}
+                style={{ display: 'flex', gap: 6, marginTop: 4 }}
+              >
+                <input
+                  autoFocus
+                  value={billToDraft}
+                  onChange={(e) => setBillToDraft(e.target.value)}
+                  placeholder="Nom de la personne ou de l'organisme"
+                  style={{ flex: 1, minWidth: 0, padding: '6px 8px', border: `1px solid ${rule}`, borderRadius: 8, fontSize: 15, color: ink, background: '#fff' }}
+                />
+                <button type="submit" disabled={savingBillTo} style={{ padding: '6px 10px', borderRadius: 8, border: 0, background: '#16a34a', color: '#fff', fontWeight: 700 }}>
+                  OK
+                </button>
+                <button type="button" onClick={() => setEditingBillTo(false)} style={{ padding: '6px 8px', borderRadius: 8, border: 0, background: '#f1efec', color: ink }}>
+                  Annuler
+                </button>
+              </form>
+            ) : (
+              <p style={{ margin: '2px 0 0', fontWeight: 700, fontSize: 16 }}>
+                {note.billTo || '—'}
+                {onChangeBillTo && (
+                  <button
+                    className="no-print"
+                    onClick={() => { setBillToDraft(note.billTo || ''); setEditingBillTo(true); }}
+                    aria-label="Changer pour qui est la note"
+                    style={{ marginLeft: 8, verticalAlign: 'middle', padding: '2px 6px', borderRadius: 6, border: 0, background: '#f1efec', color: muted, cursor: 'pointer' }}
+                  >
+                    <Pencil size={13} />
+                  </button>
+                )}
+              </p>
+            )}
           </div>
           <div>
             <p style={caption}>Boulot</p>

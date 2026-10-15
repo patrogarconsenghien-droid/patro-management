@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, setDoc, query, serverTimestamp, where } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, setDoc, updateDoc, query, serverTimestamp, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { Check, Copy, FileText, Maximize2, QrCode, Share2, X } from 'lucide-react';
 import { db, functions } from './firebase';
@@ -413,13 +413,13 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, sharedSeasonId, job
       let id = existing?.id;
       if (existing) {
         await setDoc(docRef(db, seasonId, 'expenseNotes', id, sectionId), {
-          ...note, createdAt: existing.createdAt || serverTimestamp(), updatedAt: serverTimestamp()
+          ...note, billTo: existing.billTo || note.billTo, createdAt: existing.createdAt || serverTimestamp(), updatedAt: serverTimestamp()
         });
       } else {
         id = (await addDoc(collectionRef(db, seasonId, 'expenseNotes', sectionId), { ...note, createdAt: serverTimestamp() })).id;
       }
       toast(existing ? 'Note de frais refaite' : 'Note de frais créée');
-      await openNote({ id, ...note });
+      await openNote({ id, ...note, billTo: existing?.billTo || note.billTo });
     } catch (caught) {
       console.error('Création de la note:', caught);
       toast(caught?.message || 'Ça n\'a pas marché.', { tone: 'error' });
@@ -669,7 +669,16 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, sharedSeasonId, job
         )}
       </Modal>
 
-      {shownNote && <ExpenseNote note={shownNote} onClose={() => setShownNote(null)} />}
+      {shownNote && (
+        <ExpenseNote
+          note={shownNote}
+          onClose={() => setShownNote(null)}
+          onChangeBillTo={shownNote.id ? async (billTo) => {
+            await updateDoc(docRef(db, seasonId, 'expenseNotes', shownNote.id, sectionId), { billTo, updatedAt: serverTimestamp() });
+            setShownNote((current) => current && { ...current, billTo });
+          } : undefined}
+        />
+      )}
     </div>
   );
 };

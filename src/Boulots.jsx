@@ -648,12 +648,14 @@ ${job.registeredBros.map(reg => {
     // redemande au serveur à l'ouverture, tant que la demande est en attente.
     const { payment: _payment, preview: _preview, ...stored } = note;
     try {
-      await saveToFirebase('expenseNotes', {
+      const noteId = await saveToFirebase('expenseNotes', {
         ...stored,
         location: stored.location || '',
         paymentRequestId: payment?.requestId || null,
         scheduledJobId: job.id
       });
+      // La note affichée devient modifiable (« Pour ») une fois enregistrée.
+      setExpenseNote((current) => (current === note ? { ...current, id: noteId } : current));
     } catch (error) {
       console.error('Enregistrement de la note de frais impossible:', error);
     }
@@ -1750,7 +1752,16 @@ ${job.registeredBros.map(reg => {
             onClose={() => setValidatingJob(null)}
           />
         )}
-        {expenseNote && <ExpenseNote note={expenseNote} onClose={() => setExpenseNote(null)} />}
+        {expenseNote && (
+          <ExpenseNote
+            note={expenseNote}
+            onClose={() => setExpenseNote(null)}
+            onChangeBillTo={expenseNote.id ? async (billTo) => {
+              await updateInFirebase('expenseNotes', expenseNote.id, { billTo });
+              setExpenseNote((current) => current && { ...current, billTo });
+            } : undefined}
+          />
+        )}
 
         {/* Modal pour gérer les inscriptions */}
         <Modal
