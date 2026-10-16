@@ -74,7 +74,7 @@ async function noteFromRequest(request, sectionId, sharedSeasonId) {
           where('crossSectionFrom', '==', sectionId),
           where('originalScheduledJobId', '==', scheduledId)
         ));
-        snap.docs.filter((d) => !onRequest.has(d.ref.path)).forEach((d) => extra.push(d.data()));
+        snap.docs.filter((d) => !onRequest.has(d.ref.path)).forEach((d) => extra.push({ ...d.data(), path: d.ref.path }));
       } catch (error) {
         console.error('Lecture des boulots de l\'autre section impossible:', error);
       }
@@ -90,6 +90,8 @@ async function noteFromRequest(request, sectionId, sharedSeasonId) {
       key: `${lineSection}:${index}`,
       broId: jobs[index]?.broId || null,
       sectionId: lineSection,
+      // Le boulot fait de la ligne : c'est lui que « Modifier » corrige.
+      jobPath: jobs[index] ? target.path : null,
       // Plusieurs boulots sur la même demande : chaque ligne dit lequel.
       name: works.length > 1 ? `${name} · ${workOf(target.description)}` : name,
       hours
@@ -98,6 +100,7 @@ async function noteFromRequest(request, sectionId, sharedSeasonId) {
     key: `${otherId}:extra${index}`,
     broId: job.broId || null,
     sectionId: otherId,
+    jobPath: job.path,
     name: works.length > 1 ? `${job.broName || 'Inconnu'} · ${workOf(job.description)}` : (job.broName || 'Inconnu'),
     hours: Number(job.hours) || 0
   })));
@@ -115,8 +118,9 @@ async function noteFromRequest(request, sectionId, sharedSeasonId) {
     lines,
     collectTogether: targets.some((t) => t.sectionId),
     paymentRequestId: request.id,
-    // Un seul boulot programmé derrière : la note se modifie comme les autres.
     scheduledJobId: scheduledIds.length === 1 && works.length === 1 ? scheduledIds[0] : null,
+    // Les boulots faits de la note, pour la modifier ensuite.
+    jobPaths: [...targets.filter((_, index) => jobs[index]).map((target) => target.path), ...extra.map((job) => job.path)],
     rebuiltFromRequest: true
   };
 }
@@ -564,7 +568,7 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, sharedSeasonId, job
                       {/* Toujours visible : s'il ne peut pas servir, il dit pourquoi. */}
                       <button
                         onClick={() => {
-                          const blocked = !note.scheduledJobId
+                          const blocked = !note.scheduledJobId && !note.jobPaths
                             ? (note.rebuiltFromRequest
                               ? 'Ancienne note : touche « Paiement », puis « Refaire la note de frais », et reviens la modifier.'
                               : 'Cette note ne vient pas d\'une validation de boulot : elle ne se modifie pas.')

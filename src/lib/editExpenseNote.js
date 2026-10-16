@@ -2,7 +2,7 @@
 // Tout ce qui en découle suit : les boulots faits (des deux sections), les
 // heures des Bro, et la demande de paiement, refaite puisqu'un montant
 // demandé ne change jamais (voir functions/lib/paymentRequests.js).
-import { addDoc, deleteDoc, getDocs, increment, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
+import { addDoc, deleteDoc, doc, getDoc, getDocs, increment, query, serverTimestamp, updateDoc, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { db, functions } from '../firebase';
 import { collectionRef, docRef, otherSectionId } from './seasons';
@@ -10,11 +10,21 @@ import { payUrl } from './payLink';
 
 const call = async (name, data) => (await httpsCallable(functions, name)(data)).data;
 const keyOf = (sectionId, broId) => `${sectionId}:${broId}`;
+const sectionOfPath = (path) => /^sections\/([^/]+)\//.exec(String(path))?.[1] || 'garcons';
 
 export class NoteEditError extends Error {}
 
-/** Les boulots faits de la note : les nôtres, et ceux créés chez l'autre section. */
+/**
+ * Les boulots faits de la note : les nôtres, et ceux créés chez l'autre
+ * section. Une note reconstruite depuis une demande en garde la liste
+ * (`jobPaths`) ; une note faite à la validation passe par son boulot programmé.
+ */
 export async function jobsOfNote(note, { sectionId, seasonId, sharedSeasonId, ownJobs }) {
+  if (!note.scheduledJobId && note.jobPaths?.length) {
+    const snaps = await Promise.all(note.jobPaths.map((path) => getDoc(doc(db, path))));
+    return snaps.filter((snap) => snap.exists())
+      .map((snap) => ({ id: snap.id, ...snap.data(), sectionId: sectionOfPath(snap.ref.path), ref: snap.ref }));
+  }
   const own = ownJobs
     .filter((job) => job.originalScheduledJobId === note.scheduledJobId)
     .map((job) => ({ ...job, sectionId, ref: docRef(db, seasonId, 'jobs', job.id, sectionId) }));
@@ -47,7 +57,7 @@ export function blockerOf(jobs, request) {
  * @returns      { note, payment } : la note à jour, et le QR de la nouvelle demande
  */
 export async function applyNoteEdit(note, draft, { sectionId, seasonId, sharedSeasonId, ownJobs, request }) {
-  if (!note.scheduledJobId) throw new NoteEditError('Cette note ne vient pas d\'une validation : refais-la plutôt depuis la demande.');
+  if (!note.scheduledJobId && !note.jobPaths?.length) throw new NoteEditError('Cette note ne vient pas d\'une validation : refais-la plutôt depuis la demande.');
   const jobs = await jobsOfNote(note, { sectionId, seasonId, sharedSeasonId, ownJobs });
   const blocker = blockerOf(jobs, request);
   if (blocker) throw new NoteEditError(blocker);
@@ -62,9 +72,11 @@ export async function applyNoteEdit(note, draft, { sectionId, seasonId, sharedSe
   const brosNeeded = jobs.find((job) => job.originalBrosNeeded)?.originalBrosNeeded || lines.length;
   const isPartial = lines.length < brosNeeded;
   const description = isPartial ? `${note.description} (PARTIEL ${lines.length}/${brosNeeded})` : note.description;
+  // Une note reconstruite peut couvrir des boulots aux intitulés différents :
+  // chacun garde le sien.
   const common = {
     hourlyRate: rate,
-    description,
+    ...(note.scheduledJobId ? { description } : {}),
     isPartialCompletion: isPartial,
     actualBrosUsed: lines.length,
     contactName: billTo
@@ -80,27 +92,32 @@ export async function applyNoteEdit(note, draft, { sectionId, seasonId, sharedSe
     }
   };
 
+  // Chaque ligne retrouve son boulot fait : par son chemin s'il est connu,
+  // sinon par la personne.
+  const byPath = new Map(jobs.map((job) => [job.ref.path, job]));
   const byKey = new Map(jobs.map((job) => [keyOf(job.sectionId, job.broId), job]));
   const kept = new Set();
   const finalPaths = [];
+  const finalLines = [];
   for (const line of lines) {
-    const key = keyOf(line.sectionId, line.broId);
-    const existing = byKey.get(key);
+    const existing = line.jobPath ? byPath.get(line.jobPath) : byKey.get(keyOf(line.sectionId, line.broId));
     const fields = { ...common, hours: line.hours, total: line.hours * rate };
-    if (existing) {
-      kept.add(key);
+    if (existing && !kept.has(existing.ref.path)) {
+      kept.add(existing.ref.path);
       await updateDoc(existing.ref, { ...fields, updatedAt: serverTimestamp() });
-      await addHours(line.sectionId, line.broId, line.hours - (Number(existing.hours) || 0));
-      finalPaths.push({ own: line.sectionId === sectionId, path: existing.ref.path });
+      await addHours(existing.sectionId, existing.broId, line.hours - (Number(existing.hours) || 0));
+      finalPaths.push({ own: existing.sectionId === sectionId, path: existing.ref.path });
+      finalLines.push({ ...line, jobPath: existing.ref.path });
     } else {
       const ref = await addDoc(collectionRef(db, seasonOf(line.sectionId), 'jobs', line.sectionId), {
         ...fields,
+        description,
         broId: line.broId,
         broName: line.name,
         date: note.date,
         isPaid: false,
         paymentMethod: null,
-        originalScheduledJobId: note.scheduledJobId,
+        originalScheduledJobId: note.scheduledJobId || null,
         contactPhone: request?.payer?.phone || '',
         location: note.location || '',
         originalBrosNeeded: brosNeeded,
@@ -109,10 +126,11 @@ export async function applyNoteEdit(note, draft, { sectionId, seasonId, sharedSe
       });
       await addHours(line.sectionId, line.broId, line.hours);
       finalPaths.push({ own: line.sectionId === sectionId, path: ref.path });
+      finalLines.push({ ...line, jobPath: ref.path });
     }
   }
   for (const job of jobs) {
-    if (kept.has(keyOf(job.sectionId, job.broId))) continue;
+    if (kept.has(job.ref.path)) continue;
     await deleteDoc(job.ref);
     await addHours(job.sectionId, job.broId, -(Number(job.hours) || 0));
   }
@@ -147,7 +165,10 @@ export async function applyNoteEdit(note, draft, { sectionId, seasonId, sharedSe
 
   const updated = {
     ...note,
-    lines: lines.map(({ key, broId, sectionId: lineSection, name, hours }) => ({ key, broId, sectionId: lineSection, name, hours })),
+    lines: finalLines.map(({ key, broId, sectionId: lineSection, name, hours, jobPath }) => ({
+      key, broId: broId || null, sectionId: lineSection, name, hours, jobPath
+    })),
+    jobPaths: finalPaths.map((p) => p.path),
     rate,
     billTo,
     collectTogether: together && Boolean(paymentRequestId),
