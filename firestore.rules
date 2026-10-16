@@ -184,6 +184,17 @@ service cloud.firestore {
       );
     }
 
+    // Un boulot fait qu'une section a créé chez l'autre, pas encore payé ni
+    // demandé : elle peut le corriger (heures, tarif) ou le retirer en
+    // modifiant sa note de frais.
+    function isOwnPendingCrossJob(coll) {
+      return coll == 'jobs'
+        && isManagerOf(resource.data.get('crossSectionFrom', ''))
+        && resource.data.get('isPaid', false) == false
+        && resource.data.get('paymentRequestId', null) == null
+        && resource.data.get('collectedBy', null) == null;
+    }
+
     function canUpdateSeasonDoc(sec, coll) {
       return isSeasonColl(coll) && (
         isManagerOf(sec)
@@ -196,6 +207,10 @@ service cloud.firestore {
         || (isActiveIn(sec) && animeUpdatesBarDoc(coll))
         // Depuis l'autre section : répondre à un boulot ouvert.
         || (isOpenJob(coll) && changedKeys().hasOnly(['registeredBros', 'unavailableBros', 'updatedAt']))
+        // Corriger un boulot fait créé chez l'autre section (note de frais).
+        || (isOwnPendingCrossJob(coll) && changedKeys().hasOnly([
+          'hours', 'total', 'hourlyRate', 'description', 'isPartialCompletion', 'actualBrosUsed', 'contactName', 'updatedAt'
+        ]))
         // Valider un boulot ouvert crédite les heures d'un Bro de l'autre section.
         || (coll == 'bros' && isActive() && me().role in ['animateur', 'admin']
           && changedKeys().hasOnly(['totalHours', 'updatedAt']))
@@ -210,6 +225,7 @@ service cloud.firestore {
         isManagerOf(sec)
         // Un animé ne supprime que les boulots qu'il a proposés.
         || (coll == 'scheduledJobs' && isActiveIn(sec) && resource.data.createdBy == request.auth.uid)
+        || isOwnPendingCrossJob(coll)
       );
     }
 

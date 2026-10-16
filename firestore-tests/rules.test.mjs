@@ -258,6 +258,28 @@ await ok('animateur garçons relit les boulots faits qu\'il a créés chez les f
 await ko('animateur garçons ne lit pas les autres boulots faits des filles', getDocs(FC(as(ANIMATEUR), 'jobs')));
 await ko('animé garçons ne relit pas les boulots faits créés chez les filles',
   getDocs(query(FC(as(ANIME), 'jobs'), where('crossSectionFrom', '==', 'garcons'))));
+await env.withSecurityRulesDisabled(async (ctx) => {
+  const F0 = (...s) => doc(ctx.firestore(), 'sections', 'filles', 'seasons', '2026-2027', ...s);
+  await setDoc(F0('jobs', 'xg1'), { broId: 'fbro1', hours: 2, total: 20, isPaid: false, crossSectionFrom: 'garcons' });
+  await setDoc(F0('jobs', 'xg2'), { broId: 'fbro1', hours: 2, total: 20, isPaid: false, crossSectionFrom: 'garcons' });
+  await setDoc(F0('jobs', 'xgpaid'), { broId: 'fbro1', hours: 2, total: 20, isPaid: true, crossSectionFrom: 'garcons' });
+  await setDoc(F0('jobs', 'xgreq'), { broId: 'fbro1', hours: 2, total: 20, isPaid: false, crossSectionFrom: 'garcons', paymentRequestId: 'r1' });
+  await setDoc(F0('jobs', 'fown'), { broId: 'fbro1', hours: 2, total: 20, isPaid: false });
+});
+await ok('animateur garçons corrige les heures d\'un boulot fait qu\'il a créé chez les filles',
+  updateDoc(F(as(ANIMATEUR), 'jobs', 'xg1'), { hours: 3, total: 30, updatedAt: 'x' }));
+await ko('animateur garçons ne marque pas payé un boulot fait chez les filles',
+  updateDoc(F(as(ANIMATEUR), 'jobs', 'xg1'), { isPaid: true, paymentMethod: 'cash', updatedAt: 'x' }));
+await ko('animateur garçons ne corrige pas un boulot déjà payé chez les filles',
+  updateDoc(F(as(ANIMATEUR), 'jobs', 'xgpaid'), { hours: 3, total: 30, updatedAt: 'x' }));
+await ko('animateur garçons ne corrige pas un boulot demandé chez les filles',
+  updateDoc(F(as(ANIMATEUR), 'jobs', 'xgreq'), { hours: 3, total: 30, updatedAt: 'x' }));
+await ko('animateur garçons ne corrige pas un boulot des filles qu\'il n\'a pas créé',
+  updateDoc(F(as(ANIMATEUR), 'jobs', 'fown'), { hours: 3, total: 30, updatedAt: 'x' }));
+await ok('animateur garçons retire un boulot fait qu\'il a créé chez les filles', deleteDoc(F(as(ANIMATEUR), 'jobs', 'xg2')));
+await ko('animateur garçons ne supprime pas un boulot des filles qu\'il n\'a pas créé', deleteDoc(F(as(ANIMATEUR), 'jobs', 'fown')));
+await ko('animé garçons ne corrige pas un boulot fait chez les filles',
+  updateDoc(F(as(ANIME), 'jobs', 'xg1'), { hours: 9, total: 90, updatedAt: 'x' }));
 await ko('animé garçons ne crée pas de boulot fait chez les filles',
   addDoc(FC(as(ANIME), 'jobs'), { broId: 'fbro1', hours: 2, total: 20, isPaid: false, crossSectionFrom: 'garcons' }));
 await ok('animateur garçons crédite les heures d\'une fille',

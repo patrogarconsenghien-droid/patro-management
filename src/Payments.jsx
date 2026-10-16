@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { addDoc, collection, doc, getDoc, getDocs, onSnapshot, setDoc, updateDoc, query, serverTimestamp, where } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
-import { Check, Copy, FileText, Maximize2, QrCode, Share2, X } from 'lucide-react';
+import { Check, Copy, FileText, Maximize2, Pencil, QrCode, Share2, X } from 'lucide-react';
 import { db, functions } from './firebase';
 import Modal from './components/Modal';
 import ExpenseNote from './components/ExpenseNote';
+import ValidateJobModal from './components/ValidateJobModal';
+import { NoteEditError, applyNoteEdit } from './lib/editExpenseNote';
 import { SECTIONS } from './auth/account';
 import { collectionRef, docRef, otherSectionId } from './lib/seasons';
 import { formatCurrency, formatDate } from './lib/format';
@@ -113,6 +115,8 @@ async function noteFromRequest(request, sectionId, sharedSeasonId) {
     lines,
     collectTogether: targets.some((t) => t.sectionId),
     paymentRequestId: request.id,
+    // Un seul boulot programmé derrière : la note se modifie comme les autres.
+    scheduledJobId: scheduledIds.length === 1 && works.length === 1 ? scheduledIds[0] : null,
     rebuiltFromRequest: true
   };
 }
@@ -294,7 +298,7 @@ const RequestDetail = ({ request, onClose, onOpenNote, onCreateNote, createNoteL
   );
 };
 
-const Payments = ({ Header, navigateTo, sectionId, seasonId, sharedSeasonId, jobs = [] }) => {
+const Payments = ({ Header, navigateTo, sectionId, seasonId, sharedSeasonId, jobs = [], bros = [], broPhotos = {} }) => {
   const [requests, setRequests] = useState(null);
   const [selectedJobs, setSelectedJobs] = useState(() => new Set());
   const [openId, setOpenId] = useState(null);
@@ -309,6 +313,8 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, sharedSeasonId, job
   const [debts, setDebts] = useState([]);
   const [shownNote, setShownNote] = useState(null);
   const [openingNote, setOpeningNote] = useState(null);
+  // Note en cours de modification (heures, participants, tarif, client).
+  const [editingNote, setEditingNote] = useState(null);
 
   useEffect(() => onSnapshot(
     collectionRef(db, seasonId, 'expenseNotes', sectionId),
@@ -426,6 +432,25 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, sharedSeasonId, job
     }
   };
 
+  const saveNoteEdit = async (draft) => {
+    const note = editingNote;
+    try {
+      const result = await applyNoteEdit(note, draft, {
+        sectionId, seasonId, sharedSeasonId, ownJobs: jobs, request: requestById.get(note.paymentRequestId)
+      });
+      setEditingNote(null);
+      if (result.paymentError) {
+        toast(`Note modifiée, mais QR non créé : ${result.paymentError}`, { tone: 'error', duration: 7000 });
+      } else {
+        toast('Note modifiée');
+      }
+      setShownNote({ ...result.note, payment: result.payment, paidAt: null, preview: false });
+    } catch (caught) {
+      console.error('Modification de la note:', caught);
+      toast(caught instanceof NoteEditError ? caught.message : messageOf(caught), { tone: 'error', duration: 6000 });
+    }
+  };
+
   const selected = jobs.filter((job) => selectedJobs.has(job.id));
   const selectedTotal = selected.reduce((sum, job) => sum + Number(job.total), 0);
   const opened = requests?.find((r) => r.id === openId)
@@ -536,6 +561,15 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, sharedSeasonId, job
                       >
                         <FileText size={16} />{openingNote === note.id ? 'Ouverture…' : 'Ouvrir la note'}
                       </button>
+                      {note.scheduledJobId && request?.status !== 'paid' && !debt && (
+                        <button
+                          onClick={() => setEditingNote(note)}
+                          aria-label="Modifier la note"
+                          className="p-2.5 px-3 rounded-xl bg-white ring-1 ring-gray-200 text-sm font-semibold flex items-center gap-2 active:scale-95 transition-transform"
+                        >
+                          <Pencil size={16} /><span className="hidden sm:inline">Modifier</span>
+                        </button>
+                      )}
                       {request && (
                         <button
                           onClick={() => setOpenId(request.id)}
@@ -668,6 +702,31 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, sharedSeasonId, job
           />
         )}
       </Modal>
+
+      {editingNote && (
+        <ValidateJobModal
+          job={{
+            description: editingNote.description,
+            brosNeeded: jobs.find((j) => j.originalScheduledJobId === editingNote.scheduledJobId)?.originalBrosNeeded || editingNote.lines.length,
+            registeredBros: [],
+            estimatedHours: editingNote.lines[0]?.hours || 1,
+            customRate: editingNote.rate,
+            contactName: editingNote.billTo
+          }}
+          bros={bros}
+          broPhotos={broPhotos}
+          sectionId={sectionId}
+          edit={{
+            lines: editingNote.lines,
+            rate: editingNote.rate,
+            billTo: editingNote.billTo,
+            collectTogether: editingNote.collectTogether,
+            hasRequest: requestById.get(editingNote.paymentRequestId)?.status === 'pending'
+          }}
+          onConfirm={saveNoteEdit}
+          onClose={() => setEditingNote(null)}
+        />
+      )}
 
       {shownNote && (
         <ExpenseNote

@@ -21,14 +21,16 @@ const hoursLabel = (value) => `${String(value).replace('.', ',')} h`;
  *   tout ; `onPreview` ouvre la note sans rien valider.
  * - `collectTogether` : avec des membres de l'autre section, le client paie
  *   tout en une fois chez nous (réglage de la section, modifiable ici).
+ * - `edit` : modifier une note déjà faite ({ lines, rate, billTo,
+ *   collectTogether, hasRequest }) au lieu de valider un boulot programmé.
  */
 export default function ValidateJobModal({
-  job, bros = [], broPhotos = {}, sectionId, collectOpenJobsTogether = false, onConfirm, onPreview, onClose
+  job, bros = [], broPhotos = {}, sectionId, collectOpenJobsTogether = false, edit = null, onConfirm, onPreview, onClose
 }) {
   const v = vocabFor(sectionId);
   const otherLabel = SECTIONS[otherSectionId(sectionId)];
   const defaultHours = job.estimatedHours || 1;
-  const [lines, setLines] = useState(() =>
+  const [lines, setLines] = useState(() => edit ? edit.lines.map((l) => ({ ...l })) :
     (job.registeredBros || []).map((registration) => {
       const bro = bros.find((b) => b.id === registration.broId);
       return {
@@ -40,10 +42,10 @@ export default function ValidateJobModal({
       };
     })
   );
-  const [rate, setRate] = useState(String(job.customRate ?? ''));
-  const [billTo, setBillTo] = useState(job.contactName || '');
+  const [rate, setRate] = useState(String(edit ? edit.rate : (job.customRate ?? '')));
+  const [billTo, setBillTo] = useState(edit ? edit.billTo || '' : job.contactName || '');
   const [withNote, setWithNote] = useState(true);
-  const [collectTogether, setCollectTogether] = useState(collectOpenJobsTogether);
+  const [collectTogether, setCollectTogether] = useState(edit ? Boolean(edit.collectTogether) : collectOpenJobsTogether);
   const [adding, setAdding] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -85,13 +87,17 @@ export default function ValidateJobModal({
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Valider le boulot">
+    <Modal isOpen onClose={onClose} title={edit ? 'Modifier la note de frais' : 'Valider le boulot'}>
       <div className="space-y-5">
         <div>
           <p className="font-semibold leading-tight">{job.description}</p>
-          <p className="text-sm text-gray-500">
-            Prévu : {job.registeredBros.length}/{job.brosNeeded} inscrit{v.e}s · {hoursLabel(defaultHours)} chacun
-          </p>
+          {edit ? (
+            <p className="text-sm text-gray-500">Les boulots faits, les heures de chacun et la note suivent.</p>
+          ) : (
+            <p className="text-sm text-gray-500">
+              Prévu : {job.registeredBros.length}/{job.brosNeeded} inscrit{v.e}s · {hoursLabel(defaultHours)} chacun
+            </p>
+          )}
         </div>
 
         {/* Qui a travaillé, et combien de temps */}
@@ -177,13 +183,22 @@ export default function ValidateJobModal({
 
         {/* Note de frais */}
         <div className="rounded-xl ring-1 ring-gray-200 p-3 space-y-3">
-          <label className="flex items-center justify-between gap-3 cursor-pointer">
-            <span className="text-sm">
+          {edit ? (
+            <p className="text-sm">
               <span className="font-semibold block">Note de frais</span>
-              <span className="text-gray-500">Une ligne par personne, et le QR de virement de la demande de paiement</span>
-            </span>
-            <input type="checkbox" checked={withNote} onChange={(e) => setWithNote(e.target.checked)} className="w-5 h-5" />
-          </label>
+              {edit.hasRequest && (
+                <span className="text-orange-700">Le QR déjà envoyé ne marchera plus : un nouveau est créé, renvoie la note au client.</span>
+              )}
+            </p>
+          ) : (
+            <label className="flex items-center justify-between gap-3 cursor-pointer">
+              <span className="text-sm">
+                <span className="font-semibold block">Note de frais</span>
+                <span className="text-gray-500">Une ligne par personne, et le QR de virement de la demande de paiement</span>
+              </span>
+              <input type="checkbox" checked={withNote} onChange={(e) => setWithNote(e.target.checked)} className="w-5 h-5" />
+            </label>
+          )}
           {withNote && (
             <>
               <label className="block text-sm">
@@ -216,13 +231,13 @@ export default function ValidateJobModal({
                   ))}
                 </div>
               )}
-              <button
+              {onPreview && <button
                 onClick={() => onPreview(payload())}
                 disabled={invalid}
                 className="w-full inline-flex items-center justify-center gap-2 p-2.5 rounded-xl bg-gray-100 text-sm font-semibold disabled:opacity-40 active:scale-95 transition-transform"
               >
                 <FileText size={16} /> Aperçu de la note
-              </button>
+              </button>}
             </>
           )}
         </div>
@@ -232,7 +247,7 @@ export default function ValidateJobModal({
           disabled={invalid || saving}
           className="w-full p-3.5 rounded-xl bg-green-500 text-white text-base font-bold shadow-md disabled:opacity-40 active:scale-95 transition-transform"
         >
-          {saving ? 'Validation…' : `Valider · ${formatCurrency(total)}`}
+          {saving ? 'Enregistrement…' : `${edit ? 'Enregistrer' : 'Valider'} · ${formatCurrency(total)}`}
         </button>
         {lines.length > 0 && lines.length < job.brosNeeded && (
           <p className="text-xs text-orange-700 text-center -mt-3">

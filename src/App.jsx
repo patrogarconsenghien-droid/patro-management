@@ -1139,6 +1139,8 @@ const eligible = [
         seasonId={viewedSeasonId}
         sharedSeasonId={sharedSeasonId}
         jobs={jobs}
+        bros={bros}
+        broPhotos={broPhotos}
       />
     );
   }
