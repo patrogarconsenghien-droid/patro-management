@@ -561,15 +561,25 @@ const Payments = ({ Header, navigateTo, sectionId, seasonId, sharedSeasonId, job
                       >
                         <FileText size={16} />{openingNote === note.id ? 'Ouverture…' : 'Ouvrir la note'}
                       </button>
-                      {note.scheduledJobId && request?.status !== 'paid' && !debt && (
-                        <button
-                          onClick={() => setEditingNote(note)}
-                          aria-label="Modifier la note"
-                          className="p-2.5 px-3 rounded-xl bg-white ring-1 ring-gray-200 text-sm font-semibold flex items-center gap-2 active:scale-95 transition-transform"
-                        >
-                          <Pencil size={16} /><span className="hidden sm:inline">Modifier</span>
-                        </button>
-                      )}
+                      {/* Toujours visible : s'il ne peut pas servir, il dit pourquoi. */}
+                      <button
+                        onClick={() => {
+                          const blocked = !note.scheduledJobId
+                            ? (note.rebuiltFromRequest
+                              ? 'Ancienne note : touche « Paiement », puis « Refaire la note de frais », et reviens la modifier.'
+                              : 'Cette note ne vient pas d\'une validation de boulot : elle ne se modifie pas.')
+                            : request?.status === 'paid'
+                              ? 'Déjà payé : la note ne se modifie plus.'
+                              : debt
+                                ? `La part des ${note.otherLabel} a été encaissée chez nous : la note ne se modifie plus.`
+                                : null;
+                          if (blocked) toast(blocked, { tone: 'error', duration: 6000 });
+                          else setEditingNote(note);
+                        }}
+                        className="p-2.5 px-3 rounded-xl bg-white ring-1 ring-gray-200 text-sm font-semibold flex items-center gap-1.5 active:scale-95 transition-transform"
+                      >
+                        <Pencil size={16} />Modifier
+                      </button>
                       {request && (
                         <button
                           onClick={() => setOpenId(request.id)}
